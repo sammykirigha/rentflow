@@ -1,6 +1,7 @@
 import { AbstractEntity } from '@/database/abstract.entity';
 import { User } from '@/modules/users/entities/user.entity';
-import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { WebsitePage } from './website-page.entity';
 
 export enum WebsiteScrapingStatus {
 	PENDING = 'pending',
@@ -38,6 +39,8 @@ export class UserWebsite extends AbstractEntity<UserWebsite> {
 		ogImage?: string;
 		headings?: string[];
 		links?: string[];
+		internalLinks?: string[];
+		externalLinks?: string[];
 	};
 
 	@Column({
@@ -57,8 +60,17 @@ export class UserWebsite extends AbstractEntity<UserWebsite> {
 	@Column({ name: 'is_primary', default: false })
 	isPrimary: boolean;
 
+	@Column({ name: 'total_pages_found', default: 0 })
+	totalPagesFound: number;
+
+	@Column({ name: 'total_pages_scraped', default: 0 })
+	totalPagesScraped: number;
+
 	// Relations
 	@ManyToOne(() => User, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'user_id' })
 	user: User;
+
+	@OneToMany(() => WebsitePage, page => page.website)
+	pages: WebsitePage[];
 }

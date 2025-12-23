@@ -1,5 +1,6 @@
 import { AuditLog } from '@/modules/audit/entities/audit-log.entity';
 import { UserWebsite } from '@/modules/onboarding/entities/user-website.entity';
+import { WebsitePage } from '@/modules/onboarding/entities/website-page.entity';
 import { Permission } from '@/modules/permissions/entities/permission.entity';
 import { Role } from '@/modules/permissions/entities/role.entity';
 import { AiModelConfiguration } from '@/modules/settings/entities/ai-model-configuration.entity';
@@ -21,6 +22,7 @@ export const entities = [
   AuditLog,
   AiModelConfiguration,
   UserWebsite,
+  WebsitePage,
 ];
 
 export default new DataSource({

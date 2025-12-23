@@ -1,6 +1,6 @@
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { SubmitWebsiteDto } from './dto';
 import { OnboardingService } from './onboarding.service';
@@ -41,7 +41,7 @@ export class OnboardingController {
 	}
 
 	/**
-	 * Get scraping status
+	 * Get scraping status with page stats
 	 */
 	@Get('website/:websiteId/status')
 	async getScrapingStatus(
@@ -49,6 +49,17 @@ export class OnboardingController {
 		@Param('websiteId') websiteId: string,
 	) {
 		return this.onboardingService.getScrapingStatus(websiteId, user.sub);
+	}
+
+	/**
+	 * Get scraped pages for a website
+	 */
+	@Get('website/:websiteId/pages')
+	async getWebsitePages(
+		@CurrentUser() user: JwtPayload,
+		@Param('websiteId') websiteId: string,
+	) {
+		return this.onboardingService.getWebsitePages(websiteId, user.sub);
 	}
 
 	/**
@@ -65,5 +76,46 @@ export class OnboardingController {
 	@Post('complete')
 	async completeOnboarding(@CurrentUser() user: JwtPayload) {
 		return this.onboardingService.completeOnboarding(user.sub);
+	}
+
+	/**
+	 * Get all user's pages (for backlinks page)
+	 */
+	@Get('pages')
+	async getAllUserPages(@CurrentUser() user: JwtPayload) {
+		return this.onboardingService.getAllUserPages(user.sub);
+	}
+
+	/**
+	 * Get a single page by ID
+	 */
+	@Get('pages/:pageId')
+	async getPageById(
+		@CurrentUser() user: JwtPayload,
+		@Param('pageId') pageId: string,
+	) {
+		return this.onboardingService.getPageById(pageId, user.sub);
+	}
+
+	/**
+	 * Refetch/rescrape a single page
+	 */
+	@Post('pages/:pageId/refetch')
+	async refetchPage(
+		@CurrentUser() user: JwtPayload,
+		@Param('pageId') pageId: string,
+	) {
+		return this.onboardingService.refetchPage(pageId, user.sub);
+	}
+
+	/**
+	 * Soft delete a page
+	 */
+	@Delete('pages/:pageId')
+	async deletePage(
+		@CurrentUser() user: JwtPayload,
+		@Param('pageId') pageId: string,
+	) {
+		return this.onboardingService.deletePage(pageId, user.sub);
 	}
 }
