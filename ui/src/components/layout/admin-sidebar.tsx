@@ -7,6 +7,7 @@ import {
   Brain,
   ChevronDown,
   LayoutDashboard,
+  Link2,
   LogOut,
   Menu,
   Settings,
@@ -37,6 +38,11 @@ const menuItems: MenuItem[] = [
     title: "Users",
     href: "/dashboard/users",
     icon: Users,
+  },
+  {
+    title: "Backlinks",
+    href: "/dashboard/backlinks",
+    icon: Link2,
   },
   {
     title: "System Settings",

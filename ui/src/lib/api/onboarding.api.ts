@@ -15,13 +15,52 @@ export interface UserWebsite {
 		ogImage?: string;
 		headings?: string[];
 		links?: string[];
+		internalLinks?: string[];
+		externalLinks?: string[];
 	};
 	scrapingStatus: 'pending' | 'processing' | 'completed' | 'failed';
 	scrapingError?: string;
 	scrapedAt?: string;
 	isPrimary: boolean;
+	totalPagesFound: number;
+	totalPagesScraped: number;
 	createdAt: string;
 	updatedAt: string;
+}
+
+export interface WebsitePage {
+	pageId: string;
+	websiteId: string;
+	pageUrl: string;
+	pagePath: string;
+	pageTitle?: string;
+	pageDescription?: string;
+	scrapedContent?: string;
+	scrapedMeta?: {
+		title?: string;
+		description?: string;
+		keywords?: string[];
+		ogImage?: string;
+		headings?: string[];
+		internalLinks?: string[];
+		externalLinks?: string[];
+	};
+	scrapingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+	scrapingError?: string;
+	scrapedAt?: string;
+	depth: number;
+	wordCount?: number;
+	deletedAt?: string;
+	deletedBy?: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface PageStats {
+	total: number;
+	completed: number;
+	pending: number;
+	failed: number;
 }
 
 export interface OnboardingStatus {
@@ -29,6 +68,12 @@ export interface OnboardingStatus {
 	hasWebsite: boolean;
 	websiteStatus?: 'pending' | 'processing' | 'completed' | 'failed';
 	website?: UserWebsite;
+	pageStats?: PageStats;
+}
+
+export interface ScrapingStatusResponse {
+	website: UserWebsite;
+	pageStats: PageStats;
 }
 
 export const onboardingApi = {
@@ -50,9 +95,15 @@ export const onboardingApi = {
 		return response.data?.data;
 	},
 
-	// Get scraping status
-	getScrapingStatus: async (websiteId: string): Promise<UserWebsite> => {
+	// Get scraping status with page stats
+	getScrapingStatus: async (websiteId: string): Promise<ScrapingStatusResponse> => {
 		const response = await api.get(`/onboarding/website/${websiteId}/status`);
+		return response.data?.data;
+	},
+
+	// Get scraped pages for a website
+	getWebsitePages: async (websiteId: string): Promise<WebsitePage[]> => {
+		const response = await api.get(`/onboarding/website/${websiteId}/pages`);
 		return response.data?.data;
 	},
 
@@ -63,8 +114,32 @@ export const onboardingApi = {
 	},
 
 	// Complete onboarding (Step 3)
-	completeOnboarding: async (): Promise<{ user: unknown }> => {
+	completeOnboarding: async (): Promise<{ user: unknown; }> => {
 		const response = await api.post('/onboarding/complete');
+		return response.data?.data;
+	},
+
+	// Get all user's pages (for backlinks)
+	getAllUserPages: async (): Promise<WebsitePage[]> => {
+		const response = await api.get('/onboarding/pages');
+		return response.data?.data;
+	},
+
+	// Get a single page by ID
+	getPageById: async (pageId: string): Promise<WebsitePage> => {
+		const response = await api.get(`/onboarding/pages/${pageId}`);
+		return response.data?.data;
+	},
+
+	// Refetch/rescrape a single page
+	refetchPage: async (pageId: string): Promise<WebsitePage> => {
+		const response = await api.post(`/onboarding/pages/${pageId}/refetch`);
+		return response.data?.data;
+	},
+
+	// Soft delete a page
+	deletePage: async (pageId: string): Promise<WebsitePage> => {
+		const response = await api.delete(`/onboarding/pages/${pageId}`);
 		return response.data?.data;
 	},
 };

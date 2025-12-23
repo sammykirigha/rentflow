@@ -5,10 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { onboardingApi, type UserWebsite } from '@/lib/api/onboarding.api';
+import { onboardingApi, type PageStats, type UserWebsite } from '@/lib/api/onboarding.api';
 import { cn } from '@/lib/utils';
 import { useUserStore } from '@/stores/user.store';
-import { CheckCircle2, Globe, Loader2, Sparkles } from 'lucide-react';
+import { CheckCircle2, FileText, Globe, Loader2, Sparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -26,6 +26,7 @@ export default function OnboardingPage() {
 	const [websiteUrl, setWebsiteUrl] = useState('');
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [website, setWebsite] = useState<UserWebsite | null>(null);
+	const [pageStats, setPageStats] = useState<PageStats | null>(null);
 	const [scrapingProgress, setScrapingProgress] = useState(0);
 	const [isLoading, setIsLoading] = useState(true);
 
@@ -45,6 +46,9 @@ export default function OnboardingPage() {
 				if (status.hasWebsite && status.website) {
 					setWebsite(status.website);
 					setWebsiteUrl(status.website.websiteUrl);
+					if (status.pageStats) {
+						setPageStats(status.pageStats);
+					}
 
 					if (status.websiteStatus === 'completed') {
 						setCurrentStep(3);
@@ -52,6 +56,7 @@ export default function OnboardingPage() {
 					} else if (status.websiteStatus === 'processing') {
 						setCurrentStep(2);
 						// Start polling for status
+						pollScrapingStatus(status.website.websiteId);
 					} else if (status.websiteStatus === 'pending') {
 						setCurrentStep(2);
 					} else if (status.websiteStatus === 'failed') {
@@ -67,32 +72,39 @@ export default function OnboardingPage() {
 		};
 
 		fetchStatus();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [router]);
 
 	// Poll for scraping status when on step 2
 	const pollScrapingStatus = useCallback(async (websiteId: string) => {
-		let progress = 10;
-		const progressInterval = setInterval(() => {
-			progress = Math.min(progress + Math.random() * 15, 90);
-			setScrapingProgress(progress);
-		}, 500);
-
 		const poll = async () => {
 			try {
-				const status = await onboardingApi.getScrapingStatus(websiteId);
-				setWebsite(status);
+				const statusResponse = await onboardingApi.getScrapingStatus(websiteId);
+				const { website: ws, pageStats: ps } = statusResponse;
+				setWebsite(ws);
+				setPageStats(ps);
 
-				if (status.scrapingStatus === 'completed') {
-					clearInterval(progressInterval);
+				// Calculate progress based on pages scraped
+				let progress = 10; // Base progress for starting
+				if (ws.totalPagesFound > 0) {
+					// Main page scraped = 30%, internal pages = remaining 70%
+					const mainPageDone = ws.scrapedAt ? 30 : 0;
+					const pageProgress = ps.total > 0
+						? ((ps.completed / ps.total) * 60)
+						: 0;
+					progress = Math.min(mainPageDone + pageProgress + 10, 95);
+				}
+				setScrapingProgress(progress);
+
+				if (ws.scrapingStatus === 'completed') {
 					setScrapingProgress(100);
 					setTimeout(() => {
 						setCurrentStep(3);
 					}, 500);
 					return true;
-				} else if (status.scrapingStatus === 'failed') {
-					clearInterval(progressInterval);
+				} else if (ws.scrapingStatus === 'failed') {
 					setScrapingProgress(0);
-					toast.error(status.scrapingError || 'Failed to analyze website. Please try again.');
+					toast.error(ws.scrapingError || 'Failed to analyze website. Please try again.');
 					setCurrentStep(1);
 					return true;
 				}
@@ -115,7 +127,6 @@ export default function OnboardingPage() {
 		await poll();
 
 		return () => {
-			clearInterval(progressInterval);
 			clearInterval(pollInterval);
 		};
 	}, []);
@@ -282,17 +293,41 @@ export default function OnboardingPage() {
 									Analyzing Your Website
 								</CardTitle>
 								<CardDescription>
-									Please wait while we analyze your website content
+									Please wait while we analyze your website and its pages
 								</CardDescription>
 							</CardHeader>
 							<CardContent className="space-y-6">
 								<div className="space-y-2">
 									<div className="flex justify-between text-sm">
-										<span className="text-gray-600">Progress</span>
+										<span className="text-gray-600">Overall Progress</span>
 										<span className="font-medium">{Math.round(scrapingProgress)}%</span>
 									</div>
 									<Progress value={scrapingProgress} className="h-3" />
 								</div>
+
+								{/* Page scraping stats */}
+								{pageStats && pageStats.total > 0 && (
+									<div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+										<div className="flex items-center gap-2 mb-3">
+											<FileText className="h-4 w-4 text-blue-600" />
+											<span className="font-medium text-blue-900">Scraping Internal Pages</span>
+										</div>
+										<div className="grid grid-cols-3 gap-4 text-center">
+											<div>
+												<p className="text-2xl font-bold text-blue-600">{pageStats.total}</p>
+												<p className="text-xs text-gray-600">Pages Found</p>
+											</div>
+											<div>
+												<p className="text-2xl font-bold text-green-600">{pageStats.completed}</p>
+												<p className="text-xs text-gray-600">Completed</p>
+											</div>
+											<div>
+												<p className="text-2xl font-bold text-orange-600">{pageStats.pending}</p>
+												<p className="text-xs text-gray-600">In Progress</p>
+											</div>
+										</div>
+									</div>
+								)}
 
 								<div className="bg-gray-50 rounded-lg p-4 space-y-3">
 									<div className="flex items-center gap-2 text-sm">
@@ -310,31 +345,46 @@ export default function OnboardingPage() {
 											scrapingProgress >= 30 ? 'text-green-500' : 'text-gray-300'
 										)} />
 										<span className={scrapingProgress >= 30 ? 'text-gray-700' : 'text-gray-400'}>
-											Extracting page content...
+											Analyzing main page content...
 										</span>
 									</div>
 									<div className="flex items-center gap-2 text-sm">
 										<CheckCircle2 className={cn(
 											'h-4 w-4',
-											scrapingProgress >= 60 ? 'text-green-500' : 'text-gray-300'
+											scrapingProgress >= 40 ? 'text-green-500' : 'text-gray-300'
 										)} />
-										<span className={scrapingProgress >= 60 ? 'text-gray-700' : 'text-gray-400'}>
-											Analyzing meta data...
+										<span className={scrapingProgress >= 40 ? 'text-gray-700' : 'text-gray-400'}>
+											Discovering internal pages...
+										</span>
+									</div>
+									<div className="flex items-center gap-2 text-sm">
+										{scrapingProgress >= 40 && scrapingProgress < 90 ? (
+											<Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
+										) : (
+											<CheckCircle2 className={cn(
+												'h-4 w-4',
+												scrapingProgress >= 90 ? 'text-green-500' : 'text-gray-300'
+											)} />
+										)}
+										<span className={scrapingProgress >= 40 ? 'text-gray-700' : 'text-gray-400'}>
+											Scraping internal pages {pageStats ? `(${pageStats.completed}/${pageStats.total})` : ''}...
 										</span>
 									</div>
 									<div className="flex items-center gap-2 text-sm">
 										<CheckCircle2 className={cn(
 											'h-4 w-4',
-											scrapingProgress >= 90 ? 'text-green-500' : 'text-gray-300'
+											scrapingProgress >= 95 ? 'text-green-500' : 'text-gray-300'
 										)} />
-										<span className={scrapingProgress >= 90 ? 'text-gray-700' : 'text-gray-400'}>
+										<span className={scrapingProgress >= 95 ? 'text-gray-700' : 'text-gray-400'}>
 											Finalizing analysis...
 										</span>
 									</div>
 								</div>
 
 								<p className="text-center text-sm text-gray-500">
-									This usually takes 10-30 seconds
+									{pageStats && pageStats.total > 0
+										? `Analyzing ${pageStats.total} pages. This may take a few minutes...`
+										: 'This usually takes 30 seconds to a few minutes depending on your website size'}
 								</p>
 							</CardContent>
 						</>
@@ -375,6 +425,21 @@ export default function OnboardingPage() {
 												</p>
 											</div>
 										</div>
+
+										{/* Page scraping summary */}
+										{(website.totalPagesScraped && website.totalPagesScraped > 0) && (
+											<div className="pt-2 border-t border-green-200">
+												<div className="flex items-center gap-2 text-sm">
+													<FileText className="h-4 w-4 text-green-600" />
+													<span className="text-gray-700">
+														<strong>{website.totalPagesScraped}</strong> pages analyzed
+														{website.totalPagesFound && website.totalPagesFound > website.totalPagesScraped && (
+															<span className="text-gray-500"> of {website.totalPagesFound} found</span>
+														)}
+													</span>
+												</div>
+											</div>
+										)}
 
 										{website.scrapedMeta?.keywords && website.scrapedMeta.keywords.length > 0 && (
 											<div className="pt-2 border-t border-green-200">
