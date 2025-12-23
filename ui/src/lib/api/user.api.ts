@@ -105,7 +105,7 @@ export const userApi = {
   },
 
   // Update user profile
-  updateProfile: async (profileData: { firstName?: string; lastName?: string; email?: string; phone?: string; }): Promise<User> => {
+  updateProfile: async (profileData: { firstName?: string; lastName?: string; email?: string; phone?: string; avatarUrl?: string }): Promise<User> => {
     const response = await api.patch('/users/profile', profileData);
     return response.data.data;
   },

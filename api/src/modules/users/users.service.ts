@@ -322,7 +322,7 @@ export class UsersService {
 		);
 	}
 
-	async updateProfile(userId: string, updateData: { firstName?: string; lastName?: string; email?: string; phone?: string; }): Promise<User> {
+	async updateProfile(userId: string, updateData: { firstName?: string; lastName?: string; email?: string; phone?: string; avatarUrl?: string }): Promise<User> {
 		const user = await this.usersRepository.findOne({ where: { userId } });
 
 		if (!user) {
