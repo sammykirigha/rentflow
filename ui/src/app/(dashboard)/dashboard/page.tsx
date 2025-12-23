@@ -154,7 +154,7 @@ export default function AdminDashboard() {
               )}
             </div>
             <div className="px-6 py-4 border-t border-gray-100">
-              <Link href="/admin/users">
+              <Link href="/dashboard/users">
                 <Button variant="outline" className="w-full">
                   View All Users
                 </Button>

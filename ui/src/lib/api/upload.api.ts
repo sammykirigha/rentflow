@@ -8,7 +8,7 @@ export const uploadImage = async (file: File): Promise<{ url: string; key: strin
 				'Content-Type': 'multipart/form-data',
 			},
 		});
-		
+
 		if (response.data?.data && response.data?.data.key) {
 			return {
 				...response.data?.data,

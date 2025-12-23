@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
-import { ArrowLeft, Home, Search, Settings, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { AlertTriangle, ArrowLeft, Home, Search, Settings } from "lucide-react";
+import Link from "next/link";
 
 export default function NotFound() {
   return (
@@ -24,7 +24,7 @@ export default function NotFound() {
         {/* Error Message */}
         <div className="mb-6">
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-3">
-             Page Not Found
+            Page Not Found
           </h1>
           <p className="text-gray-600 mb-2">
             The page you&apos;re looking for doesn&apos;t exist or has been moved.
@@ -79,7 +79,7 @@ export default function NotFound() {
               <p className="text-xs text-gray-600 mb-3">
                 Manage admin configurations
               </p>
-              <Link href="/admin/settings">
+              <Link href="/dashboard/settings">
                 <Button variant="outline" className="w-full">
                   Settings
                 </Button>
