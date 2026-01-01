@@ -7,6 +7,7 @@ import { AiModelConfigurationService } from '../settings/ai-model-configuration.
 import { SettingsService } from '../settings/settings.service';
 import { ArticlesRepository } from './articles.repository';
 import { CreateArticleDto } from './dto/create-article.dto';
+import { EditWithAiDto } from './dto/edit-with-ai.dto';
 import { RegenerateTitleDto } from './dto/regenerate-title.dto';
 import { UpdateArticleDto } from './dto/update-article.dto';
 import { Article, ArticleStatus } from './entities/article.entity';
@@ -110,11 +111,6 @@ The article must be returned as valid JSON that TipTap rich text editor can pars
   "type": "doc",
   "content": [
     {
-      "type": "heading",
-      "attrs": { "level": 1 },
-      "content": [{ "type": "text", "text": "Your Main Title" }]
-    },
-    {
       "type": "paragraph",
       "content": [{ "type": "text", "text": "Introduction paragraph..." }]
     },
@@ -161,14 +157,16 @@ The article must be returned as valid JSON that TipTap rich text editor can pars
   ]
 }
 
-Available node types: doc, paragraph, heading (levels 1-4), bulletList, orderedList, listItem, blockquote, codeBlock, horizontalRule
+Available node types: doc, paragraph, heading (levels 2-4), bulletList, orderedList, listItem, blockquote, codeBlock, horizontalRule
 Available marks: bold, italic, strike, code, link (with href attr)
 
 IMPORTANT: 
 - Return ONLY the JSON object, no markdown code blocks or explanations
 - The JSON must be valid and parseable
+- DO NOT include the article title (h1 heading) in the content - the title is stored separately
+- Start the content directly with an introduction paragraph or h2 section heading
 - Include comprehensive content with multiple sections
-- Use proper headings hierarchy (h1 for title, h2 for sections, h3 for subsections)
+- Use h2 for main sections and h3 for subsections (never use h1)
 - Include bullet points and numbered lists where appropriate
 - Make the content SEO-optimized for the given keywords`;
 
@@ -335,5 +333,118 @@ Return ONLY the title text, nothing else.`;
 	async deleteArticle(articleId: string, userId: string): Promise<void> {
 		const article = await this.getArticleById(articleId, userId);
 		await this.articlesRepository.delete(article.articleId);
+	}
+
+	async editWithAi(articleId: string, userId: string, dto: EditWithAiDto): Promise<Article> {
+		const article = await this.getArticleById(articleId, userId);
+
+		if (!article.contentJson) {
+			throw new BadRequestException('Article has no content to edit');
+		}
+
+		// Set status to generating while AI is working
+		await this.articlesRepository.updateStatus(articleId, ArticleStatus.GENERATING, null);
+
+		// Start async editing
+		this.performAiEdit(articleId, article, dto.instructions)
+			.catch(err => {
+				this.logger.error(`Failed to edit article ${articleId} with AI:`, err);
+			});
+
+		return this.articlesRepository.findByIdWithRelations(articleId);
+	}
+
+	private async performAiEdit(
+		articleId: string,
+		article: Article,
+		instructions: string,
+	): Promise<void> {
+		try {
+			const systemPrompt = `You are an expert content editor. You will receive an existing article in TipTap JSON format and instructions on how to modify it.
+
+Your task is to modify the article according to the user's instructions while maintaining the TipTap JSON structure.
+
+The article must be returned as valid JSON that TipTap rich text editor can parse. Use this exact structure:
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "paragraph",
+      "content": [{ "type": "text", "text": "Your paragraph text..." }]
+    },
+    {
+      "type": "heading",
+      "attrs": { "level": 2 },
+      "content": [{ "type": "text", "text": "Section Heading" }]
+    }
+  ]
+}
+
+Available node types: doc, paragraph, heading (levels 2-4), bulletList, orderedList, listItem, blockquote, codeBlock, horizontalRule
+Available marks: bold, italic, strike, code, link (with href attr)
+
+IMPORTANT:
+- Return ONLY the JSON object, no markdown code blocks or explanations
+- The JSON must be valid and parseable
+- DO NOT include the article title (h1 heading) in the content - the title is stored separately
+- Preserve the overall structure unless instructed otherwise
+- Apply the requested modifications carefully
+- Maintain SEO optimization and readability`;
+
+			const userPrompt = `Here is the current article content in TipTap JSON format:
+
+\`\`\`json
+${JSON.stringify(article.contentJson, null, 2)}
+\`\`\`
+
+**Modification Instructions:**
+${instructions}
+
+Please apply these modifications and return the updated article in TipTap JSON format.`;
+
+			const response = await this.openAiService.chat([
+				{ role: 'system', content: systemPrompt },
+				{ role: 'user', content: userPrompt },
+			]);
+
+			// Parse the response
+			let contentJson: object;
+			let content: string;
+
+			try {
+				// Clean the response - remove any markdown code blocks if present
+				let jsonString = response.content.trim();
+				if (jsonString.startsWith('```json')) {
+					jsonString = jsonString.slice(7);
+				} else if (jsonString.startsWith('```')) {
+					jsonString = jsonString.slice(3);
+				}
+				if (jsonString.endsWith('```')) {
+					jsonString = jsonString.slice(0, -3);
+				}
+				jsonString = jsonString.trim();
+
+				contentJson = JSON.parse(jsonString);
+				content = this.extractTextFromTipTapJson(contentJson);
+			} catch (parseError) {
+				this.logger.error('Failed to parse AI edit response as JSON:', parseError);
+				throw new Error('Failed to parse AI response');
+			}
+
+			// Update article with edited content
+			await this.articlesRepository.updateContent(
+				articleId,
+				content,
+				contentJson,
+				response.tokenUsage,
+			);
+		} catch (error) {
+			this.logger.error(`AI edit failed for article ${articleId}:`, error);
+			await this.articlesRepository.updateStatus(
+				articleId,
+				ArticleStatus.FAILED,
+				error.message || 'Unknown error during AI editing',
+			);
+		}
 	}
 }

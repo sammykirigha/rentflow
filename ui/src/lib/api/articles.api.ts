@@ -60,6 +60,10 @@ export interface RegenerateTitleDto {
 	context?: string;
 }
 
+export interface EditWithAiDto {
+	instructions: string;
+}
+
 export const articlesApi = {
 	// Get all articles for current user
 	getArticles: async (): Promise<Article[]> => {
@@ -100,5 +104,11 @@ export const articlesApi = {
 	// Delete article
 	deleteArticle: async (articleId: string): Promise<void> => {
 		await api.delete(`/articles/${articleId}`);
+	},
+
+	// Edit article with AI
+	editWithAi: async (articleId: string, data: EditWithAiDto): Promise<Article> => {
+		const response = await api.post(`/articles/${articleId}/edit-with-ai`, data);
+		return response.data?.data;
 	},
 };

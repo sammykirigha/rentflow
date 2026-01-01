@@ -16,6 +16,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { ArticlesService } from './articles.service';
 import { CreateArticleDto } from './dto/create-article.dto';
+import { EditWithAiDto } from './dto/edit-with-ai.dto';
 import { RegenerateTitleDto } from './dto/regenerate-title.dto';
 import { UpdateArticleDto } from './dto/update-article.dto';
 
@@ -117,6 +118,24 @@ export class ArticlesController {
 		return {
 			success: true,
 			message: 'Article updated successfully',
+			data: article,
+		};
+	}
+
+	@Post(':id/edit-with-ai')
+	@HttpCode(HttpStatus.OK)
+	@ApiOperation({ summary: 'Edit article content using AI' })
+	@ApiResponse({ status: 200, description: 'AI editing started' })
+	@ApiResponse({ status: 404, description: 'Article not found' })
+	async editWithAi(
+		@Param('id') articleId: string,
+		@Body() dto: EditWithAiDto,
+		@CurrentUser() user: JwtPayload,
+	) {
+		const article = await this.articlesService.editWithAi(articleId, user.sub, dto);
+		return {
+			success: true,
+			message: 'AI editing started',
 			data: article,
 		};
 	}

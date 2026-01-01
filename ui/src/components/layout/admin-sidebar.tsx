@@ -86,7 +86,7 @@ export default function AdminSidebar() {
   };
 
   const isActive = (href: string) => {
-    return pathname === href;// || (href !== "/admin" && pathname.startsWith(href));
+    return pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
   };
 
   const isExpanded = (title: string) => expandedItems.includes(title);
@@ -118,8 +118,7 @@ export default function AdminSidebar() {
               <Brain className="h-6 w-6 text-white" />
             </div>
             <div className="ml-3">
-              <h1 className="text-lg font-bold text-gray-900">MasomoAI Admin</h1>
-              <p className="text-xs text-gray-500">Management Panel</p>
+              <h1 className="text-lg font-bold text-gray-900">GetAISEO</h1>
             </div>
           </div>
 
@@ -204,7 +203,7 @@ export default function AdminSidebar() {
 
           {/* User Info */}
           <div className="px-4 py-4 border-t border-gray-200 w-full">
-            <div className="flex items-center justify-between w-full ">
+            <div className="flex items-center justify-between w-full gap-2">
               <div className="flex items-center w-full truncate">
                 <div className="w-8 h-8 bg-primary shrink-0 rounded-full flex items-center justify-center">
                   <Shield className="h-4 w-4 text-white" />
