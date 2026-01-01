@@ -52,7 +52,7 @@ const menuItems: MenuItem[] = [
     icon: FileText,
   },
   {
-    title: "Wibsite Pages",
+    title: "Website Pages",
     href: "/dashboard/pages",
     icon: Link2,
   },
