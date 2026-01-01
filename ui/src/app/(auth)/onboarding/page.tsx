@@ -168,6 +168,7 @@ export default function OnboardingPage() {
 			await onboardingApi.completeOnboarding();
 			toast.success('Welcome to GetAISEO!');
 			router.push('/dashboard');
+
 		} catch (error) {
 			console.error('Failed to complete onboarding:', error);
 			toast.error('Failed to complete onboarding. Please try again.');
