@@ -4,24 +4,29 @@ export interface Keyword {
 	keywordId: string;
 	userId: string;
 	keyword: string;
-	competition: 'low' | 'medium' | 'high';
+	difficulty: number;
 	volume: number;
 	recommendedTitle: string | null;
 	aiAnalysis: {
-		competitionScore?: number;
+		difficultyScore?: number;
 		volumeEstimate?: number;
-		difficulty?: string;
 		trend?: string;
 	} | null;
 	isAnalyzed: boolean;
+	isPrimary: boolean;
+	parentKeywordId: string | null;
+	parentKeyword?: Keyword | null;
+	secondaryKeywords?: Keyword[];
 	createdAt: string;
 	updatedAt: string;
 }
 
 export interface KeywordItem {
 	keyword: string;
-	competition?: 'low' | 'medium' | 'high';
+	difficulty?: number;
 	volume?: number;
+	isPrimary?: boolean;
+	parentKeywordId?: string;
 }
 
 export interface CreateKeywordsDto {
@@ -61,5 +66,23 @@ export const keywordsApi = {
 	// Delete multiple keywords
 	deleteMultipleKeywords: async (keywordIds: string[]): Promise<void> => {
 		await api.post('/keywords/delete-multiple', { keywordIds });
+	},
+
+	// Update keyword primary status
+	updatePrimaryStatus: async (keywordId: string, isPrimary: boolean): Promise<Keyword> => {
+		const response = await api.put(`/keywords/${keywordId}/primary`, { isPrimary });
+		return response.data?.data;
+	},
+
+	// Update parent keyword for a secondary keyword
+	updateParentKeyword: async (keywordId: string, parentKeywordId: string | null): Promise<Keyword> => {
+		const response = await api.put(`/keywords/${keywordId}/parent`, { parentKeywordId });
+		return response.data?.data;
+	},
+
+	// Get all primary keywords (for dropdown selection)
+	getPrimaryKeywords: async (): Promise<Keyword[]> => {
+		const response = await api.get('/keywords/primary/list');
+		return response.data?.data;
 	},
 };

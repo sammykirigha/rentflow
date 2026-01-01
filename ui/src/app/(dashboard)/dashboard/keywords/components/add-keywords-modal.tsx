@@ -13,6 +13,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
+import {
 	Table,
 	TableBody,
 	TableCell,
@@ -22,7 +29,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KeywordItem, keywordsApi } from "@/lib/api/keywords.api";
-import { FileSpreadsheet, Loader2, Plus, Trash2, Upload, X } from "lucide-react";
+import { Crown, FileSpreadsheet, Loader2, Plus, Trash2, Upload, X } from "lucide-react";
 import { KeyboardEvent, useRef, useState } from "react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -33,19 +40,53 @@ interface AddKeywordsModalProps {
 	onSuccess?: () => void;
 }
 
-// Competition badge component for preview
-const CompetitionBadge = ({ competition }: { competition?: string; }) => {
-	const variants: Record<string, { color: string; label: string; }> = {
-		low: { color: "bg-green-100 text-green-800 border-green-200", label: "Low" },
-		medium: { color: "bg-yellow-100 text-yellow-800 border-yellow-200", label: "Medium" },
-		high: { color: "bg-red-100 text-red-800 border-red-200", label: "High" },
+// Extended KeywordItem with isPrimary for internal tracking
+interface ExtendedKeywordItem extends KeywordItem {
+	isPrimary: boolean;
+}
+
+// Difficulty badge component for preview - shows score with yellow-to-red gradient
+const DifficultyBadge = ({ difficulty }: { difficulty?: number; }) => {
+	if (difficulty === undefined) return null;
+
+	// Interpolate from yellow (0) to red (100)
+	const getGradientColor = (score: number) => {
+		const clampedScore = Math.max(0, Math.min(100, score));
+		// Yellow: hsl(45, 100%, 51%) -> Red: hsl(0, 100%, 50%)
+		const hue = 45 - (clampedScore / 100) * 45; // 45 (yellow) to 0 (red)
+		return {
+			background: `hsl(${hue}, 100%, 90%)`,
+			color: `hsl(${hue}, 100%, 30%)`,
+			borderColor: `hsl(${hue}, 100%, 70%)`,
+		};
 	};
 
-	const variant = variants[competition?.toLowerCase() || "medium"] || variants.medium;
+	const colors = getGradientColor(difficulty);
 
 	return (
-		<Badge variant="outline" className={variant.color}>
-			{variant.label}
+		<Badge
+			variant="outline"
+			style={{
+				backgroundColor: colors.background,
+				color: colors.color,
+				borderColor: colors.borderColor,
+			}}
+		>
+			{difficulty}
+		</Badge>
+	);
+};
+
+// Primary/Secondary badge component
+const TypeBadge = ({ isPrimary }: { isPrimary: boolean; }) => {
+	return isPrimary ? (
+		<Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-100">
+			<Crown className="h-3 w-3 mr-1" />
+			Primary
+		</Badge>
+	) : (
+		<Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-200">
+			Secondary
 		</Badge>
 	);
 };
@@ -55,18 +96,22 @@ export default function AddKeywordsModal({
 	onOpenChange,
 	onSuccess,
 }: AddKeywordsModalProps) {
-	const [manualKeywords, setManualKeywords] = useState<string[]>([]);
+	const [manualKeywords, setManualKeywords] = useState<ExtendedKeywordItem[]>([]);
 	const [inputValue, setInputValue] = useState("");
+	const [defaultKeywordType, setDefaultKeywordType] = useState<"primary" | "secondary">("primary");
 	const [isLoading, setIsLoading] = useState(false);
 	const [activeTab, setActiveTab] = useState<string>("manual");
-	const [fileKeywords, setFileKeywords] = useState<KeywordItem[]>([]);
+	const [fileKeywords, setFileKeywords] = useState<ExtendedKeywordItem[]>([]);
 	const [fileName, setFileName] = useState<string>("");
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
 	const handleAddKeyword = () => {
 		const trimmed = inputValue.trim().toLowerCase();
-		if (trimmed && !manualKeywords.includes(trimmed)) {
-			setManualKeywords([...manualKeywords, trimmed]);
+		if (trimmed && !manualKeywords.some(k => k.keyword === trimmed)) {
+			setManualKeywords([...manualKeywords, {
+				keyword: trimmed,
+				isPrimary: defaultKeywordType === "primary"
+			}]);
 			setInputValue("");
 		}
 	};
@@ -82,7 +127,13 @@ export default function AddKeywordsModal({
 	};
 
 	const handleRemoveKeyword = (keywordToRemove: string) => {
-		setManualKeywords(manualKeywords.filter((k) => k !== keywordToRemove));
+		setManualKeywords(manualKeywords.filter((k) => k.keyword !== keywordToRemove));
+	};
+
+	const handleToggleKeywordType = (keyword: string) => {
+		setManualKeywords(manualKeywords.map((k) =>
+			k.keyword === keyword ? { ...k, isPrimary: !k.isPrimary } : k
+		));
 	};
 
 	const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
@@ -91,35 +142,50 @@ export default function AddKeywordsModal({
 		const pastedKeywords = pastedText
 			.split(/[,\n\t]+/)
 			.map((k) => k.trim().toLowerCase())
-			.filter((k) => k && !manualKeywords.includes(k));
+			.filter((k) => k && !manualKeywords.some(mk => mk.keyword === k));
 
 		if (pastedKeywords.length > 0) {
-			setManualKeywords([...manualKeywords, ...pastedKeywords]);
+			const newKeywords = pastedKeywords.map(k => ({
+				keyword: k,
+				isPrimary: defaultKeywordType === "primary"
+			}));
+			setManualKeywords([...manualKeywords, ...newKeywords]);
 		}
 	};
 
-	const normalizeCompetition = (value: string | number | undefined): "low" | "medium" | "high" | undefined => {
-		if (!value) return undefined;
-		const strValue = String(value).toLowerCase().trim();
-		if (strValue === "low" || strValue === "l" || strValue === "1") return "low";
-		if (strValue === "medium" || strValue === "med" || strValue === "m" || strValue === "2") return "medium";
-		if (strValue === "high" || strValue === "h" || strValue === "3") return "high";
-		return undefined;
+	const normalizeDifficulty = (value: string | number | undefined): number | undefined => {
+		if (value === undefined || value === null || value === "") return undefined;
+		const numValue = Number(value);
+		if (isNaN(numValue)) return undefined;
+		// Clamp between 0 and 100
+		return Math.max(0, Math.min(100, Math.round(numValue)));
 	};
 
-	const parseFileData = (data: Record<string, unknown>[]): KeywordItem[] => {
-		const keywords: KeywordItem[] = [];
+	const parseIsPrimary = (value: string | number | boolean | undefined): boolean => {
+		if (value === undefined || value === null || value === "") return defaultKeywordType === "primary";
+		if (typeof value === "boolean") return value;
+		const strValue = String(value).toLowerCase().trim();
+		return strValue === "true" || strValue === "1" || strValue === "yes" || strValue === "primary";
+	};
+
+	const parseFileData = (data: Record<string, unknown>[]): ExtendedKeywordItem[] => {
+		const keywords: ExtendedKeywordItem[] = [];
 
 		for (const row of data) {
 			// Try to find keyword column (case-insensitive)
 			const keywordKey = Object.keys(row).find(
 				(k) => k.toLowerCase() === "keyword" || k.toLowerCase() === "keywords"
 			);
-			const competitionKey = Object.keys(row).find(
-				(k) => k.toLowerCase() === "competition" || k.toLowerCase() === "comp"
+			const difficultyKey = Object.keys(row).find(
+				(k) => k.toLowerCase() === "difficulty" || k.toLowerCase() === "diff" ||
+					k.toLowerCase() === "competition" || k.toLowerCase() === "comp"
 			);
 			const volumeKey = Object.keys(row).find(
 				(k) => k.toLowerCase() === "volume" || k.toLowerCase() === "vol" || k.toLowerCase() === "search volume"
+			);
+			const typeKey = Object.keys(row).find(
+				(k) => k.toLowerCase() === "type" || k.toLowerCase() === "primary" ||
+					k.toLowerCase() === "isprimary" || k.toLowerCase() === "is_primary"
 			);
 
 			if (keywordKey && row[keywordKey]) {
@@ -127,8 +193,9 @@ export default function AddKeywordsModal({
 				if (keyword) {
 					keywords.push({
 						keyword,
-						competition: normalizeCompetition(row[competitionKey as string] as string | number),
+						difficulty: normalizeDifficulty(row[difficultyKey as string] as string | number),
 						volume: volumeKey && row[volumeKey] ? Number(row[volumeKey]) || undefined : undefined,
+						isPrimary: parseIsPrimary(row[typeKey as string] as string | number | boolean),
 					});
 				}
 			}
@@ -193,6 +260,12 @@ export default function AddKeywordsModal({
 		setFileKeywords(fileKeywords.filter((_, i) => i !== index));
 	};
 
+	const handleToggleFileKeywordType = (index: number) => {
+		setFileKeywords(fileKeywords.map((k, i) =>
+			i === index ? { ...k, isPrimary: !k.isPrimary } : k
+		));
+	};
+
 	const clearFileUpload = () => {
 		setFileKeywords([]);
 		setFileName("");
@@ -201,8 +274,8 @@ export default function AddKeywordsModal({
 	const handleSubmit = async () => {
 		const keywordsToSubmit: KeywordItem[] =
 			activeTab === "manual"
-				? manualKeywords.map((k) => ({ keyword: k }))
-				: fileKeywords;
+				? manualKeywords.map((k) => ({ keyword: k.keyword, isPrimary: k.isPrimary }))
+				: fileKeywords.map((k) => ({ keyword: k.keyword, difficulty: k.difficulty, volume: k.volume, isPrimary: k.isPrimary }));
 
 		if (keywordsToSubmit.length === 0) {
 			toast.error("Please add at least one keyword");
@@ -269,7 +342,26 @@ export default function AddKeywordsModal({
 					{/* Manual Entry Tab */}
 					<TabsContent value="manual" className="space-y-4 mt-4">
 						<div className="space-y-2">
-							<Label htmlFor="keyword-input">Keywords</Label>
+							<div className="flex items-center justify-between">
+								<Label htmlFor="keyword-input">Keywords</Label>
+								<div className="flex items-center gap-2">
+									<Label htmlFor="default-type" className="text-xs text-muted-foreground">Default type:</Label>
+									<Select value={defaultKeywordType} onValueChange={(v: "primary" | "secondary") => setDefaultKeywordType(v)}>
+										<SelectTrigger id="default-type" className="h-8 w-32">
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="primary">
+												<span className="flex items-center gap-1">
+													<Crown className="h-3 w-3" />
+													Primary
+												</span>
+											</SelectItem>
+											<SelectItem value="secondary">Secondary</SelectItem>
+										</SelectContent>
+									</Select>
+								</div>
+							</div>
 							<div className="flex gap-2">
 								<Input
 									id="keyword-input"
@@ -298,33 +390,52 @@ export default function AddKeywordsModal({
 						{manualKeywords.length > 0 && (
 							<div className="space-y-2">
 								<Label>Keywords to add ({manualKeywords.length})</Label>
-								<div className="flex flex-wrap gap-2 p-3 bg-muted/50 rounded-lg min-h-20 max-h-40 overflow-y-auto">
-									{manualKeywords.map((keyword) => (
-										<Badge
-											key={keyword}
-											variant="secondary"
-											className="flex items-center gap-1 pr-1"
-										>
-											{keyword}
-											<button
-												type="button"
-												onClick={() => handleRemoveKeyword(keyword)}
-												className="ml-1 hover:bg-muted rounded-full p-0.5"
-												disabled={isLoading}
-											>
-												<X className="h-3 w-3" />
-											</button>
-										</Badge>
-									))}
+								<div className="border rounded-lg max-h-60 overflow-y-auto">
+									<Table>
+										<TableHeader>
+											<TableRow>
+												<TableHead>Keyword</TableHead>
+												<TableHead>Type</TableHead>
+												<TableHead className="w-10"></TableHead>
+											</TableRow>
+										</TableHeader>
+										<TableBody>
+											{manualKeywords.map((item) => (
+												<TableRow key={item.keyword}>
+													<TableCell className="font-medium">{item.keyword}</TableCell>
+													<TableCell>
+														<button
+															type="button"
+															onClick={() => handleToggleKeywordType(item.keyword)}
+															className="cursor-pointer"
+															disabled={isLoading}
+														>
+															<TypeBadge isPrimary={item.isPrimary} />
+														</button>
+													</TableCell>
+													<TableCell>
+														<Button
+															variant="ghost"
+															size="sm"
+															onClick={() => handleRemoveKeyword(item.keyword)}
+															disabled={isLoading}
+														>
+															<Trash2 className="h-3 w-3 text-red-500" />
+														</Button>
+													</TableCell>
+												</TableRow>
+											))}
+										</TableBody>
+									</Table>
 								</div>
 							</div>
 						)}
 
 						<div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
 							<p className="text-sm text-blue-700">
-								<strong>Note:</strong> After adding keywords, the AI will analyze each one
-								to provide competition levels, search volumes, and generate
-								SEO-optimized article title recommendations.
+								<strong>Note:</strong> <strong>Primary</strong> keywords will trigger AI title generation.
+								<strong> Secondary</strong> keywords will only be analyzed for difficulty and volume.
+								Click on the type badge to toggle between Primary and Secondary.
 							</p>
 						</div>
 					</TabsContent>
@@ -355,7 +466,8 @@ export default function AddKeywordsModal({
 							</div>
 							<p className="text-xs text-muted-foreground">
 								File should have columns: <strong>Keyword</strong> (required),{" "}
-								<strong>Competition</strong> (low/medium/high), <strong>Volume</strong> (number)
+								<strong>Difficulty</strong> (0-100), <strong>Volume</strong> (number),{" "}
+								<strong>Type</strong> or <strong>isPrimary</strong> (true/false/primary/secondary)
 							</p>
 						</div>
 
@@ -385,7 +497,8 @@ export default function AddKeywordsModal({
 										<TableHeader>
 											<TableRow>
 												<TableHead>Keyword</TableHead>
-												<TableHead>Competition</TableHead>
+												<TableHead>Type</TableHead>
+												<TableHead>Difficulty</TableHead>
 												<TableHead>Volume</TableHead>
 												<TableHead className="w-10"></TableHead>
 											</TableRow>
@@ -395,8 +508,18 @@ export default function AddKeywordsModal({
 												<TableRow key={index}>
 													<TableCell className="font-medium">{item.keyword}</TableCell>
 													<TableCell>
-														{item.competition ? (
-															<CompetitionBadge competition={item.competition} />
+														<button
+															type="button"
+															onClick={() => handleToggleFileKeywordType(index)}
+															className="cursor-pointer"
+															disabled={isLoading}
+														>
+															<TypeBadge isPrimary={item.isPrimary} />
+														</button>
+													</TableCell>
+													<TableCell>
+														{item.difficulty !== undefined ? (
+															<DifficultyBadge difficulty={item.difficulty} />
 														) : (
 															<span className="text-muted-foreground text-xs">AI will analyze</span>
 														)}
@@ -429,8 +552,9 @@ export default function AddKeywordsModal({
 						{fileKeywords.length === 0 && !fileName && (
 							<div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
 								<p className="text-sm text-amber-700">
-									<strong>Tip:</strong> If Competition and Volume columns are provided,
+									<strong>Tip:</strong> If Difficulty and Volume columns are provided,
 									those values will be used directly. Otherwise, AI will analyze each keyword.
+									Add a <strong>Type</strong> or <strong>isPrimary</strong> column to control whether keywords are Primary (title generation) or Secondary.
 								</p>
 							</div>
 						)}

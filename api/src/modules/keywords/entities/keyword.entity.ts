@@ -1,12 +1,6 @@
 import { AbstractEntity } from '@/database/abstract.entity';
 import { User } from '@/modules/users/entities/user.entity';
-import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
-
-export enum CompetitionLevel {
-	LOW = 'low',
-	MEDIUM = 'medium',
-	HIGH = 'high',
-}
+import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('keywords')
 @Index(['userId', 'keyword'], { unique: true })
@@ -20,12 +14,8 @@ export class Keyword extends AbstractEntity<Keyword> {
 	@Column()
 	keyword: string;
 
-	@Column({
-		type: 'enum',
-		enum: CompetitionLevel,
-		default: CompetitionLevel.MEDIUM,
-	})
-	competition: CompetitionLevel;
+	@Column({ type: 'int', default: 50 })
+	difficulty: number;
 
 	@Column({ type: 'int', default: 0 })
 	volume: number;
@@ -35,14 +25,26 @@ export class Keyword extends AbstractEntity<Keyword> {
 
 	@Column({ name: 'ai_analysis', nullable: true, type: 'json' })
 	aiAnalysis: {
-		competitionScore?: number;
+		difficultyScore?: number;
 		volumeEstimate?: number;
-		difficulty?: string;
 		trend?: string;
 	};
 
 	@Column({ name: 'is_analyzed', default: false })
 	isAnalyzed: boolean;
+
+	@Column({ name: 'is_primary', default: true })
+	isPrimary: boolean;
+
+	@Column({ name: 'parent_keyword_id', nullable: true })
+	parentKeywordId: string | null;
+
+	@ManyToOne(() => Keyword, (keyword) => keyword.secondaryKeywords, { onDelete: 'SET NULL', nullable: true })
+	@JoinColumn({ name: 'parent_keyword_id' })
+	parentKeyword: Keyword | null;
+
+	@OneToMany(() => Keyword, (keyword) => keyword.parentKeyword)
+	secondaryKeywords: Keyword[];
 
 	@ManyToOne(() => User, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'user_id' })

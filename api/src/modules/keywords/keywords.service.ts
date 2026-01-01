@@ -1,15 +1,13 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { OpenAiService } from '../openai/openai.service';
 import { CreateKeywordsDto } from './dto/create-keyword.dto';
-import { CompetitionLevel, Keyword } from './entities/keyword.entity';
+import { Keyword } from './entities/keyword.entity';
 import { KeywordsRepository } from './keywords.repository';
 
 interface KeywordAnalysis {
 	keyword: string;
-	competition: CompetitionLevel;
-	competitionScore: number;
+	difficulty: number;
 	volume: number;
-	difficulty: string;
 	trend: string;
 	recommendedTitle: string;
 }
@@ -47,26 +45,34 @@ export class KeywordsService {
 				continue;
 			}
 
-			// Check if competition and volume are provided (from CSV/Excel upload)
-			const hasPrefilledData = keywordItem.competition && keywordItem.volume !== undefined;
+			// Check if difficulty and volume are provided (from CSV/Excel upload)
+			const hasPrefilledData = keywordItem.difficulty !== undefined && keywordItem.volume !== undefined;
+			// Default to primary if not specified
+			const isPrimary = keywordItem.isPrimary ?? true;
 
 			// Create the keyword entry
 			const newKeyword = await this.keywordsRepository.create({
 				userId,
 				keyword: normalizedKeyword,
-				competition: keywordItem.competition || CompetitionLevel.MEDIUM,
-				volume: keywordItem.volume || 0,
+				difficulty: keywordItem.difficulty ?? 50,
+				volume: keywordItem.volume ?? 0,
 				isAnalyzed: hasPrefilledData, // Mark as analyzed if data is provided
+				isPrimary,
+				parentKeywordId: keywordItem.parentKeywordId ?? null,
 			});
 			createdKeywords.push(newKeyword);
 
-			// Only analyze keywords that don't have prefilled data
-			if (!hasPrefilledData) {
+			// Only analyze primary keywords that don't have prefilled data
+			// Secondary keywords skip title generation
+			if (!hasPrefilledData && isPrimary) {
 				keywordsToAnalyze.push(newKeyword);
+			} else if (!hasPrefilledData && !isPrimary) {
+				// For secondary keywords, analyze without title generation
+				this.analyzeSecondaryKeywordInBackground(newKeyword);
 			}
 		}
 
-		// Analyze keywords without prefilled data in background (don't await)
+		// Analyze primary keywords without prefilled data in background (don't await)
 		if (keywordsToAnalyze.length > 0) {
 			this.analyzeKeywordsInBackground(keywordsToAnalyze);
 		}
@@ -92,13 +98,12 @@ export class KeywordsService {
 			const updated = await this.keywordsRepository.update(
 				{ keywordId: keyword.keywordId },
 				{
-					competition: analysis.competition,
+					difficulty: analysis.difficulty,
 					volume: analysis.volume,
 					recommendedTitle: analysis.recommendedTitle,
 					aiAnalysis: {
-						competitionScore: analysis.competitionScore,
+						difficultyScore: analysis.difficulty,
 						volumeEstimate: analysis.volume,
-						difficulty: analysis.difficulty,
 						trend: analysis.trend,
 					},
 					isAnalyzed: true,
@@ -119,19 +124,21 @@ export class KeywordsService {
 
 			Provide a JSON response with the following structure:
 			{
-				"competition": "low" | "medium" | "high",
-				"competitionScore": number (1-100, where 1 is easiest to rank),
+				"difficulty": number (0-100, where 0 is easiest to rank and 100 is hardest),
 				"volume": number (estimated monthly search volume on Google - be realistic based on the keyword's popularity),
-				"difficulty": "easy" | "moderate" | "hard" | "very hard",
 				"trend": "rising" | "stable" | "declining",
 				"recommendedTitle": "A compelling SEO-optimized article title for this keyword (max 60 characters)"
 			}
 
 			Important:
+			- For difficulty, estimate how hard it is to rank on Google's first page (0-100 scale)
+			  - 0-30: Easy to rank (low competition keywords)
+			  - 31-60: Moderate difficulty
+			  - 61-80: Hard to rank
+			  - 81-100: Very hard to rank (highly competitive keywords)
 			- For volume, estimate realistic monthly search volumes based on the keyword's nature
 			- Popular topics should have higher volumes (thousands to millions)
 			- Niche topics should have lower volumes (hundreds to low thousands)
-			- Competition should reflect how hard it is to rank on Google's first page
 			- The recommended title should be engaging and include the keyword naturally
 
 			Return ONLY valid JSON, no additional text.`;
@@ -152,10 +159,8 @@ export class KeywordsService {
 			// Validate and normalize the response
 			return {
 				keyword,
-				competition: this.normalizeCompetition(analysis.competition),
-				competitionScore: Math.min(100, Math.max(1, analysis.competitionScore || 50)),
+				difficulty: Math.min(100, Math.max(0, Math.round(analysis.difficulty ?? 50))),
 				volume: Math.max(0, Math.round(analysis.volume || 0)),
-				difficulty: analysis.difficulty || 'moderate',
 				trend: analysis.trend || 'stable',
 				recommendedTitle: analysis.recommendedTitle || `Guide to ${keyword}`,
 			};
@@ -164,21 +169,12 @@ export class KeywordsService {
 			// Return default values on failure
 			return {
 				keyword,
-				competition: CompetitionLevel.MEDIUM,
-				competitionScore: 50,
+				difficulty: 50,
 				volume: 1000,
-				difficulty: 'moderate',
 				trend: 'stable',
 				recommendedTitle: `Complete Guide to ${keyword}`,
 			};
 		}
-	}
-
-	private normalizeCompetition(value: string): CompetitionLevel {
-		const lower = value?.toLowerCase();
-		if (lower === 'low') return CompetitionLevel.LOW;
-		if (lower === 'high') return CompetitionLevel.HIGH;
-		return CompetitionLevel.MEDIUM;
 	}
 
 	async findAllByUser(userId: string): Promise<Keyword[]> {
@@ -211,5 +207,137 @@ export class KeywordsService {
 		for (const keywordId of keywordIds) {
 			await this.deleteKeyword(keywordId, userId);
 		}
+	}
+
+	// Analyze secondary keyword (difficulty and volume only, no title)
+	private async analyzeSecondaryKeywordInBackground(keyword: Keyword): Promise<void> {
+		try {
+			const analysis = await this.getKeywordAnalysisWithoutTitle(keyword.keyword);
+
+			await this.keywordsRepository.update(
+				{ keywordId: keyword.keywordId },
+				{
+					difficulty: analysis.difficulty,
+					volume: analysis.volume,
+					aiAnalysis: {
+						difficultyScore: analysis.difficulty,
+						volumeEstimate: analysis.volume,
+						trend: analysis.trend,
+					},
+					isAnalyzed: true,
+				}
+			);
+		} catch (error) {
+			this.logger.error(`Failed to analyze secondary keyword "${keyword.keyword}": ${error.message}`);
+		}
+	}
+
+	// Get keyword analysis without title generation (for secondary keywords)
+	private async getKeywordAnalysisWithoutTitle(keyword: string): Promise<Omit<KeywordAnalysis, 'recommendedTitle'>> {
+		const prompt = `You are an SEO expert. Analyze the following keyword and provide realistic SEO metrics.
+
+			Keyword: "${keyword}"
+
+			Provide a JSON response with the following structure:
+			{
+				"difficulty": number (0-100, where 0 is easiest to rank and 100 is hardest),
+				"volume": number (estimated monthly search volume on Google - be realistic based on the keyword's popularity),
+				"trend": "rising" | "stable" | "declining"
+			}
+
+			Important:
+			- For difficulty, estimate how hard it is to rank on Google's first page (0-100 scale)
+			  - 0-30: Easy to rank (low competition keywords)
+			  - 31-60: Moderate difficulty
+			  - 61-80: Hard to rank
+			  - 81-100: Very hard to rank (highly competitive keywords)
+			- For volume, estimate realistic monthly search volumes based on the keyword's nature
+			- Popular topics should have higher volumes (thousands to millions)
+			- Niche topics should have lower volumes (hundreds to low thousands)
+
+			Return ONLY valid JSON, no additional text.`;
+
+		try {
+			const response = await this.openAiService.chat([
+				{ role: 'user', content: prompt }
+			] as any);
+
+			const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+			if (!jsonMatch) {
+				throw new Error('No valid JSON found in AI response');
+			}
+
+			const analysis = JSON.parse(jsonMatch[0]);
+
+			return {
+				keyword,
+				difficulty: Math.min(100, Math.max(0, Math.round(analysis.difficulty ?? 50))),
+				volume: Math.max(0, Math.round(analysis.volume || 0)),
+				trend: analysis.trend || 'stable',
+			};
+		} catch (error) {
+			this.logger.error(`AI analysis failed for secondary keyword "${keyword}": ${error.message}`);
+			return {
+				keyword,
+				difficulty: 50,
+				volume: 1000,
+				trend: 'stable',
+			};
+		}
+	}
+
+	// Update keyword primary status
+	async updatePrimaryStatus(keywordId: string, userId: string, isPrimary: boolean): Promise<Keyword> {
+		const keyword = await this.findOne(keywordId, userId);
+
+		// If changing from secondary to primary, generate title if not already present
+		if (isPrimary && !keyword.isPrimary && !keyword.recommendedTitle) {
+			// Analyze and generate title for the newly promoted keyword
+			await this.keywordsRepository.update(
+				{ keywordId: keyword.keywordId },
+				{ isPrimary: true }
+			);
+			return this.analyzeKeyword({ ...keyword, isPrimary: true });
+		}
+
+		const updated = await this.keywordsRepository.update(
+			{ keywordId: keyword.keywordId },
+			{ isPrimary }
+		);
+
+		return updated;
+	}
+
+	// Update parent keyword for a secondary keyword
+	async updateParentKeyword(keywordId: string, userId: string, parentKeywordId: string | null): Promise<Keyword> {
+		const keyword = await this.findOne(keywordId, userId);
+
+		// Can only assign parent to secondary keywords
+		if (keyword.isPrimary) {
+			throw new Error('Cannot assign a parent keyword to a primary keyword');
+		}
+
+		// Validate parent keyword exists and belongs to user if parentKeywordId is provided
+		if (parentKeywordId) {
+			const parentKeyword = await this.findOne(parentKeywordId, userId);
+			if (!parentKeyword.isPrimary) {
+				throw new Error('Parent keyword must be a primary keyword');
+			}
+		}
+
+		const updated = await this.keywordsRepository.update(
+			{ keywordId: keyword.keywordId },
+			{ parentKeywordId }
+		);
+
+		return updated;
+	}
+
+	// Get all primary keywords for a user (for dropdown selection)
+	async getPrimaryKeywords(userId: string): Promise<Keyword[]> {
+		return this.keywordsRepository.findAll({
+			where: { userId, isPrimary: true },
+			order: { keyword: 'ASC' },
+		});
 	}
 }

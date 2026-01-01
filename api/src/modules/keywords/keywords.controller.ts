@@ -39,6 +39,29 @@ export class KeywordsController {
 		return await this.keywordsService.reanalyzeKeyword(keywordId, user.sub);
 	}
 
+	@Put(':keywordId/primary')
+	async updatePrimaryStatus(
+		@CurrentUser() user: JwtPayload,
+		@Param('keywordId') keywordId: string,
+		@Body('isPrimary') isPrimary: boolean,
+	) {
+		return await this.keywordsService.updatePrimaryStatus(keywordId, user.sub, isPrimary);
+	}
+
+	@Put(':keywordId/parent')
+	async updateParentKeyword(
+		@CurrentUser() user: JwtPayload,
+		@Param('keywordId') keywordId: string,
+		@Body('parentKeywordId') parentKeywordId: string | null,
+	) {
+		return await this.keywordsService.updateParentKeyword(keywordId, user.sub, parentKeywordId);
+	}
+
+	@Get('primary/list')
+	async getPrimaryKeywords(@CurrentUser() user: JwtPayload) {
+		return await this.keywordsService.getPrimaryKeywords(user.sub);
+	}
+
 	@Delete(':keywordId')
 	async deleteKeyword(
 		@CurrentUser() user: JwtPayload,

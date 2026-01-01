@@ -2,15 +2,16 @@ import { Type } from 'class-transformer';
 import {
 	ArrayMinSize,
 	IsArray,
-	IsEnum,
+	IsBoolean,
 	IsNotEmpty,
 	IsNumber,
 	IsOptional,
 	IsString,
+	IsUUID,
+	Max,
 	Min,
 	ValidateNested,
 } from 'class-validator';
-import { CompetitionLevel } from '../entities/keyword.entity';
 
 export class KeywordItemDto {
 	@IsString()
@@ -18,13 +19,23 @@ export class KeywordItemDto {
 	keyword: string;
 
 	@IsOptional()
-	@IsEnum(CompetitionLevel)
-	competition?: CompetitionLevel;
+	@IsNumber()
+	@Min(0)
+	@Max(100)
+	difficulty?: number;
 
 	@IsOptional()
 	@IsNumber()
 	@Min(0)
 	volume?: number;
+
+	@IsOptional()
+	@IsBoolean()
+	isPrimary?: boolean;
+
+	@IsOptional()
+	@IsUUID()
+	parentKeywordId?: string;
 }
 
 export class CreateKeywordsDto {

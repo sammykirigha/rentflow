@@ -24,8 +24,19 @@ import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuSub,
+	DropdownMenuSubContent,
+	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import {
 	Table,
 	TableBody,
@@ -43,8 +54,11 @@ import {
 import { Keyword, keywordsApi } from "@/lib/api/keywords.api";
 import {
 	AlertCircle,
-	BarChart3,
+	Check,
+	Crown,
+	Filter,
 	Key,
+	Link2,
 	Loader2,
 	MoreHorizontal,
 	Plus,
@@ -52,24 +66,45 @@ import {
 	Target,
 	Trash2,
 	TrendingUp,
+	Unlink
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import AddKeywordsModal from "./components/add-keywords-modal";
 
-// Competition badge component
-const CompetitionBadge = ({ competition }: { competition: Keyword["competition"]; }) => {
-	const variants: Record<Keyword["competition"], { color: string; label: string; }> = {
-		low: { color: "bg-green-100 text-green-800 border-green-200", label: "Low" },
-		medium: { color: "bg-yellow-100 text-yellow-800 border-yellow-200", label: "Medium" },
-		high: { color: "bg-red-100 text-red-800 border-red-200", label: "High" },
+// Difficulty badge component - shows score with yellow-to-red gradient
+const DifficultyBadge = ({ difficulty }: { difficulty: number; }) => {
+	// Interpolate from yellow (0) to red (100)
+	const getGradientColor = (score: number) => {
+		const clampedScore = Math.max(0, Math.min(100, score));
+		// Yellow: hsl(45, 100%, 51%) -> Red: hsl(0, 100%, 50%)
+		const hue = 45 - (clampedScore / 100) * 45; // 45 (yellow) to 0 (red)
+		return {
+			background: `hsl(${hue}, 100%, 90%)`,
+			color: `hsl(${hue}, 100%, 30%)`,
+			borderColor: `hsl(${hue}, 100%, 70%)`,
+		};
 	};
 
-	const variant = variants[competition] || variants.medium;
+	const getLabel = (score: number) => {
+		if (score <= 30) return "Easy";
+		if (score <= 60) return "Medium";
+		if (score <= 80) return "Hard";
+		return "Very Hard";
+	};
+
+	const colors = getGradientColor(difficulty);
 
 	return (
-		<Badge variant="outline" className={variant.color}>
-			{variant.label}
+		<Badge
+			variant="outline"
+			style={{
+				backgroundColor: colors.background,
+				color: colors.color,
+				borderColor: colors.borderColor,
+			}}
+		>
+			{difficulty} - {getLabel(difficulty)}
 		</Badge>
 	);
 };
@@ -85,6 +120,20 @@ const formatVolume = (volume: number): string => {
 	return volume.toString();
 };
 
+// Primary/Secondary badge component
+const TypeBadge = ({ isPrimary }: { isPrimary: boolean; }) => {
+	return isPrimary ? (
+		<Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-100">
+			<Crown className="h-3 w-3 mr-1" />
+			Primary
+		</Badge>
+	) : (
+		<Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-200">
+			Secondary
+		</Badge>
+	);
+};
+
 export default function KeywordsPage() {
 	const [keywords, setKeywords] = useState<Keyword[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
@@ -96,6 +145,20 @@ export default function KeywordsPage() {
 	const [deletingId, setDeletingId] = useState<string | null>(null);
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 	const [isDeletingMultiple, setIsDeletingMultiple] = useState(false);
+	const [togglingPrimaryId, setTogglingPrimaryId] = useState<string | null>(null);
+	const [updatingParentId, setUpdatingParentId] = useState<string | null>(null);
+	const [typeFilter, setTypeFilter] = useState<"all" | "primary" | "secondary">("all");
+
+	// Get primary keywords for parent selection
+	const primaryKeywords = keywords.filter((k) => k.isPrimary);
+
+	// Filter keywords by type
+	const filteredKeywords = keywords.filter((k) => {
+		if (typeFilter === "all") return true;
+		if (typeFilter === "primary") return k.isPrimary;
+		if (typeFilter === "secondary") return !k.isPrimary;
+		return true;
+	});
 
 	const fetchKeywords = useCallback(async () => {
 		try {
@@ -131,6 +194,47 @@ export default function KeywordsPage() {
 		}
 	};
 
+	const handleTogglePrimary = async (keyword: Keyword) => {
+		try {
+			setTogglingPrimaryId(keyword.keywordId);
+			const updated = await keywordsApi.updatePrimaryStatus(keyword.keywordId, !keyword.isPrimary);
+			setKeywords((prev) =>
+				prev.map((k) => (k.keywordId === keyword.keywordId ? updated : k))
+			);
+			toast.success(
+				updated.isPrimary
+					? "Keyword set as Primary - title will be generated"
+					: "Keyword set as Secondary"
+			);
+		} catch (err) {
+			toast.error("Failed to update keyword type");
+			console.error("Error updating keyword type:", err);
+		} finally {
+			setTogglingPrimaryId(null);
+		}
+	};
+
+	const handleUpdateParentKeyword = async (keyword: Keyword, parentKeywordId: string | null) => {
+		try {
+			setUpdatingParentId(keyword.keywordId);
+			const updated = await keywordsApi.updateParentKeyword(keyword.keywordId, parentKeywordId);
+			setKeywords((prev) =>
+				prev.map((k) => (k.keywordId === keyword.keywordId ? updated : k))
+			);
+			if (parentKeywordId) {
+				const parentKeyword = keywords.find(k => k.keywordId === parentKeywordId);
+				toast.success(`Assigned to "${parentKeyword?.keyword}"`);
+			} else {
+				toast.success("Parent keyword removed");
+			}
+		} catch (err) {
+			toast.error("Failed to update parent keyword");
+			console.error("Error updating parent keyword:", err);
+		} finally {
+			setUpdatingParentId(null);
+		}
+	};
+
 	const handleDeleteClick = (keyword: Keyword) => {
 		setKeywordToDelete(keyword);
 		setIsDeleteDialogOpen(true);
@@ -153,14 +257,6 @@ export default function KeywordsPage() {
 			setDeletingId(null);
 			setIsDeleteDialogOpen(false);
 			setKeywordToDelete(null);
-		}
-	};
-
-	const handleSelectAll = (checked: boolean) => {
-		if (checked) {
-			setSelectedIds(new Set(keywords.map((k) => k.keywordId)));
-		} else {
-			setSelectedIds(new Set());
 		}
 	};
 
@@ -196,9 +292,9 @@ export default function KeywordsPage() {
 	// Calculate stats
 	const stats = {
 		total: keywords.length,
-		lowCompetition: keywords.filter((k) => k.competition === "low").length,
+		primaryKeywords: keywords.filter((k) => k.isPrimary).length,
+		easyKeywords: keywords.filter((k) => k.difficulty <= 30).length,
 		highVolume: keywords.filter((k) => k.volume >= 1000).length,
-		analyzed: keywords.filter((k) => k.isAnalyzed).length,
 	};
 
 	return (
@@ -221,8 +317,19 @@ export default function KeywordsPage() {
 						<CardContent className="pt-6">
 							<div className="flex items-center justify-between">
 								<div>
-									<p className="text-sm text-muted-foreground">Low Competition</p>
-									<p className="text-2xl font-bold text-green-600">{stats.lowCompetition}</p>
+									<p className="text-sm text-muted-foreground">Primary Keywords</p>
+									<p className="text-2xl font-bold text-purple-600">{stats.primaryKeywords}</p>
+								</div>
+								<Crown className="h-8 w-8 text-purple-500" />
+							</div>
+						</CardContent>
+					</Card>
+					<Card>
+						<CardContent className="pt-6">
+							<div className="flex items-center justify-between">
+								<div>
+									<p className="text-sm text-muted-foreground">Easy Keywords (≤30)</p>
+									<p className="text-2xl font-bold text-green-600">{stats.easyKeywords}</p>
 								</div>
 								<Target className="h-8 w-8 text-green-500" />
 							</div>
@@ -236,17 +343,6 @@ export default function KeywordsPage() {
 									<p className="text-2xl font-bold text-blue-600">{stats.highVolume}</p>
 								</div>
 								<TrendingUp className="h-8 w-8 text-blue-500" />
-							</div>
-						</CardContent>
-					</Card>
-					<Card>
-						<CardContent className="pt-6">
-							<div className="flex items-center justify-between">
-								<div>
-									<p className="text-sm text-muted-foreground">Analyzed</p>
-									<p className="text-2xl font-bold text-purple-600">{stats.analyzed}</p>
-								</div>
-								<BarChart3 className="h-8 w-8 text-purple-500" />
 							</div>
 						</CardContent>
 					</Card>
@@ -266,6 +362,23 @@ export default function KeywordsPage() {
 								</CardDescription>
 							</div>
 							<div className="flex items-center gap-2">
+								{/* Type Filter */}
+								<Select value={typeFilter} onValueChange={(value: "all" | "primary" | "secondary") => setTypeFilter(value)}>
+									<SelectTrigger className="min-w-35 h-9">
+										<Filter className="h-4 w-4 mr-2" />
+										<SelectValue placeholder="Filter by type" />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="all">All Types</SelectItem>
+										<SelectItem value="primary">
+											<div className="flex items-center gap-2">
+												<Crown className="h-3 w-3 text-purple-600" />
+												Primary
+											</div>
+										</SelectItem>
+										<SelectItem value="secondary">Secondary</SelectItem>
+									</SelectContent>
+								</Select>
 								{selectedIds.size > 0 && (
 									<Button
 										variant="destructive"
@@ -324,6 +437,17 @@ export default function KeywordsPage() {
 									Add Keywords
 								</Button>
 							</div>
+						) : filteredKeywords.length === 0 ? (
+							<div className="flex flex-col items-center justify-center py-12 text-center">
+								<Filter className="h-12 w-12 text-gray-300 mb-4" />
+								<p className="text-gray-600">No {typeFilter} keywords found</p>
+								<p className="text-sm text-gray-400 mt-1">
+									Try changing the filter or add new keywords
+								</p>
+								<Button variant="outline" className="mt-4" onClick={() => setTypeFilter("all")}>
+									Clear Filter
+								</Button>
+							</div>
 						) : (
 							<div className="rounded-md border">
 								<Table>
@@ -331,21 +455,42 @@ export default function KeywordsPage() {
 										<TableRow>
 											<TableHead className="w-12">
 												<Checkbox
-													checked={selectedIds.size === keywords.length && keywords.length > 0}
-													onCheckedChange={handleSelectAll}
+													checked={selectedIds.size === filteredKeywords.length && filteredKeywords.length > 0}
+													onCheckedChange={(checked) => {
+														if (checked) {
+															setSelectedIds(new Set(filteredKeywords.map((k) => k.keywordId)));
+														} else {
+															setSelectedIds(new Set());
+														}
+													}}
 												/>
 											</TableHead>
 											<TableHead>Keyword</TableHead>
 											<TableHead>
 												<Tooltip>
 													<TooltipTrigger className="flex items-center gap-1">
-														Competition
+														Type
 														<AlertCircle className="h-3 w-3 text-muted-foreground" />
 													</TooltipTrigger>
 													<TooltipContent className="max-w-xs">
 														<p>
-															How hard it is to rank on Google&apos;s first page. Low
-															competition keywords are easier to rank for.
+															Primary keywords trigger AI title generation.
+															Secondary keywords only get difficulty/volume analysis.
+															Click to toggle.
+														</p>
+													</TooltipContent>
+												</Tooltip>
+											</TableHead>
+											<TableHead>
+												<Tooltip>
+													<TooltipTrigger className="flex items-center gap-1">
+														Difficulty
+														<AlertCircle className="h-3 w-3 text-muted-foreground" />
+													</TooltipTrigger>
+													<TooltipContent className="max-w-xs">
+														<p>
+															Score from 0-100 indicating how hard it is to rank on Google&apos;s first page.
+															Lower scores (0-30) are easier to rank for.
 														</p>
 													</TooltipContent>
 												</Tooltip>
@@ -365,12 +510,26 @@ export default function KeywordsPage() {
 												</Tooltip>
 											</TableHead>
 											<TableHead>Recommended Title</TableHead>
+											<TableHead>
+												<Tooltip>
+													<TooltipTrigger className="flex items-center gap-1">
+														Parent
+														<AlertCircle className="h-3 w-3 text-muted-foreground" />
+													</TooltipTrigger>
+													<TooltipContent className="max-w-xs">
+														<p>
+															Secondary keywords can be grouped under a primary keyword.
+															Use the actions menu to assign a parent.
+														</p>
+													</TooltipContent>
+												</Tooltip>
+											</TableHead>
 											<TableHead>Status</TableHead>
 											<TableHead className="text-right">Actions</TableHead>
 										</TableRow>
 									</TableHeader>
 									<TableBody>
-										{keywords.map((keyword) => (
+										{filteredKeywords.map((keyword) => (
 											<TableRow key={keyword.keywordId}>
 												<TableCell>
 													<Checkbox
@@ -384,7 +543,22 @@ export default function KeywordsPage() {
 													{keyword.keyword}
 												</TableCell>
 												<TableCell>
-													<CompetitionBadge competition={keyword.competition} />
+													<button
+														onClick={() => handleTogglePrimary(keyword)}
+														disabled={togglingPrimaryId === keyword.keywordId}
+														className="cursor-pointer disabled:opacity-50"
+													>
+														{togglingPrimaryId === keyword.keywordId ? (
+															<Badge variant="outline" className="bg-gray-100">
+																<Loader2 className="h-3 w-3 animate-spin" />
+															</Badge>
+														) : (
+															<TypeBadge isPrimary={keyword.isPrimary} />
+														)}
+													</button>
+												</TableCell>
+												<TableCell>
+													<DifficultyBadge difficulty={keyword.difficulty} />
 												</TableCell>
 												<TableCell>
 													<span className="font-mono">
@@ -404,8 +578,36 @@ export default function KeywordsPage() {
 																<p>{keyword.recommendedTitle}</p>
 															</TooltipContent>
 														</Tooltip>
+													) : keyword.isPrimary ? (
+														<span className="text-muted-foreground text-xs">Generating...</span>
 													) : (
-														<span className="text-muted-foreground">-</span>
+														<Tooltip>
+															<TooltipTrigger className="text-muted-foreground text-xs cursor-help">
+																N/A (Secondary)
+															</TooltipTrigger>
+															<TooltipContent>
+																<p>Click on Type to make this a Primary keyword and generate a title</p>
+															</TooltipContent>
+														</Tooltip>
+													)}
+												</TableCell>
+												<TableCell>
+													{keyword.isPrimary ? (
+														<span className="text-muted-foreground text-xs">—</span>
+													) : keyword.parentKeywordId ? (
+														<Tooltip>
+															<TooltipTrigger className="text-left truncate block max-w-32">
+																<Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+																	<Link2 className="h-3 w-3 mr-1" />
+																	{keywords.find(k => k.keywordId === keyword.parentKeywordId)?.keyword || "Unknown"}
+																</Badge>
+															</TooltipTrigger>
+															<TooltipContent>
+																<p>Parent: {keywords.find(k => k.keywordId === keyword.parentKeywordId)?.keyword}</p>
+															</TooltipContent>
+														</Tooltip>
+													) : (
+														<span className="text-muted-foreground text-xs">Not assigned</span>
 													)}
 												</TableCell>
 												<TableCell>
@@ -428,6 +630,59 @@ export default function KeywordsPage() {
 															</Button>
 														</DropdownMenuTrigger>
 														<DropdownMenuContent align="end">
+															<DropdownMenuItem
+																onClick={() => handleTogglePrimary(keyword)}
+																disabled={togglingPrimaryId === keyword.keywordId}
+															>
+																{togglingPrimaryId === keyword.keywordId ? (
+																	<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+																) : (
+																	<Crown className="h-4 w-4 mr-2" />
+																)}
+																{keyword.isPrimary ? "Make Secondary" : "Make Primary"}
+															</DropdownMenuItem>
+															{!keyword.isPrimary && primaryKeywords.length > 0 && (
+																<>
+																	<DropdownMenuSeparator />
+																	<DropdownMenuSub>
+																		<DropdownMenuSubTrigger disabled={updatingParentId === keyword.keywordId}>
+																			{updatingParentId === keyword.keywordId ? (
+																				<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+																			) : (
+																				<Link2 className="h-4 w-4 mr-2" />
+																			)}
+																			Set Parent Keyword
+																		</DropdownMenuSubTrigger>
+																		<DropdownMenuSubContent className='max-h-125! overflow-y-auto'>
+																			{keyword.parentKeywordId && (
+																				<>
+																					<DropdownMenuItem
+																						onClick={() => handleUpdateParentKeyword(keyword, null)}
+																					>
+																						<Unlink className="h-4 w-4 mr-2" />
+																						Remove Parent
+																					</DropdownMenuItem>
+																					<DropdownMenuSeparator />
+																				</>
+																			)}
+																			{primaryKeywords.map((primary) => (
+																				<DropdownMenuItem
+																					key={primary.keywordId}
+																					onClick={() => handleUpdateParentKeyword(keyword, primary.keywordId)}
+																					disabled={keyword.parentKeywordId === primary.keywordId}
+																				>
+																					{keyword.parentKeywordId === primary.keywordId && (
+																						<Check className="h-4 w-4 mr-2" />
+																					)}
+																					<span className={keyword.parentKeywordId === primary.keywordId ? "font-medium" : ""}>
+																						{primary.keyword}
+																					</span>
+																				</DropdownMenuItem>
+																			))}
+																		</DropdownMenuSubContent>
+																	</DropdownMenuSub>
+																</>
+															)}
 															<DropdownMenuItem
 																onClick={() => handleReanalyze(keyword)}
 																disabled={reanalyzingId === keyword.keywordId}
