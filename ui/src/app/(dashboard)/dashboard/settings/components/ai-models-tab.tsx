@@ -130,11 +130,12 @@ export default function AiModelsTab() {
 
   const activeModels = aiModels.filter(model => model.isActive);
   const inactiveModels = aiModels.filter(model => !model.isActive);
+  const defaultModel = aiModels.find(model => model.isDefault);
 
   return (
     <div className="space-y-6">
       {/* Header Actions */}
-      {/* <Card>
+      <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
@@ -153,7 +154,7 @@ export default function AiModelsTab() {
                   Add AI Model
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-2xl sm:min-w-4xl">
                 <DialogHeader>
                   <DialogTitle>Add New AI Model</DialogTitle>
                 </DialogHeader>
@@ -174,13 +175,13 @@ export default function AiModelsTab() {
             </div>
             <div className="text-center p-4 bg-purple-50 rounded-lg">
               <div className="text-2xl font-bold text-purple-600">
-                {defaultModel ? '1' : '0'}
+                {defaultModel ? defaultModel.displayName : '-'}
               </div>
               <div className="text-sm text-purple-600">Default Model</div>
             </div>
           </div>
         </CardContent>
-      </Card> */}
+      </Card>
 
       {/* Default Model */}
       {/* {defaultModel && (
@@ -202,8 +203,8 @@ export default function AiModelsTab() {
               onDelete={handleDelete}
               onTestConnection={handleTestConnection}
               onEdit={setEditingModel}
-              showApiKey={showApiKeys[defaultModel.id]}
-              onToggleApiKey={() => toggleApiKeyVisibility(defaultModel.id)}
+              showApiKey={showApiKeys[defaultModel.modelId]}
+              onToggleApiKey={() => toggleApiKeyVisibility(defaultModel.modelId)}
               isDefault={true}
             />
           </CardContent>
@@ -295,7 +296,7 @@ export default function AiModelsTab() {
                     Add Your First AI Model
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-2xl sm:min-w-4xl">
                   <DialogHeader>
                     <DialogTitle>Add New AI Model</DialogTitle>
                   </DialogHeader>

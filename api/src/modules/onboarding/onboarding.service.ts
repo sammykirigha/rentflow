@@ -67,7 +67,7 @@ export class OnboardingService {
 	 * Perform full scraping of main page and all nested internal pages recursively
 	 */
 	private async performFullScraping(websiteId: string, websiteUrl: string): Promise<void> {
-		const MAX_PAGES_TO_SCRAPE = 200; // Safety limit
+		const MAX_PAGES_TO_SCRAPE = 350; // Safety limit
 		const visitedUrls = new Set<string>();
 		const urlQueue: { url: string; depth: number; }[] = [];
 		let scrapedCount = 0;

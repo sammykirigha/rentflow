@@ -33,10 +33,13 @@ export class UsersService {
 			throw new ConflictException('User with this email already exists');
 		}
 
+		const userRole = await this.permissionsService.getRoleByName(UserRole.USER);
+
 		const hashedPassword = await bcrypt.hash(createUserDto.password, authConfig.bcryptRounds);
 		const userData = {
 			...createUserDto,
 			password: hashedPassword,
+			roleId: userRole.roleId,
 		};
 
 		return this.usersRepository.create(userData);

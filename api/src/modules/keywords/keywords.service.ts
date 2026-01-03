@@ -35,14 +35,13 @@ export class KeywordsService {
 			return true;
 		});
 
-		for (const keywordItem of uniqueKeywords) {
+		await Promise.all(uniqueKeywords.map(async keywordItem => {
 			const normalizedKeyword = keywordItem.keyword.trim().toLowerCase();
-
 			// Check if keyword already exists for this user
 			const existing = await this.keywordsRepository.findByUserIdAndKeyword(userId, normalizedKeyword);
 			if (existing) {
 				this.logger.warn(`Keyword "${normalizedKeyword}" already exists for user ${userId}`);
-				continue;
+				return;
 			}
 
 			// Check if difficulty and volume are provided (from CSV/Excel upload)
@@ -70,7 +69,7 @@ export class KeywordsService {
 				// For secondary keywords, analyze without title generation
 				this.analyzeSecondaryKeywordInBackground(newKeyword);
 			}
-		}
+		}));
 
 		// Analyze primary keywords without prefilled data in background (don't await)
 		if (keywordsToAnalyze.length > 0) {
@@ -81,13 +80,13 @@ export class KeywordsService {
 	}
 
 	private async analyzeKeywordsInBackground(keywords: Keyword[]): Promise<void> {
-		for (const keyword of keywords) {
+		await Promise.all(keywords.map(async keyword => {
 			try {
 				await this.analyzeKeyword(keyword);
 			} catch (error) {
 				this.logger.error(`Failed to analyze keyword "${keyword.keyword}": ${error.message}`);
 			}
-		}
+		}));
 	}
 
 	async analyzeKeyword(keyword: Keyword): Promise<Keyword> {

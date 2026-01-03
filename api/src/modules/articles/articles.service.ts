@@ -106,80 +106,80 @@ export class ArticlesService {
 
 			const systemPrompt = `You are an expert SEO content writer. Generate a comprehensive, well-structured article in TipTap JSON format.
 
-The article must be returned as valid JSON that TipTap rich text editor can parse. Use this exact structure:
-{
-  "type": "doc",
-  "content": [
-    {
-      "type": "paragraph",
-      "content": [{ "type": "text", "text": "Introduction paragraph..." }]
-    },
-    {
-      "type": "heading",
-      "attrs": { "level": 2 },
-      "content": [{ "type": "text", "text": "Section Heading" }]
-    },
-    {
-      "type": "paragraph",
-      "content": [
-        { "type": "text", "text": "Regular text " },
-        { "type": "text", "marks": [{ "type": "bold" }], "text": "bold text" },
-        { "type": "text", "text": " and " },
-        { "type": "text", "marks": [{ "type": "italic" }], "text": "italic text" }
-      ]
-    },
-    {
-      "type": "bulletList",
-      "content": [
-        {
-          "type": "listItem",
-          "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "List item 1" }] }]
-        },
-        {
-          "type": "listItem",
-          "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "List item 2" }] }]
-        }
-      ]
-    },
-    {
-      "type": "orderedList",
-      "content": [
-        {
-          "type": "listItem",
-          "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Step 1" }] }]
-        }
-      ]
-    },
-    {
-      "type": "blockquote",
-      "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Quote text" }] }]
-    }
-  ]
-}
+								The article must be returned as valid JSON that TipTap rich text editor can parse. Use this exact structure:
+								{
+								"type": "doc",
+								"content": [
+									{
+									"type": "paragraph",
+									"content": [{ "type": "text", "text": "Introduction paragraph..." }]
+									},
+									{
+									"type": "heading",
+									"attrs": { "level": 2 },
+									"content": [{ "type": "text", "text": "Section Heading" }]
+									},
+									{
+									"type": "paragraph",
+									"content": [
+										{ "type": "text", "text": "Regular text " },
+										{ "type": "text", "marks": [{ "type": "bold" }], "text": "bold text" },
+										{ "type": "text", "text": " and " },
+										{ "type": "text", "marks": [{ "type": "italic" }], "text": "italic text" }
+									]
+									},
+									{
+									"type": "bulletList",
+									"content": [
+										{
+										"type": "listItem",
+										"content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "List item 1" }] }]
+										},
+										{
+										"type": "listItem",
+										"content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "List item 2" }] }]
+										}
+									]
+									},
+									{
+									"type": "orderedList",
+									"content": [
+										{
+										"type": "listItem",
+										"content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Step 1" }] }]
+										}
+									]
+									},
+									{
+									"type": "blockquote",
+									"content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Quote text" }] }]
+									}
+								]
+								}
 
-Available node types: doc, paragraph, heading (levels 2-4), bulletList, orderedList, listItem, blockquote, codeBlock, horizontalRule
-Available marks: bold, italic, strike, code, link (with href attr)
+								Available node types: doc, paragraph, heading (levels 2-4), bulletList, orderedList, listItem, blockquote, codeBlock, horizontalRule
+								Available marks: bold, italic, strike, code, link (with href attr)
 
-IMPORTANT: 
-- Return ONLY the JSON object, no markdown code blocks or explanations
-- The JSON must be valid and parseable
-- DO NOT include the article title (h1 heading) in the content - the title is stored separately
-- Start the content directly with an introduction paragraph or h2 section heading
-- Include comprehensive content with multiple sections
-- Use h2 for main sections and h3 for subsections (never use h1)
-- Include bullet points and numbered lists where appropriate
-- Make the content SEO-optimized for the given keywords`;
+								IMPORTANT: 
+								- Return ONLY the JSON object, no markdown code blocks or explanations
+								- The JSON must be valid and parseable
+								- DO NOT include the article title (h1 heading) in the content - the title is stored separately
+								- Start the content directly with an introduction paragraph or h2 section heading
+								- Include comprehensive content with multiple sections
+								- Use h2 for main sections and h3 for subsections (never use h1)
+								- Include bullet points and numbered lists where appropriate
+								- Make the content SEO-optimized for the given keywords`;
 
 			let userPrompt = `Generate an SEO-optimized article with the following details:
 
-**Title:** ${dto.title}
+						**Title:** ${dto.title}
 
-**Primary Keyword:** ${primaryKeyword.keyword}
-${secondaryKeywordsList ? `**Secondary Keywords to incorporate:** ${secondaryKeywordsList}` : ''}
+						**Primary Keyword:** ${primaryKeyword.keyword}
+						${secondaryKeywordsList ? `**Secondary Keywords to incorporate:** ${secondaryKeywordsList}` : ''}
 
-**Content Briefing/Instructions:**
-${dto.contentBriefing}
-`;
+						**Content Briefing/Instructions:**
+						${dto.contentBriefing}
+						`;
 
 			if (dto.referenceContent) {
 				userPrompt += `
@@ -189,14 +189,14 @@ ${dto.referenceContent.substring(0, 5000)}
 			}
 
 			userPrompt += `
-Generate a comprehensive, engaging article that:
-1. Naturally incorporates the primary and secondary keywords
-2. Is well-structured with clear headings and subheadings
-3. Provides valuable, actionable information
-4. Is optimized for search engines
-5. Is at least 1500 words
+				Generate a comprehensive, engaging article that:
+				1. Naturally incorporates the primary and secondary keywords
+				2. Is well-structured with clear headings and subheadings
+				3. Provides valuable, actionable information
+				4. Is optimized for search engines
+				5. Is at least 1500 words
 
-Return the article in TipTap JSON format as specified.`;
+				Return the article in TipTap JSON format as specified.`;
 
 			const response = await this.openAiService.chat([
 				{ role: 'system', content: systemPrompt },
@@ -290,16 +290,16 @@ Return the article in TipTap JSON format as specified.`;
 
 		const prompt = `Generate an engaging, SEO-optimized article title for the following keyword:
 
-Keyword: ${keyword.keyword}
-${context ? `Additional context: ${context}` : ''}
+						Keyword: ${keyword.keyword}
+						${context ? `Additional context: ${context}` : ''}
 
-Requirements:
-- The title should be compelling and click-worthy
-- Include the main keyword naturally
-- Keep it under 60 characters for SEO
-- Make it specific and valuable to readers
+						Requirements:
+						- The title should be compelling and click-worthy
+						- Include the main keyword naturally
+						- Keep it under 60 characters for SEO
+						- Make it specific and valuable to readers
 
-Return ONLY the title text, nothing else.`;
+						Return ONLY the title text, nothing else.`;
 
 		const response = await this.openAiService.chat([
 			{ role: 'user', content: prompt },
@@ -389,18 +389,18 @@ IMPORTANT:
 - DO NOT include the article title (h1 heading) in the content - the title is stored separately
 - Preserve the overall structure unless instructed otherwise
 - Apply the requested modifications carefully
-- Maintain SEO optimization and readability`;
+					- Maintain SEO optimization and readability`;
 
 			const userPrompt = `Here is the current article content in TipTap JSON format:
 
-\`\`\`json
-${JSON.stringify(article.contentJson, null, 2)}
-\`\`\`
+						\`\`\`json
+						${JSON.stringify(article.contentJson, null, 2)}
+						\`\`\`
 
-**Modification Instructions:**
-${instructions}
+						**Modification Instructions:**
+						${instructions}
 
-Please apply these modifications and return the updated article in TipTap JSON format.`;
+						Please apply these modifications and return the updated article in TipTap JSON format.`;
 
 			const response = await this.openAiService.chat([
 				{ role: 'system', content: systemPrompt },

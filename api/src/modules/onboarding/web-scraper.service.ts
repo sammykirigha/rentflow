@@ -339,9 +339,9 @@ export class WebScraperService {
 			}
 		}
 
-		result.links = [...new Set(allLinks)].slice(0, 100);
-		result.internalLinks = internalLinks.slice(0, 100);
-		result.externalLinks = externalLinks.slice(0, 50);
+		result.links = [...new Set(allLinks)].slice(0, 300);
+		result.internalLinks = internalLinks.slice(0, 300);
+		result.externalLinks = externalLinks.slice(0, 100);
 
 		return result;
 	}
@@ -364,7 +364,7 @@ export class WebScraperService {
 		text = this.decodeHtmlEntities(text);
 
 		// Limit content length
-		return text.substring(0, 10000);
+		return text.substring(0, 30000);
 	}
 
 	private stripTags(html: string): string {
