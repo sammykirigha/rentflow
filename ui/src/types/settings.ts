@@ -37,6 +37,9 @@ export interface SystemSetting {
   smsNotifications: boolean;
   adminAlerts: boolean;
 
+  // Content Settings
+  contentBriefingPrompt?: string;
+
   createdAt: string;
   updatedAt: string;
 }

@@ -56,6 +56,11 @@ export const userApi = {
     return response.data?.data;
   },
 
+  checkIfOnboarded: async (userId: string): Promise<{ isOnboarded: boolean; }> => {
+    const response = await api.get(`/users/${userId}/is-onboarded`);
+    return response.data?.data;
+  },
+
   // Get all users with pagination and filters
   getUsers: async (query?: GetUsersQueryDto): Promise<GetUsersResponse> => {
     const params = new URLSearchParams();

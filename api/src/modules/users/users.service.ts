@@ -138,6 +138,15 @@ export class UsersService {
 		);
 	}
 
+	async checkIfOnboarded(userId: string): Promise<{ isOnboarded: boolean; }> {
+		const user = await this.usersRepository.findOne({ where: { userId } });
+
+		if (!user) {
+			throw new NotFoundException('User not found');
+		}
+
+		return { isOnboarded: user.isOnboarded };
+	}
 
 	async updateUserStatus(
 		userId: string,

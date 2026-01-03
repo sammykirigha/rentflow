@@ -31,10 +31,10 @@ import { toast } from "sonner";
 
 interface AiModelCardProps {
   model: AiModelConfiguration;
-  onSetDefault: (id: number) => void;
-  onToggleStatus: (id: number) => void;
-  onDelete: (id: number) => void;
-  onTestConnection: (id: number) => void;
+  onSetDefault: (id: string) => void;
+  onToggleStatus: (id: string) => void;
+  onDelete: (id: string) => void;
+  onTestConnection: (id: string) => void;
   onEdit: (model: AiModelConfiguration) => void;
   showApiKey?: boolean;
   onToggleApiKey: () => void;
@@ -59,7 +59,7 @@ export default function AiModelCard({
 
   // Get API key mutation
   const getApiKeyMutation = useMutation({
-    mutationFn: () => aiModelsApi.getAiModelApiKey(model.id),
+    mutationFn: () => aiModelsApi.getAiModelApiKey(model.modelId),
     onSuccess: (key) => {
       setApiKey(key);
     },
@@ -160,19 +160,19 @@ export default function AiModelCard({
                 <Edit className="h-4 w-4 mr-2" />
                 Edit Model
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onTestConnection(model.id)}>
+              <DropdownMenuItem onClick={() => onTestConnection(model.modelId)}>
                 <TestTube className="h-4 w-4 mr-2" />
                 Test Connection
               </DropdownMenuItem>
               {!isDefault && (
-                <DropdownMenuItem onClick={() => onSetDefault(model.id)}>
+                <DropdownMenuItem onClick={() => onSetDefault(model.modelId)}>
                   <Star className="h-4 w-4 mr-2" />
                   Set as Default
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onClick={() => onDelete(model.id)}
+                onClick={() => onDelete(model.modelId)}
                 className="text-red-600 focus:text-red-600"
                 disabled={isDefault}
               >
@@ -268,7 +268,7 @@ export default function AiModelCard({
             <span className="text-sm text-gray-600">Active</span>
             <Switch
               checked={model.isActive}
-              onCheckedChange={() => onToggleStatus(model.id)}
+              onCheckedChange={() => onToggleStatus(model.modelId)}
               disabled={isDefault}
             />
           </div>
@@ -279,7 +279,7 @@ export default function AiModelCard({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => onSetDefault(model.id)}
+                onClick={() => onSetDefault(model.modelId)}
               >
                 <Star className="h-4 w-4 mr-2" />
                 Set Default
@@ -288,7 +288,7 @@ export default function AiModelCard({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => onTestConnection(model.id)}
+              onClick={() => onTestConnection(model.modelId)}
             >
               <TestTube className="h-4 w-4 mr-2" />
               Test Connection

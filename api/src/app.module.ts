@@ -9,10 +9,13 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { DatabaseModule } from './database/database.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { ArticlesModule } from './modules/articles/articles.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { KeywordsModule } from './modules/keywords/keywords.module';
 import { LoggingModule } from './modules/logging/logging.module';
 import { MailModule } from './modules/mail/mail.module';
+import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { OpenAiModule } from './modules/openai/openai.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
 import { SettingsModule } from './modules/settings/settings.module';
@@ -82,6 +85,9 @@ import { UsersModule } from './modules/users/users.module';
 		SettingsModule,
 		OpenAiModule,
 		AdminModule,
+		ArticlesModule,
+		OnboardingModule,
+		KeywordsModule,
 	],
 	providers: [
 		// Global guards

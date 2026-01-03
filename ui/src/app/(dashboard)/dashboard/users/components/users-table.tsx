@@ -232,99 +232,103 @@ export function UsersTable({}: UsersTableProps) {
                     </div>
                 </div>
 
-                {/* Table */}
-                <div className="border rounded-lg overflow-hidden">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>User</TableHead>
-                                <TableHead>Email</TableHead>
-                                <TableHead>Role</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Joined Date</TableHead>
-                                <TableHead>Last Login</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {isLoading ? (
-                                <TableRow>
-                                    <TableCell colSpan={7} className="text-center py-12">
-                                        <div className="flex items-center justify-center">
-                                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-                                            <span className="ml-2">Loading users...</span>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ) : filteredUsers.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
-                                        No users found
-                                    </TableCell>
-                                </TableRow>
-                            ) : (
-                                filteredUsers.map((user: User) => (
-                                    <TableRow key={user.userId}>
-                                        <TableCell>
-                                            <div className="flex items-center gap-3">
-                                                <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center">
-                                                    {user.avatarUrl ? (
-                                                        <Image
-                                                            src={user.avatarUrl}
-                                                            alt={`${user.firstName} ${user.lastName}`}
-                                                            width={32}
-                                                            height={32}
-                                                            className="h-8 w-8 rounded-full object-cover"
-                                                        />
-                                                    ) : (
-                                                        <span className="text-sm font-medium">
-                                                            {user.firstName[0]}
-                                                            {user.lastName[0]}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <p className="font-medium">
-                                                        {user.firstName} {user.lastName}
-                                                    </p>
-                                                    <p className="text-sm text-muted-foreground">
-                                                        ID: {user.userId?.substring(0, 8)}...
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div>
-                                                <p>{user.email}</p>
-                                                {!user.emailVerified && (
-                                                    <p className="text-xs text-amber-600">Not verified</p>
-                                                )}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>{getRoleBadge(user.roleId, user.isAdminUser)}</TableCell>
-                                        <TableCell>{getStatusBadge(user.status)}</TableCell>
-                                        <TableCell>
-                                            <span className="text-sm">
-                                                {format(new Date(user.createdAt), "MMM dd, yyyy")}
-                                            </span>
-                                        </TableCell>
-                                        <TableCell>
-                                            <span className="text-sm text-muted-foreground">
-                                                {user.lastLoginAt
-                                                    ? format(new Date(user.lastLoginAt), "MMM dd, yyyy")
-                                                    : "Never"}
-                                            </span>
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" className="h-8 w-8 p-0">
-                                                        <span className="sr-only">Open menu</span>
-                                                        <MoreHorizontal className="h-4 w-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    {/* <DropdownMenuItem onClick={() => handleUserAction(user, "view")}>
+				{/* Table */}
+				<div className="border rounded-lg overflow-hidden">
+					<Table>
+						<TableHeader>
+							<TableRow>
+								<TableHead>User</TableHead>
+								<TableHead>Email</TableHead>
+								<TableHead>Role</TableHead>
+								<TableHead>Status</TableHead>
+								<TableHead>Joined Date</TableHead>
+								<TableHead>Last Login</TableHead>
+								<TableHead className="text-right">Actions</TableHead>
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							{isLoading ? (
+								<TableRow>
+									<TableCell colSpan={7} className="text-center py-12">
+										<div className="flex items-center justify-center">
+											<div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+											<span className="ml-2">Loading users...</span>
+										</div>
+									</TableCell>
+								</TableRow>
+							) : filteredUsers.length === 0 ? (
+								<TableRow>
+									<TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+										No users found
+									</TableCell>
+								</TableRow>
+							) : (
+								filteredUsers.map((user: User) => (
+									<TableRow key={user.userId}>
+										<TableCell>
+											<div className="flex items-center gap-3">
+												<div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center">
+													{user.avatarUrl ? (
+														<Image
+															src={user.avatarUrl}
+															alt={`${user.firstName} ${user.lastName}`}
+															width={32}
+															height={32}
+															className="h-8 w-8 rounded-full object-cover"
+														/>
+													) : (
+														<span className="text-sm font-medium">
+															{user.firstName[0]}{user.lastName[0]}
+														</span>
+													)}
+												</div>
+												<div>
+													<p className="font-medium">
+														{user.firstName} {user.lastName}
+													</p>
+													<p className="text-sm text-muted-foreground">
+														ID: {user.userId?.substring(0, 8)}...
+													</p>
+												</div>
+											</div>
+										</TableCell>
+										<TableCell>
+											<div>
+												<p>{user.email}</p>
+												{!user.emailVerified && (
+													<p className="text-xs text-amber-600">Not verified</p>
+												)}
+											</div>
+										</TableCell>
+										<TableCell>
+											{getRoleBadge(user.userRole?.name, user.isAdminUser)}
+										</TableCell>
+										<TableCell>
+											{getStatusBadge(user.status)}
+										</TableCell>
+										<TableCell>
+											<span className="text-sm">
+												{format(new Date(user.createdAt), "MMM dd, yyyy")}
+											</span>
+										</TableCell>
+										<TableCell>
+											<span className="text-sm text-muted-foreground">
+												{user.lastLoginAt
+													? format(new Date(user.lastLoginAt), "MMM dd, yyyy")
+													: "Never"
+												}
+											</span>
+										</TableCell>
+										<TableCell className="text-right">
+											<DropdownMenu>
+												<DropdownMenuTrigger asChild>
+													<Button variant="ghost" className="h-8 w-8 p-0">
+														<span className="sr-only">Open menu</span>
+														<MoreHorizontal className="h-4 w-4" />
+													</Button>
+												</DropdownMenuTrigger>
+												<DropdownMenuContent align="end">
+													{/* <DropdownMenuItem onClick={() => handleUserAction(user, "view")}>
 														<Eye className="h-4 w-4 mr-2" />
 														View Details
 													</DropdownMenuItem> */}

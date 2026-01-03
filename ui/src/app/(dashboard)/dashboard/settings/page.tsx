@@ -6,12 +6,14 @@ import {
   Bell,
   Bot,
   Database,
+  FileText,
   Settings,
   Upload,
   Users
 } from "lucide-react";
 import { useState } from "react";
 import AiModelsTab from "./components/ai-models-tab";
+import ContentSettingsTab from "./components/content-settings-tab";
 import GeneralSettingsTab from "./components/general-settings-tab";
 import NotificationSettingsTab from "./components/notification-settings-tab";
 import UploadSettingsTab from "./components/upload-settings-tab";
@@ -50,6 +52,12 @@ export default function AdminSettingsPage() {
       label: "User Settings",
       icon: Users,
       description: "User registration and verification settings",
+    },
+    {
+      id: "content",
+      label: "Content",
+      icon: FileText,
+      description: "Content generation and briefing settings",
     },
   ];
 
@@ -147,6 +155,10 @@ export default function AdminSettingsPage() {
 
           <TabsContent value="users" className="space-y-6">
             <UserSettingsTab />
+          </TabsContent>
+
+          <TabsContent value="content" className="space-y-6">
+            <ContentSettingsTab />
           </TabsContent>
         </div>
       </Tabs>

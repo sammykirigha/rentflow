@@ -12,7 +12,6 @@ const queryClient = new QueryClient();
 
 const Providers = ({ children }: { children: ReactNode; }) => {
 
-  
   return (
     <QueryClientProvider client={queryClient} >
       <AuthProvider>

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react-hooks/refs */
 "use client";
 
@@ -177,14 +178,15 @@ const MobileToolbarContent = ({
 
 interface Props {
   value?: string;
-  onChange?: (value: { html: string, text: string; }) => void;
+  onChange?: (value: { html: string, text: string; json: any; }) => void;
   showToolbar?: boolean;
   className?: string,
   containerClasses?: string,
   placeholder?: string,
+  editable?: boolean,
 }
 
-export function TiptapEditor({ value, onChange, showToolbar, className, containerClasses }: Props) {
+export function TiptapEditor({ value, onChange, showToolbar, className, containerClasses, editable = true }: Props) {
   const isMobile = useIsMobile();
   const { height } = useWindowSize();
   const [mobileView, setMobileView] = useState<"main" | "highlighter" | "link">(
@@ -234,12 +236,14 @@ export function TiptapEditor({ value, onChange, showToolbar, className, containe
       }),
     ],
     content: `<p>${value || ""}</p> `,
-
+    editable,
     onUpdate({ editor }) {
+      if (!onChange) return;
       const html = editor.getHTML();
       const text = editor.getText();
+      const json = editor.getJSON() as any;
       if (onChange) {
-        onChange({ html, text });
+        onChange({ html, text, json });
       }
     },
   });
@@ -259,6 +263,13 @@ export function TiptapEditor({ value, onChange, showToolbar, className, containe
       }
     }
   }, [editor, value]);
+
+  // Update editor editable state when editable prop changes
+  useEffect(() => {
+    if (editor) {
+      editor.setEditable(editable);
+    }
+  }, [editor, editable]);
 
   useEffect(() => {
     if (!isMobile && mobileView !== "main") {

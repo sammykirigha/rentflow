@@ -73,6 +73,10 @@ export class SystemSetting extends AbstractEntity<SystemSetting> {
   @Column({ name: 'admin_alerts', type: 'boolean', default: true })
   adminAlerts: boolean;
 
+  // Content Settings
+  @Column({ name: 'content_briefing_prompt', type: 'text', nullable: true })
+  contentBriefingPrompt?: string;
+
   // Helper methods
   getFileUploadSizeInMB(): string {
     return `${this.maxFileUploadSize} MB`;

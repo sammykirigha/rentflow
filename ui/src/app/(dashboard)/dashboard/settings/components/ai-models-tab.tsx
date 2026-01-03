@@ -16,7 +16,7 @@ import AiModelForm from "./ai-model-form";
 export default function AiModelsTab() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingModel, setEditingModel] = useState<AiModelConfiguration | null>(null);
-  const [showApiKeys, setShowApiKeys] = useState<Record<number, boolean>>({});
+  const [showApiKeys, setShowApiKeys] = useState<Record<string, boolean>>({});
   const queryClient = useQueryClient();
 
   // Fetch AI models
@@ -78,21 +78,21 @@ export default function AiModelsTab() {
     },
   });
 
-  const handleSetDefault = (modelId: number) => {
+  const handleSetDefault = (modelId: string) => {
     setDefaultMutation.mutate(modelId);
   };
 
-  const handleToggleStatus = (modelId: number) => {
+  const handleToggleStatus = (modelId: string) => {
     toggleStatusMutation.mutate(modelId);
   };
 
-  const handleDelete = (modelId: number) => {
+  const handleDelete = (modelId: string) => {
     if (confirm('Are you sure you want to delete this AI model? This action cannot be undone.')) {
       deleteMutation.mutate(modelId);
     }
   };
 
-  const handleTestConnection = (modelId: number) => {
+  const handleTestConnection = (modelId: string) => {
     testConnectionMutation.mutate(modelId);
   };
 
@@ -102,12 +102,12 @@ export default function AiModelsTab() {
   };
 
   const handleEditSuccess = () => {
-    handleTestConnection(editingModel!.id);
+    handleTestConnection(editingModel!.modelId);
     setEditingModel(null);
     queryClient.invalidateQueries({ queryKey: ['ai-models'] });
   };
 
-  const toggleApiKeyVisibility = (modelId: number) => {
+  const toggleApiKeyVisibility = (modelId: string) => {
     setShowApiKeys(prev => ({
       ...prev,
       [modelId]: !prev[modelId]
@@ -227,16 +227,16 @@ export default function AiModelsTab() {
               {activeModels
                 .map((model) => (
                   <AiModelCard
-                    key={model.id}
+                    key={model.modelId}
                     model={model}
                     onSetDefault={handleSetDefault}
                     onToggleStatus={handleToggleStatus}
                     onDelete={handleDelete}
                     onTestConnection={handleTestConnection}
                     onEdit={setEditingModel}
-                    showApiKey={showApiKeys[model.id]}
+                    showApiKey={showApiKeys[model.modelId]}
                     isDefault={model.isDefault}
-                    onToggleApiKey={() => toggleApiKeyVisibility(model.id)}
+                    onToggleApiKey={() => toggleApiKeyVisibility(model.modelId)}
                   />
                 ))}
             </div>
@@ -260,15 +260,15 @@ export default function AiModelsTab() {
             <div className="grid gap-4">
               {inactiveModels.map((model) => (
                 <AiModelCard
-                  key={model.id}
+                  key={model.modelId}
                   model={model}
                   onSetDefault={handleSetDefault}
                   onToggleStatus={handleToggleStatus}
                   onDelete={handleDelete}
                   onTestConnection={handleTestConnection}
                   onEdit={setEditingModel}
-                  showApiKey={showApiKeys[model.id]}
-                  onToggleApiKey={() => toggleApiKeyVisibility(model.id)}
+                  showApiKey={showApiKeys[model.modelId]}
+                  onToggleApiKey={() => toggleApiKeyVisibility(model.modelId)}
                 />
               ))}
             </div>

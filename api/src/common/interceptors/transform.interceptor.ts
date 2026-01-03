@@ -18,7 +18,13 @@ export interface Response<T> {
 export class TransformInterceptor<T> implements NestInterceptor<T, Response<T>> {
   intercept(context: ExecutionContext, next: CallHandler): Observable<Response<T>> {
     return next.handle().pipe(
-      map((data) => ({
+      map((data) => data?.success ? (
+        {
+          ...data,
+          statusCode: context.switchToHttp().getResponse().statusCode,
+          timestamp: new Date().toISOString(),
+        }
+      ) : ({
         data,
         success: context.switchToHttp().getResponse().statusCode < 400,
         statusCode: context.switchToHttp().getResponse().statusCode,

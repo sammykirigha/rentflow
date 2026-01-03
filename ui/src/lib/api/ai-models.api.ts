@@ -29,7 +29,7 @@ export const getDefaultAiModel = async (): Promise<AiModelConfiguration | null> 
   }
 };
 
-export const getAiModelById = async (id: number): Promise<AiModelConfiguration> => {
+export const getAiModelById = async (id: string): Promise<AiModelConfiguration> => {
   const response = await apiClient.get<{ data: AiModelConfiguration; }>(`/settings/ai-models/${id}`);
   return response.data?.data;
 };
@@ -39,30 +39,30 @@ export const createAiModel = async (data: CreateAiModelDto): Promise<AiModelConf
   return response.data?.data;
 };
 
-export const updateAiModel = async (id: number, data: UpdateAiModelDto): Promise<AiModelConfiguration> => {
+export const updateAiModel = async (id: string, data: UpdateAiModelDto): Promise<AiModelConfiguration> => {
   const response = await apiClient.patch<{ data: AiModelConfiguration; }>(`/settings/ai-models/${id}`, data);
   return response.data?.data;
 };
 
-export const deleteAiModel = async (id: number): Promise<void> => {
+export const deleteAiModel = async (id: string): Promise<void> => {
   await apiClient.delete(`/settings/ai-models/${id}`);
 };
 
-export const setDefaultAiModel = async (id: number): Promise<void> => {
+export const setDefaultAiModel = async (id: string): Promise<void> => {
   await apiClient.post(`/settings/ai-models/${id}/set-default`);
 };
 
-export const toggleAiModelStatus = async (id: number): Promise<AiModelConfiguration> => {
+export const toggleAiModelStatus = async (id: string): Promise<AiModelConfiguration> => {
   const response = await apiClient.post<ToggleStatusResponse>(`/settings/ai-models/${id}/toggle-status`);
   return response.data.data;
 };
 
-export const testAiModelConnection = async (id: number): Promise<boolean> => {
+export const testAiModelConnection = async (id: string): Promise<boolean> => {
   const response = await apiClient.post<{ data: TestConnectionResponse; }>(`/settings/ai-models/${id}/test-connection`);
   return response.data?.data?.success;
 };
 
-export const getAiModelApiKey = async (id: number): Promise<string | null> => {
+export const getAiModelApiKey = async (id: string): Promise<string | null> => {
   const response = await apiClient.get<{ data: ApiKeyResponse; }>(`/settings/ai-models/${id}/api-key`);
   return response.data?.data?.apiKey;
 };
