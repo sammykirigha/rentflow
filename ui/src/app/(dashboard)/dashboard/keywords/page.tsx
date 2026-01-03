@@ -145,6 +145,7 @@ export default function KeywordsPage() {
 	const [keywordArticles, setKeywordArticles] = useState<Map<string, Article>>(new Map());
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [expandedRow, setExpandedRow] = useState<string | null>("");
 	const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 	const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
 	const [selectedKeywordForArticle, setSelectedKeywordForArticle] = useState<Keyword | null>(null);
@@ -170,13 +171,53 @@ export default function KeywordsPage() {
 			return keyword && !keyword.isPrimary;
 		});
 
-	// Filter keywords by type
-	const filteredKeywords = keywords.filter((k) => {
-		if (typeFilter === "all") return true;
-		if (typeFilter === "primary") return k.isPrimary;
-		if (typeFilter === "secondary") return !k.isPrimary;
-		return true;
-	});
+ // Filter and organize keywords hierarchically
+  const filteredKeywords = (() => {
+    // First, filter based on type
+    const filtered = keywords.filter((k) => {
+      if (typeFilter === "all") return true;
+      if (typeFilter === "primary") return k.isPrimary;
+      if (typeFilter === "secondary") return !k.isPrimary;
+      return true;
+    });
+
+    // If showing all, organize hierarchically
+    if (typeFilter === "all") {
+      const result: Keyword[] = [];
+      
+      // Get primary keywords sorted by volume (descending)
+      const primaries = filtered
+        .filter((k) => k.isPrimary)
+        .sort((a, b) => b.volume - a.volume);
+      
+      // Get secondary keywords
+      const secondaries = filtered.filter((k) => !k.isPrimary);
+      
+      // For each primary, add it and its children
+      primaries.forEach((primary) => {
+        result.push(primary);
+        
+        // Add secondary keywords for this primary, sorted by volume
+        const children = secondaries
+          .filter((s) => s.parentKeywordId === primary.keywordId)
+          .sort((a, b) => b.volume - a.volume);
+        
+        result.push(...children);
+      });
+      
+      // Add orphaned secondary keywords (no parent) at the end
+      const orphans = secondaries
+        .filter((s) => !s.parentKeywordId)
+        .sort((a, b) => b.volume - a.volume);
+      
+      result.push(...orphans);
+      
+      return result;
+    }
+    
+    // For primary or secondary filter, just sort by volume
+    return filtered.sort((a, b) => b.volume - a.volume);
+  })();
 
 	const fetchKeywords = useCallback(async () => {
 		try {
@@ -702,211 +743,330 @@ export default function KeywordsPage() {
 										</TableRow>
 									</TableHeader>
 									<TableBody>
-										{filteredKeywords.map((keyword) => (
-											<TableRow key={keyword.keywordId}>
-												<TableCell>
-													<Checkbox
-														checked={selectedIds.has(keyword.keywordId)}
-														onCheckedChange={(checked) =>
-															handleSelectOne(keyword.keywordId, checked as boolean)
-														}
-													/>
-												</TableCell>
-												<TableCell className="font-medium">
-													{keyword.keyword}
-												</TableCell>
-												<TableCell>
-													<button
-														onClick={() => handleTogglePrimary(keyword)}
-														disabled={togglingPrimaryId === keyword.keywordId}
-														className="cursor-pointer disabled:opacity-50"
-													>
-														{togglingPrimaryId === keyword.keywordId ? (
-															<Badge variant="outline" className="bg-gray-100">
-																<Loader2 className="h-3 w-3 animate-spin" />
-															</Badge>
-														) : (
-															<TypeBadge isPrimary={keyword.isPrimary} />
-														)}
-													</button>
-												</TableCell>
-												<TableCell>
-													<DifficultyBadge difficulty={keyword.difficulty} />
-												</TableCell>
-												<TableCell>
-													<span className="font-mono">
-														{formatVolume(keyword.volume)}
-													</span>
-													<span className="text-xs text-muted-foreground ml-1">
-														/mo
-													</span>
-												</TableCell>
-												<TableCell className="max-w-xs">
-													{keyword.recommendedTitle ? (
-														<Tooltip>
-															<TooltipTrigger className="text-left truncate block max-w-52">
-																{keyword.recommendedTitle}
-															</TooltipTrigger>
-															<TooltipContent className="max-w-sm">
-																<p>{keyword.recommendedTitle}</p>
-															</TooltipContent>
-														</Tooltip>
-													) : keyword.isPrimary ? (
-														<span className="text-muted-foreground text-xs">Generating...</span>
-													) : (
-														<Tooltip>
-															<TooltipTrigger className="text-muted-foreground text-xs cursor-help">
-																N/A (Secondary)
-															</TooltipTrigger>
-															<TooltipContent>
-																<p>Click on Type to make this a Primary keyword and generate a title</p>
-															</TooltipContent>
-														</Tooltip>
-													)}
-												</TableCell>
-												<TableCell>
-													{keyword.isPrimary ? (
-														<span className="text-muted-foreground text-xs">—</span>
-													) : keyword.parentKeywordId ? (
-														<Tooltip>
-															<TooltipTrigger className="text-left truncate block max-w-32">
-																<Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-																	<Link2 className="h-3 w-3 mr-1" />
-																	{keywords.find(k => k.keywordId === keyword.parentKeywordId)?.keyword?.substring(0, 15) || "Unknown"}
-																</Badge>
-															</TooltipTrigger>
-															<TooltipContent>
-																<p>Parent: {keywords.find(k => k.keywordId === keyword.parentKeywordId)?.keyword}</p>
-															</TooltipContent>
-														</Tooltip>
-													) : (
-														<span className="text-muted-foreground text-xs">Not assigned</span>
-													)}
-												</TableCell>
-												<TableCell>
-													{keyword.isAnalyzed ? (
-														<Badge variant="outline" className="bg-green-100 text-green-800 border-green-200">
-															Analyzed
-														</Badge>
-													) : (
-														<Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200">
-															<Loader2 className="h-3 w-3 mr-1 animate-spin" />
-															Analyzing
-														</Badge>
-													)}
-												</TableCell>
-												<TableCell className="text-right">
-													<DropdownMenu>
-														<DropdownMenuTrigger asChild>
-															<Button variant="ghost" size="sm">
-																<MoreHorizontal className="h-4 w-4" />
-															</Button>
-														</DropdownMenuTrigger>
-														<DropdownMenuContent align="end">
-															{/* Generate Article / Read Article action for primary keywords */}
-															{keyword.isPrimary && (
-																<>
-																	{keywordArticles.has(keyword.keywordId) ? (
-																		<DropdownMenuItem
-																			onClick={() => handleReadArticleClick(keyword)}
-																			className="text-green-600"
-																		>
-																			<FileText className="h-4 w-4 mr-2" />
-																			Read Article
-																		</DropdownMenuItem>
-																	) : (
-																		<DropdownMenuItem
-																			onClick={() => handleGenerateArticleClick(keyword)}
-																			className="text-purple-600"
-																		>
-																			<Sparkles className="h-4 w-4 mr-2" />
-																			Generate Article
-																		</DropdownMenuItem>
+										{filteredKeywords.map((keyword) => {
+											const isSecondary = !keyword.isPrimary;
+											const hasParent = !!keyword.parentKeywordId;
+
+											return (
+												<>
+													<TableRow
+														key={keyword.keywordId}
+														className={`
+																${isSecondary && hasParent ? "bg-muted/30" : ""}
+																${expandedRow === keyword.keywordId ? "bg-muted/50" : ""}
+															`}
+														>
+														<TableCell className={isSecondary && hasParent ? "pl-12" : ""}>
+															<Checkbox
+																checked={selectedIds.has(keyword.keywordId)}
+																onCheckedChange={(checked) =>
+																	handleSelectOne(keyword.keywordId, checked as boolean)
+																}
+															/>
+														</TableCell>
+														<TableCell className={`font-medium ${isSecondary && hasParent ? "pl-2" : ""}`}>
+															<div
+																onClick={() =>
+																	setExpandedRow((prev) =>
+																		prev === keyword.keywordId ? "" : keyword.keywordId
+																	)
+																}
+																className="flex cursor-pointer items-center gap-2"
+															>
+																{/* {keyword.isPrimary && (
+																	<div>
+																		{expandedRow === keyword.keywordId ? (
+																			<ChevronDown className="h-4 w-4" />
+																		) : (
+																			<ChevronRight className="h-4 w-4" />
+																		)}
+																	</div>
+																)} */}
+																<div className="flex items-center gap-2">
+																	{isSecondary && hasParent && (
+																		<span className="text-muted-foreground">└─</span>
 																	)}
-																	<DropdownMenuSeparator />
-																</>
-															)}
-															<DropdownMenuItem
+																	<span className={isSecondary && hasParent ? "text-sm" : ""}>
+																		{keyword.keyword}
+																	</span>
+																</div>
+															</div>
+														</TableCell>
+														<TableCell>
+															<button
 																onClick={() => handleTogglePrimary(keyword)}
 																disabled={togglingPrimaryId === keyword.keywordId}
+																className="cursor-pointer disabled:opacity-50"
 															>
 																{togglingPrimaryId === keyword.keywordId ? (
-																	<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+																	<Badge variant="outline" className="bg-gray-100">
+																		<Loader2 className="h-3 w-3 animate-spin" />
+																	</Badge>
 																) : (
-																	<Crown className="h-4 w-4 mr-2" />
+																	<TypeBadge isPrimary={keyword.isPrimary} />
 																)}
-																{keyword.isPrimary ? "Make Secondary" : "Make Primary"}
-															</DropdownMenuItem>
-															{!keyword.isPrimary && primaryKeywords.length > 0 && (
-																<>
-																	<DropdownMenuSeparator />
-																	<DropdownMenuSub>
-																		<DropdownMenuSubTrigger disabled={updatingParentId === keyword.keywordId}>
-																			{updatingParentId === keyword.keywordId ? (
-																				<Loader2 className="h-4 w-4 mr-2 animate-spin" />
-																			) : (
-																				<Link2 className="h-4 w-4 mr-2" />
-																			)}
-																			Set Parent Keyword
-																		</DropdownMenuSubTrigger>
-																		<DropdownMenuSubContent className='max-h-125! overflow-y-auto'>
-																			{keyword.parentKeywordId && (
-																				<>
-																					<DropdownMenuItem
-																						onClick={() => handleUpdateParentKeyword(keyword, null)}
-																					>
-																						<Unlink className="h-4 w-4 mr-2" />
-																						Remove Parent
-																					</DropdownMenuItem>
-																					<DropdownMenuSeparator />
-																				</>
-																			)}
-																			{primaryKeywords.map((primary) => (
-																				<DropdownMenuItem
-																					key={primary.keywordId}
-																					onClick={() => handleUpdateParentKeyword(keyword, primary.keywordId)}
-																					disabled={keyword.parentKeywordId === primary.keywordId}
-																				>
-																					{keyword.parentKeywordId === primary.keywordId && (
-																						<Check className="h-4 w-4 mr-2" />
-																					)}
-																					<span className={keyword.parentKeywordId === primary.keywordId ? "font-medium" : ""}>
-																						{primary.keyword}
-																					</span>
-																				</DropdownMenuItem>
-																			))}
-																		</DropdownMenuSubContent>
-																	</DropdownMenuSub>
-																</>
+															</button>
+														</TableCell>
+														<TableCell>
+															<DifficultyBadge difficulty={keyword.difficulty} />
+														</TableCell>
+														<TableCell>
+															<span className="font-mono">
+																{formatVolume(keyword.volume)}
+															</span>
+															<span className="text-xs text-muted-foreground ml-1">
+																/mo
+															</span>
+														</TableCell>
+														<TableCell className="max-w-xs">
+															{keyword.recommendedTitle ? (
+																<Tooltip>
+																	<TooltipTrigger className="text-left truncate block max-w-52">
+																		{keyword.recommendedTitle}
+																	</TooltipTrigger>
+																	<TooltipContent className="max-w-sm">
+																		<p>{keyword.recommendedTitle}</p>
+																	</TooltipContent>
+																</Tooltip>
+															) : keyword.isPrimary ? (
+																<span className="text-muted-foreground text-xs">Generating...</span>
+															) : (
+																<Tooltip>
+																	<TooltipTrigger className="text-muted-foreground text-xs cursor-help">
+																		N/A (Secondary)
+																	</TooltipTrigger>
+																	<TooltipContent>
+																		<p>Click on Type to make this a Primary keyword and generate a title</p>
+																	</TooltipContent>
+																</Tooltip>
 															)}
-															<DropdownMenuItem
-																onClick={() => handleReanalyze(keyword)}
-																disabled={reanalyzingId === keyword.keywordId}
-															>
-																{reanalyzingId === keyword.keywordId ? (
-																	<Loader2 className="h-4 w-4 mr-2 animate-spin" />
-																) : (
-																	<RefreshCw className="h-4 w-4 mr-2" />
-																)}
-																Reanalyze
-															</DropdownMenuItem>
-															<DropdownMenuItem
-																onClick={() => handleDeleteClick(keyword)}
-																className="text-red-600"
-																disabled={deletingId === keyword.keywordId}
-															>
-																{deletingId === keyword.keywordId ? (
-																	<Loader2 className="h-4 w-4 mr-2 animate-spin" />
-																) : (
-																	<Trash2 className="h-4 w-4 mr-2" />
-																)}
-																Delete
-															</DropdownMenuItem>
-														</DropdownMenuContent>
-													</DropdownMenu>
-												</TableCell>
-											</TableRow>
-										))}
+														</TableCell>
+														<TableCell>
+															{keyword.isPrimary ? (
+																<span className="text-muted-foreground text-xs">—</span>
+															) : keyword.parentKeywordId ? (
+																<Tooltip>
+																	<TooltipTrigger className="text-left truncate block max-w-32">
+																		<Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+																			<Link2 className="h-3 w-3 mr-1" />
+																			{keywords.find(k => k.keywordId === keyword.parentKeywordId)?.keyword?.substring(0, 15) || "Unknown"}
+																		</Badge>
+																	</TooltipTrigger>
+																	<TooltipContent>
+																		<p>Parent: {keywords.find(k => k.keywordId === keyword.parentKeywordId)?.keyword}</p>
+																	</TooltipContent>
+																</Tooltip>
+															) : (
+																<span className="text-muted-foreground text-xs">Not assigned</span>
+															)}
+														</TableCell>
+														<TableCell>
+															{keyword.isAnalyzed ? (
+																<Badge variant="outline" className="bg-green-100 text-green-800 border-green-200">
+																	Analyzed
+																</Badge>
+															) : (
+																<Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200">
+																	<Loader2 className="h-3 w-3 mr-1 animate-spin" />
+																	Analyzing
+																</Badge>
+															)}
+														</TableCell>
+														<TableCell className="text-right">
+															<DropdownMenu>
+																<DropdownMenuTrigger asChild>
+																	<Button variant="ghost" size="sm">
+																		<MoreHorizontal className="h-4 w-4" />
+																	</Button>
+																</DropdownMenuTrigger>
+																<DropdownMenuContent align="end">
+																	{/* Generate Article / Read Article action for primary keywords */}
+																	{keyword.isPrimary && (
+																		<>
+																			{keywordArticles.has(keyword.keywordId) ? (
+																				<DropdownMenuItem
+																					onClick={() => handleReadArticleClick(keyword)}
+																					className="text-green-600"
+																				>
+																					<FileText className="h-4 w-4 mr-2" />
+																					Read Article
+																				</DropdownMenuItem>
+																			) : (
+																				<DropdownMenuItem
+																					onClick={() => handleGenerateArticleClick(keyword)}
+																					className="text-purple-600"
+																				>
+																					<Sparkles className="h-4 w-4 mr-2" />
+																					Generate Article
+																				</DropdownMenuItem>
+																			)}
+																			<DropdownMenuSeparator />
+																		</>
+																	)}
+																	<DropdownMenuItem
+																		onClick={() => handleTogglePrimary(keyword)}
+																		disabled={togglingPrimaryId === keyword.keywordId}
+																	>
+																		{togglingPrimaryId === keyword.keywordId ? (
+																			<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+																		) : (
+																			<Crown className="h-4 w-4 mr-2" />
+																		)}
+																		{keyword.isPrimary ? "Make Secondary" : "Make Primary"}
+																	</DropdownMenuItem>
+																	{!keyword.isPrimary && primaryKeywords.length > 0 && (
+																		<>
+																			<DropdownMenuSeparator />
+																			<DropdownMenuSub>
+																				<DropdownMenuSubTrigger disabled={updatingParentId === keyword.keywordId}>
+																					{updatingParentId === keyword.keywordId ? (
+																						<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+																					) : (
+																						<Link2 className="h-4 w-4 mr-2" />
+																					)}
+																					Set Parent Keyword
+																				</DropdownMenuSubTrigger>
+																				<DropdownMenuSubContent className='max-h-125! overflow-y-auto'>
+																					{keyword.parentKeywordId && (
+																						<>
+																							<DropdownMenuItem
+																								onClick={() => handleUpdateParentKeyword(keyword, null)}
+																							>
+																								<Unlink className="h-4 w-4 mr-2" />
+																								Remove Parent
+																							</DropdownMenuItem>
+																							<DropdownMenuSeparator />
+																						</>
+																					)}
+																					{primaryKeywords.map((primary) => (
+																						<DropdownMenuItem
+																							key={primary.keywordId}
+																							onClick={() => handleUpdateParentKeyword(keyword, primary.keywordId)}
+																							disabled={keyword.parentKeywordId === primary.keywordId}
+																						>
+																							{keyword.parentKeywordId === primary.keywordId && (
+																								<Check className="h-4 w-4 mr-2" />
+																							)}
+																							<span className={keyword.parentKeywordId === primary.keywordId ? "font-medium" : ""}>
+																								{primary.keyword}
+																							</span>
+																						</DropdownMenuItem>
+																					))}
+																				</DropdownMenuSubContent>
+																			</DropdownMenuSub>
+																		</>
+																	)}
+																	<DropdownMenuItem
+																		onClick={() => handleReanalyze(keyword)}
+																		disabled={reanalyzingId === keyword.keywordId}
+																	>
+																		{reanalyzingId === keyword.keywordId ? (
+																			<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+																		) : (
+																			<RefreshCw className="h-4 w-4 mr-2" />
+																		)}
+																		Reanalyze
+																	</DropdownMenuItem>
+																	<DropdownMenuItem
+																		onClick={() => handleDeleteClick(keyword)}
+																		className="text-red-600"
+																		disabled={deletingId === keyword.keywordId}
+																	>
+																		{deletingId === keyword.keywordId ? (
+																			<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+																		) : (
+																			<Trash2 className="h-4 w-4 mr-2" />
+																		)}
+																		Delete
+																	</DropdownMenuItem>
+																</DropdownMenuContent>
+															</DropdownMenu>
+														</TableCell>
+													</TableRow>
+
+													{expandedRow === keyword.keywordId && keyword.isPrimary && (
+														<TableRow>
+															<TableCell colSpan={9} className="bg-muted/30 p-0">
+																<Table>
+																	<TableHeader className="border-b">
+																		<TableRow>
+																			<TableHead>Keyword</TableHead>
+																			<TableHead>Type</TableHead>
+																			<TableHead>Difficulty</TableHead>
+																			<TableHead>Volume</TableHead>
+																			<TableHead>Parent</TableHead>
+																			<TableHead>Status</TableHead>
+																		</TableRow>
+																	</TableHeader>
+																	<TableBody>
+																		{getSecondaryKeywordsForPrimary(keyword.keywordId)
+																			.sort((a, b) => b.volume - a.volume)
+																			.map((secondary) => (
+																				<TableRow key={secondary.keywordId}>
+																					<TableCell>
+																						<div className="font-medium">{secondary.keyword}</div>
+																					</TableCell>
+																					<TableCell>
+																						{togglingPrimaryId === secondary.keywordId ? (
+																							<Badge variant="outline" className="bg-gray-100">
+																								<Loader2 className="h-3 w-3 animate-spin" />
+																							</Badge>
+																						) : (
+																							<TypeBadge isPrimary={secondary.isPrimary} />
+																						)}
+																					</TableCell>
+																					<TableCell>
+																						<DifficultyBadge difficulty={secondary.difficulty} />
+																					</TableCell>
+																					<TableCell>
+																						<span className="font-mono">
+																							{formatVolume(secondary.volume)}
+																						</span>
+																						<span className="text-xs text-muted-foreground ml-1">
+																							/mo
+																						</span>
+																					</TableCell>
+																					<TableCell>
+																						{secondary.isPrimary ? (
+																							<span className="text-muted-foreground text-xs">—</span>
+																						) : secondary.parentKeywordId ? (
+																							<Tooltip>
+																								<TooltipTrigger className="text-left truncate block max-w-32">
+																									<Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+																										<Link2 className="h-3 w-3 mr-1" />
+																										{keywords.find(k => k.keywordId === secondary.parentKeywordId)?.keyword?.substring(0, 15) || "Unknown"}
+																									</Badge>
+																								</TooltipTrigger>
+																								<TooltipContent>
+																									<p>Parent: {keywords.find(k => k.keywordId === secondary.parentKeywordId)?.keyword}</p>
+																								</TooltipContent>
+																							</Tooltip>
+																						) : (
+																							<span className="text-muted-foreground text-xs">Not assigned</span>
+																						)}
+																					</TableCell>
+																					<TableCell>
+																						{secondary.isAnalyzed ? (
+																							<Badge variant="outline" className="bg-green-100 text-green-800 border-green-200">
+																								Analyzed
+																							</Badge>
+																						) : (
+																							<Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200">
+																								<Loader2 className="h-3 w-3 mr-1 animate-spin" />
+																								Analyzing
+																							</Badge>
+																						)}
+																					</TableCell>
+																				</TableRow>
+																			))}
+																	</TableBody>
+																</Table>
+															</TableCell>
+														</TableRow>
+													)}
+												</>
+											);
+										})}
 									</TableBody>
 								</Table>
 							</div>
