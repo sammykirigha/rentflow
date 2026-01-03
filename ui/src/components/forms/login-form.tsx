@@ -16,6 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
@@ -34,9 +35,11 @@ interface Props {
   isModal?: boolean;
 }
 
-export default function LoginForm({ onSuccess, isModal=false }: Props) {
+export default function LoginForm({ onSuccess, isModal = false }: Props) {
   const [showPassword, setShowPassword] = useState(false);
   const { login, loading } = useAuth();
+
+  const router = useRouter();
 
   const form = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -53,7 +56,7 @@ export default function LoginForm({ onSuccess, isModal=false }: Props) {
 
       if (result.success) {
         toast.success('Login successful! Redirecting...');
-        window.location.reload();
+        router.replace('/dashboard');
         onSuccess?.();
       } else {
         toast.error(result.error || 'Login failed. Please try again.');

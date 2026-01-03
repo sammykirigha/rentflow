@@ -1,32 +1,32 @@
-
-import { Role } from './permissions';
+import { Role } from "./permissions";
 
 export interface User {
-	userId: number;
+	userId: string;
 	createdAt: string;
 	avatarUrl?: string;
 	updatedAt: string;
-	deletedAt: null;
+	deletedAt?: string | null;
 	userId: string;
 	roleId: number;
 	email: string;
 	firstName: string;
 	lastName: string;
-	phone: null;
+	phone?: string | null;
 	roleId: string;
 	status: string;
 	isAdminUser: boolean;
+	isOnboarded: boolean;
 	phoneVerified: boolean;
 	emailVerified: boolean;
-	emailVerificationToken: null;
-	emailVerificationExpires: null;
-	resetPasswordToken: null;
-	resetPasswordExpires: null;
-	phoneVerificationToken: null;
-	phoneVerificationExpires: null;
-	suspensionReason: null;
-	lastLoginAt: null;
-	teacherProfile: null;
+	emailVerificationToken?: string | null;
+	emailVerificationExpires?: string | null;
+	resetPasswordToken?: string | null;
+	resetPasswordExpires?: string | null;
+	phoneVerificationToken?: string | null;
+	phoneVerificationExpires?: string | null;
+	suspensionReason?: string | null;
+	lastLoginAt?: string | null;
+	teacherProfile?: string | null;
 	userRole: Role;
 	teacherProfile?: Teacher;
 }

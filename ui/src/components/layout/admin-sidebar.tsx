@@ -1,16 +1,20 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { useAuth } from '@/contexts/AuthContext';
-import { useUserStore } from '@/stores/user.store';
+import { useAuth } from "@/contexts/AuthContext";
+import { useUserStore } from "@/stores/user.store";
 import {
   Brain,
   ChevronDown,
+  FileText,
+  Key,
   LayoutDashboard,
+  Link2,
   LogOut,
   Menu,
   Settings,
   Shield,
+  User,
   Users,
   X
 } from "lucide-react";
@@ -34,6 +38,21 @@ const menuItems: MenuItem[] = [
     icon: LayoutDashboard,
   },
   {
+    title: "Keywords",
+    href: "/dashboard/keywords",
+    icon: Key,
+  },
+  {
+    title: "Articles",
+    href: "/dashboard/articles",
+    icon: FileText,
+  },
+  {
+    title: "Website Pages",
+    href: "/dashboard/pages",
+    icon: Link2,
+  },
+  {
     title: "Users",
     href: "/dashboard/users",
     icon: Users,
@@ -42,6 +61,18 @@ const menuItems: MenuItem[] = [
     title: "System Settings",
     href: "/dashboard/settings",
     icon: Settings,
+    children: []
+  },
+  {
+    title: "Activity logs",
+    href: "/dashboard/activity-logs",
+    icon: Shield,
+    children: [],
+  },
+  {
+    title: "Profile",
+    href: "/dashboard/profile",
+    icon: User,
     children: []
   },
 ];
@@ -60,15 +91,11 @@ export default function AdminSidebar() {
   };
 
   const toggleExpanded = (title: string) => {
-    setExpandedItems(prev =>
-      prev.includes(title)
-        ? prev.filter(item => item !== title)
-        : [...prev, title]
-    );
+    setExpandedItems((prev) => (prev.includes(title) ? prev.filter((item) => item !== title) : [...prev, title]));
   };
 
   const isActive = (href: string) => {
-    return pathname === href;// || (href !== "/admin" && pathname.startsWith(href));
+    return pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
   };
 
   const isExpanded = (title: string) => expandedItems.includes(title);
@@ -88,9 +115,10 @@ export default function AdminSidebar() {
       </div>
 
       {/* Sidebar */}
-      <div className={`
+      <div
+        className={`
         fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out
-        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+        ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}
         lg:translate-x-0 lg:static lg:inset-0
       `}>
         <div className="flex flex-col h-full">
@@ -100,8 +128,7 @@ export default function AdminSidebar() {
               <Brain className="h-6 w-6 text-white" />
             </div>
             <div className="ml-3">
-              <h1 className="text-lg font-bold text-gray-900">MasomoAI Admin</h1>
-              <p className="text-xs text-gray-500">Management Panel</p>
+              <h1 className="text-lg font-bold text-gray-900">GetAISEO</h1>
             </div>
           </div>
 
@@ -109,7 +136,7 @@ export default function AdminSidebar() {
           <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
             {menuItems.map((item) => (
               <div key={item.title}>
-                {(item.children && item.children.length > 0) ? (
+                {item.children && item.children.length > 0 ? (
                   <div>
                     <button
                       onClick={() => {
@@ -118,10 +145,7 @@ export default function AdminSidebar() {
                       }}
                       className={`
                         w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-colors
-                        ${isActive(item.href)
-                          ? 'bg-purple-100 text-purple-700'
-                          : 'text-gray-700 hover:bg-gray-100'
-                        }
+                        ${isActive(item.href) ? "bg-purple-100 text-purple-700" : "text-gray-700 hover:bg-gray-100"}
                       `}
                     >
                       <div className="flex items-center">
@@ -129,12 +153,12 @@ export default function AdminSidebar() {
                         <span>{item.title}</span>
                       </div>
                       <ChevronDown
-                        onClick={e => {
+                        onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
                           toggleExpanded(item.title);
                         }}
-                        className={`h-4 w-4 shrink-0 transition-transform ${isExpanded(item.title) ? 'rotate-180' : ''
+                        className={`h-4 w-4 shrink-0 transition-transform ${isExpanded(item.title) ? "rotate-180" : ""
                           }`}
                       />
                     </button>
@@ -149,8 +173,8 @@ export default function AdminSidebar() {
                             className={`
                               block px-3 py-2 text-sm rounded-lg transition-colors
                               ${isActive(child.href)
-                                ? 'bg-purple-100 text-purple-700 font-medium'
-                                : 'text-gray-600 hover:bg-gray-100'
+                                ? "bg-purple-100 text-purple-700 font-medium"
+                                : "text-gray-600 hover:bg-gray-100"
                               }
                             `}
                             onClick={() => setIsMobileMenuOpen(false)}
@@ -167,10 +191,7 @@ export default function AdminSidebar() {
                     href={item.href}
                     className={`
                       flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-colors
-                      ${isActive(item.href)
-                        ? 'bg-purple-100 text-purple-700'
-                        : 'text-gray-700 hover:bg-gray-100'
-                      }
+                      ${isActive(item.href) ? "bg-purple-100 text-purple-700" : "text-gray-700 hover:bg-gray-100"}
                     `}
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
@@ -185,38 +206,40 @@ export default function AdminSidebar() {
           </nav>
 
           {/* User Info */}
-          <div className="px-4 py-4 border-t border-gray-200">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+          <div className="px-4 py-4 border-t border-gray-200 w-full">
+            <div className="flex items-center justify-between w-full gap-2">
+              <div className="flex items-center w-full truncate">
+                <div className="w-8 h-8 bg-primary shrink-0 rounded-full flex items-center justify-center">
                   <Shield className="h-4 w-4 text-white" />
                 </div>
-                <div className="ml-3">
+                <div className="ml-3 w-full ">
                   <p className="text-sm font-medium text-gray-900">{user?.firstName} {user?.lastName}</p>
-                  <p className="text-xs text-gray-500">{user?.email}</p>
+                  <p className="text-xs text-gray-500 w-full truncate line-clamp-1">{user?.email}</p>
                 </div>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleLogout}
-                className="text-gray-600 hover:text-red-600 hover:bg-red-50"
+                className="text-gray-600 shrink-0 flex-1 hover:text-red-600 hover:bg-red-50"
                 title="Logout"
               >
                 <LogOut className="h-4 w-4" />
               </Button>
-            </div>
-          </div>
-        </div>
-      </div>
+            </div >
+          </div >
 
-      {/* Mobile Overlay */}
-      {isMobileMenuOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
-      )}
+          {/* Mobile Overlay */};
+          {
+            isMobileMenuOpen && (
+              <div
+                className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
+                onClick={() => setIsMobileMenuOpen(false)}
+              />
+            )
+          }
+        </div >
+      </div >
     </>
   );
 }

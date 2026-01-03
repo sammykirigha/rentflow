@@ -66,6 +66,9 @@ export class User extends AbstractEntity<User> {
 	@Column({ name: 'suspension_reason', nullable: true, type: 'text' })
 	suspensionReason?: string;
 
+	@Column({ name: 'is_onboarded', default: false })
+	isOnboarded: boolean;
+
 	@Column({ name: 'last_login_at', nullable: true })
 	lastLoginAt?: Date;
 

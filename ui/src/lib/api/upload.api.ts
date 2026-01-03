@@ -22,3 +22,20 @@ export const uploadImage = async (file: File): Promise<{ url: string; key: strin
 		return null;
 	}
 };
+
+export const getSignedUrl = async (key: string,): Promise<{ url: string } | null> => {
+	try {
+		const response = await api.get(`/storage/signed-url/${key}`);
+
+		if (response.data?.data && response.data?.data.signedUrl) {
+			return {
+				url: response.data?.data.signedUrl
+			};
+		}
+
+		return null;
+	} catch (error) {
+		console.error('Error uploading image:', (error as Error).message);
+		return null;
+	}
+};

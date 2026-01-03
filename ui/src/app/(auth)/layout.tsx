@@ -1,9 +1,7 @@
 
 import { DotPattern } from '@/components/ui/dot-pattern';
-import { getCurrentUser } from '@/lib/session';
 import { cn } from '@/lib/utils';
 import type { Metadata } from "next";
-import { redirect } from 'next/navigation';
 
 export const metadata: Metadata = {
   title: {
@@ -40,13 +38,6 @@ export default async function PublicLayout({
 }: {
   children: React.ReactNode;
 }) {
-
-  const currentUser = await getCurrentUser();
-
-  if (currentUser) {
-    return redirect('/dashboard');
-  }
-
   return (
     <div className="min-h-screen bg-white">
       <DotPattern

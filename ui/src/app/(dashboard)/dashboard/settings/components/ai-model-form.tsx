@@ -124,7 +124,7 @@ export default function AiModelForm({ model, onSuccess }: AiModelFormProps) {
 
   // Update mutation
   const updateMutation = useMutation({
-    mutationFn: (data: UpdateAiModelDto) => aiModelsApi.updateAiModel(model!.id, data),
+    mutationFn: (data: UpdateAiModelDto) => aiModelsApi.updateAiModel(model!.modelId, data),
     onSuccess: () => {
       toast.success('AI model updated successfully');
       onSuccess();
@@ -176,9 +176,6 @@ export default function AiModelForm({ model, onSuccess }: AiModelFormProps) {
   };
 
   const requiresEndpoint = selectedProvider === AiProvider.CUSTOM;
-
-  console.log(form.formState.errors);
-
 
   return (
     <Form {...form}>
@@ -378,7 +375,7 @@ export default function AiModelForm({ model, onSuccess }: AiModelFormProps) {
                   <FormControl>
                     <Input
                       value={field.value || AI_MODEL_DEFAULTS.maxTokens}
-                      onChange={(e) => field.onChange(parseInt(e.target.value))}
+                      onChange={(e) => field.onChange(e.target.value)}
                     />
                   </FormControl>
                   <FormDescription>
@@ -398,7 +395,7 @@ export default function AiModelForm({ model, onSuccess }: AiModelFormProps) {
                   <FormControl>
                     <Input
                       value={field.value || AI_MODEL_DEFAULTS.temperature}
-                      onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                      onChange={(e) => field.onChange(e.target.value)}
                     />
                   </FormControl>
                   <FormDescription>

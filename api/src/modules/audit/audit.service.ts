@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { AuditLogsRepository } from './audit-logs.repository';
 import {
-  AuditLogsListResponseDto,
-  CreateAuditLogDto,
-  GetAuditLogsQueryDto,
+	AuditLogsListResponseDto,
+	CreateAuditLogDto,
+	GetAuditLogsQueryDto,
 } from './dto/audit-log.dto';
 import { AuditLog } from './entities/audit-log.entity';
 
@@ -36,7 +36,7 @@ export class AuditService {
 
 		if (search) {
 			queryBuilder.andWhere(
-				'(audit.performerName ILIKE :search OR audit.details ILIKE :search OR audit.targetId ILIKE :search)',
+				'(performer.firstName ILIKE :search OR performer.lastName ILIKE :search OR audit.details ILIKE :search OR audit.targetId ILIKE :search)',
 				{ search: `%${search}%` },
 			);
 		}
@@ -48,7 +48,7 @@ export class AuditService {
 				auditId: log.auditId,
 				action: log.action,
 				performedBy: log.performedBy,
-				performerName: log.performerName,
+				performerName: log.performer?.firstName + ' ' + log.performer?.lastName,
 				targetType: log.targetType,
 				targetId: log.targetId,
 				details: log.details,

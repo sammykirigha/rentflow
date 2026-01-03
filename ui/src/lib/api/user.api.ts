@@ -56,6 +56,11 @@ export const userApi = {
     return response.data?.data;
   },
 
+  checkIfOnboarded: async (userId: string): Promise<{ isOnboarded: boolean; }> => {
+    const response = await api.get(`/users/${userId}/is-onboarded`);
+    return response.data?.data;
+  },
+
   // Get all users with pagination and filters
   getUsers: async (query?: GetUsersQueryDto): Promise<GetUsersResponse> => {
     const params = new URLSearchParams();
@@ -105,7 +110,7 @@ export const userApi = {
   },
 
   // Update user profile
-  updateProfile: async (profileData: { firstName?: string; lastName?: string; email?: string; phone?: string; }): Promise<User> => {
+  updateProfile: async (profileData: { firstName?: string; lastName?: string; email?: string; phone?: string; avatarUrl?: string }): Promise<User> => {
     const response = await api.patch('/users/profile', profileData);
     return response.data.data;
   },

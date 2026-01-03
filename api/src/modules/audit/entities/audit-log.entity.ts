@@ -18,9 +18,6 @@ export class AuditLog extends AbstractEntity<AuditLog> {
 	@Column({ name: 'performed_by' })
 	performedBy: string;
 
-	@Column({ name: 'performer_name', nullable: true })
-	performerName: string;
-
 	@Column({
 		type: 'enum',
 		enum: AuditTargetType,

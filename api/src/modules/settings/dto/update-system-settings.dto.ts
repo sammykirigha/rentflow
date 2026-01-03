@@ -111,4 +111,10 @@ export class UpdateSystemSettingsDto {
   @IsOptional()
   @IsBoolean()
   adminAlerts?: boolean;
+
+  // Content Settings
+  @ApiPropertyOptional({ description: 'Content briefing prompt for article generation' })
+  @IsOptional()
+  @IsString()
+  contentBriefingPrompt?: string;
 }
