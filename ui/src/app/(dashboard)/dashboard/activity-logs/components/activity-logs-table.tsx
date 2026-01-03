@@ -14,7 +14,6 @@ import { ChevronLeft, ChevronRight, Filter, Search } from "lucide-react";
 import { useState } from "react";
 
 interface ActivityLogsProps {
-    // Add props if needed in the future
 }
 
 export function ActivityLogsTable({}: ActivityLogsProps) {
@@ -116,7 +115,6 @@ export function ActivityLogsTable({}: ActivityLogsProps) {
 
     return (
         <div className="space-y-4">
-            {/* Filters and Search */}
             <div className="flex flex-col sm:flex-row gap-4">
                 <div className="flex-1">
                     <div className="relative">
@@ -178,7 +176,6 @@ export function ActivityLogsTable({}: ActivityLogsProps) {
                 </div>
             </div>
 
-            {/* Table */}
             <div className="border rounded-lg overflow-hidden">
                 <Table>
                     <TableHeader>
