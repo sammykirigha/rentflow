@@ -376,4 +376,157 @@ export class UsersService {
 			{ password: hashedPassword }
 		);
 	}
+
+	/**
+	 * Find or create user from Google OAuth profile
+	 */
+	async findOrCreateFromGoogleProfile(profileData: {
+		providerAccountId: string;
+		email: string;
+		givenName?: string;
+		familyName?: string;
+		pictureUrl?: string;
+	}): Promise<User> {
+		// Check if user exists by Google ID
+		let existingUser = await this.usersRepository.findOne({
+			where: { googleId: profileData.providerAccountId },
+			relations: { userRole: true },
+		});
+
+		if (existingUser) {
+			return existingUser;
+		}
+
+		// Check if email already registered (link accounts)
+		existingUser = await this.usersRepository.findOne({
+			where: { email: profileData.email },
+			relations: { userRole: true },
+		});
+
+		if (existingUser) {
+			// Link Google account to existing user
+			await this.usersRepository.update(
+				{ userId: existingUser.userId },
+				{ googleId: profileData.providerAccountId }
+			);
+			return this.findOne(existingUser.userId);
+		}
+
+		// Create brand new user from Google profile
+		const defaultRole = await this.permissionsService.getRoleByName(UserRole.USER);
+
+		const createdUser = await this.usersRepository.create({
+			email: profileData.email,
+			googleId: profileData.providerAccountId,
+			firstName: profileData.givenName,
+			lastName: profileData.familyName,
+			avatarUrl: profileData.pictureUrl,
+			authProvider: 'google',
+			roleId: defaultRole.roleId,
+			emailVerified: true,
+			status: UserStatus.ACTIVE,
+		});
+
+		return this.findOne(createdUser.userId);
+	}
+
+	/**
+	 * Connect Google account to existing user
+	 */
+	async connectGoogleAccount(userId: string, googleId: string, googleEmail: string): Promise<User> {
+		const user = await this.usersRepository.findOne({ where: { userId } });
+
+		if (!user) {
+			throw new NotFoundException('User not found');
+		}
+
+		// Check if this Google ID is already linked to another account
+		const existingGoogleUser = await this.usersRepository.findOne({
+			where: { googleId }
+		});
+
+		if (existingGoogleUser && existingGoogleUser.userId !== userId) {
+			throw new ConflictException('This Google account is already linked to another user');
+		}
+
+		// User can connect Google account even with different email
+		// Store the Google email for reference if needed
+		await this.usersRepository.update(
+			{ userId },
+			{ googleId }
+		);
+
+		return this.findOne(userId);
+	}
+
+	/**
+	 * Disconnect Google account from user
+	 */
+	async disconnectGoogleAccount(userId: string): Promise<User> {
+		const user = await this.usersRepository.findOne({ where: { userId } });
+
+		if (!user) {
+			throw new NotFoundException('User not found');
+		}
+
+		// Ensure user has a password set before disconnecting Google
+		if (!user.password) {
+			throw new BadRequestException('You must set a password before disconnecting Google login');
+		}
+
+		await this.usersRepository.update(
+			{ userId },
+			{ googleId: null }
+		);
+
+		return this.findOne(userId);
+	}
+
+	/**
+	 * Set password for user who signed up via OAuth (no existing password)
+	 */
+	async setPassword(userId: string, newPassword: string): Promise<void> {
+		const user = await this.usersRepository.findOne({ where: { userId } });
+
+		if (!user) {
+			throw new NotFoundException('User not found');
+		}
+
+		if (user.password) {
+			throw new BadRequestException('Password is already set. Use change password instead.');
+		}
+
+		const hashedPassword = await bcrypt.hash(newPassword, authConfig.bcryptRounds);
+		// Don't change authProvider - user can have both local and Google auth
+		await this.usersRepository.update(
+			{ userId },
+			{ password: hashedPassword }
+		);
+	}
+
+	/**
+	 * Check if user has password set
+	 */
+	async hasPasswordSet(userId: string): Promise<boolean> {
+		const user = await this.usersRepository.findOne({ where: { userId } });
+
+		if (!user) {
+			throw new NotFoundException('User not found');
+		}
+
+		return !!user.password;
+	}
+
+	/**
+	 * Check if user has Google connected
+	 */
+	async hasGoogleConnected(userId: string): Promise<boolean> {
+		const user = await this.usersRepository.findOne({ where: { userId } });
+
+		if (!user) {
+			throw new NotFoundException('User not found');
+		}
+
+		return !!user.googleId;
+	}
 }

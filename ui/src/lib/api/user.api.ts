@@ -120,4 +120,28 @@ export const userApi = {
     const response = await api.post('/users/change-password', passwordData);
     return response.data;
   },
+
+  // Set password (for OAuth users who don't have one)
+  setPassword: async (newPassword: string): Promise<{ success: boolean; message: string; }> => {
+    const response = await api.post('/auth/set-password', { newPassword });
+    return response.data;
+  },
+
+  // Get auth status (has password, has google connected)
+  getAuthStatus: async (): Promise<{ hasPassword: boolean; hasGoogleConnected: boolean; }> => {
+    const response = await api.get('/auth/status');
+    return response.data?.data;
+  },
+
+  // Connect Google account
+  connectGoogle: async (providerAccountId: string, email: string): Promise<{ message: string; }> => {
+    const response = await api.post('/auth/google/connect', { providerAccountId, email });
+    return response.data?.data;
+  },
+
+  // Disconnect Google account
+  disconnectGoogle: async (): Promise<{ message: string; }> => {
+    const response = await api.delete('/auth/google/disconnect');
+    return response.data?.data;
+  },
 };

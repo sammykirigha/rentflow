@@ -55,6 +55,8 @@ import { Article, articlesApi } from "@/lib/api/articles.api";
 import { Keyword, keywordsApi } from "@/lib/api/keywords.api";
 import {
 	AlertCircle,
+	ArrowDown,
+	ArrowUp,
 	Check,
 	Crown,
 	FileText,
@@ -159,24 +161,88 @@ export default function KeywordsPage() {
 	const [togglingPrimaryId, setTogglingPrimaryId] = useState<string | null>(null);
 	const [updatingParentId, setUpdatingParentId] = useState<string | null>(null);
 	const [typeFilter, setTypeFilter] = useState<"all" | "primary" | "secondary">("all");
+	const [sortColumn, setSortColumn] = useState<string>("volume");
+	const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+	const [isDeleteMultipleDialogOpen, setIsDeleteMultipleDialogOpen] = useState(false);
 
 	// Get primary keywords for parent selection
 	const primaryKeywords = keywords.filter((k) => k.isPrimary);
 
-	// Check if all selected keywords are secondary (for bulk parent assignment)
 	const allSelectedAreSecondary = selectedIds.size > 0 &&
 		Array.from(selectedIds).every((id) => {
 			const keyword = keywords.find((k) => k.keywordId === id);
 			return keyword && !keyword.isPrimary;
 		});
 
-	// Filter keywords by type
 	const filteredKeywords = keywords.filter((k) => {
 		if (typeFilter === "all") return true;
 		if (typeFilter === "primary") return k.isPrimary;
 		if (typeFilter === "secondary") return !k.isPrimary;
 		return true;
 	});
+
+	// Sort filtered keywords
+	const sortedKeywords = [...filteredKeywords].sort((a, b) => {
+		let aValue: string | number | boolean = "";
+		let bValue: string | number | boolean = "";
+
+		switch (sortColumn) {
+			case "keyword":
+				aValue = a.keyword.toLowerCase();
+				bValue = b.keyword.toLowerCase();
+				break;
+			case "difficulty":
+				aValue = a.difficulty;
+				bValue = b.difficulty;
+				break;
+			case "volume":
+				aValue = a.volume;
+				bValue = b.volume;
+				break;
+			case "type":
+				aValue = a.isPrimary ? 1 : 0;
+				bValue = b.isPrimary ? 1 : 0;
+				break;
+			case "status":
+				aValue = a.isAnalyzed ? 1 : 0;
+				bValue = b.isAnalyzed ? 1 : 0;
+				break;
+			case "recommendedTitle":
+				aValue = (a.recommendedTitle || "").toLowerCase();
+				bValue = (b.recommendedTitle || "").toLowerCase();
+				break;
+			case "parent":
+				const getParentKeyword = (parentId: string | null) => {
+					if (!parentId) return "";
+					return keywords.find(k => k.keywordId === parentId)?.keyword?.toLowerCase() || "";
+				};
+				aValue = getParentKeyword(a.parentKeywordId);
+				bValue = getParentKeyword(b.parentKeywordId);
+				break;
+			default:
+				return 0;
+		}
+
+		if (aValue < bValue) {
+			return sortDirection === "asc" ? -1 : 1;
+		}
+		if (aValue > bValue) {
+			return sortDirection === "asc" ? 1 : -1;
+		}
+		return 0;
+	});
+
+	// Handle sort column click
+	const handleSortClick = (column: string) => {
+		if (sortColumn === column) {
+			// Toggle direction if same column
+			setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+		} else {
+			// Set new column with desc as default
+			setSortColumn(column);
+			setSortDirection("desc");
+		}
+	};
 
 	const fetchKeywords = useCallback(async () => {
 		try {
@@ -320,22 +386,29 @@ export default function KeywordsPage() {
 		setSelectedIds(newSelected);
 	};
 
+	const handleDeleteSelectedClick = () => {
+		if (selectedIds.size === 0) return;
+		setIsDeleteMultipleDialogOpen(true);
+	};
+
 	const handleDeleteSelected = async () => {
 		if (selectedIds.size === 0) return;
 
 		try {
 			setIsDeletingMultiple(true);
+			const count = selectedIds.size;
 			await keywordsApi.deleteMultipleKeywords(Array.from(selectedIds));
 			setKeywords((prev) =>
 				prev.filter((k) => !selectedIds.has(k.keywordId))
 			);
 			setSelectedIds(new Set());
-			toast.success(`${selectedIds.size} keyword${selectedIds.size > 1 ? "s" : ""} deleted successfully`);
+			toast.success(`${count} keyword${count > 1 ? "s" : ""} deleted successfully`);
 		} catch (err) {
 			toast.error("Failed to delete keywords");
 			console.error("Error deleting keywords:", err);
 		} finally {
 			setIsDeletingMultiple(false);
+			setIsDeleteMultipleDialogOpen(false);
 		}
 	};
 
@@ -459,7 +532,6 @@ export default function KeywordsPage() {
 					</Card>
 				</div>
 
-				{/* Main Card */}
 				<Card>
 					<CardHeader>
 						<div className="flex items-center justify-between">
@@ -555,7 +627,7 @@ export default function KeywordsPage() {
 										<Button
 											variant="destructive"
 											size="sm"
-											onClick={handleDeleteSelected}
+											onClick={handleDeleteSelectedClick}
 											disabled={isDeletingMultiple}
 										>
 											{isDeletingMultiple ? (
@@ -628,21 +700,41 @@ export default function KeywordsPage() {
 										<TableRow>
 											<TableHead className="w-12">
 												<Checkbox
-													checked={selectedIds.size === filteredKeywords.length && filteredKeywords.length > 0}
+													checked={selectedIds.size === sortedKeywords.length && sortedKeywords.length > 0}
 													onCheckedChange={(checked) => {
 														if (checked) {
-															setSelectedIds(new Set(filteredKeywords.map((k) => k.keywordId)));
+															setSelectedIds(new Set(sortedKeywords.map((k) => k.keywordId)));
 														} else {
 															setSelectedIds(new Set());
 														}
 													}}
 												/>
 											</TableHead>
-											<TableHead>Keyword</TableHead>
-											<TableHead>
+											<TableHead
+												className="cursor-pointer hover:bg-muted/50 select-none"
+												onClick={() => handleSortClick("keyword")}
+											>
+												<div className="flex items-center gap-1">
+													Keyword
+													{sortColumn === "keyword" && (
+														sortDirection === "asc" ?
+															<ArrowUp className="h-4 w-4" /> :
+															<ArrowDown className="h-4 w-4" />
+													)}
+												</div>
+											</TableHead>
+											<TableHead
+												className="cursor-pointer hover:bg-muted/50 select-none"
+												onClick={() => handleSortClick("type")}
+											>
 												<Tooltip>
 													<TooltipTrigger className="flex items-center gap-1">
 														Type
+														{sortColumn === "type" && (
+															sortDirection === "asc" ?
+																<ArrowUp className="h-4 w-4" /> :
+																<ArrowDown className="h-4 w-4" />
+														)}
 														<AlertCircle className="h-3 w-3 text-muted-foreground" />
 													</TooltipTrigger>
 													<TooltipContent className="max-w-xs">
@@ -654,10 +746,18 @@ export default function KeywordsPage() {
 													</TooltipContent>
 												</Tooltip>
 											</TableHead>
-											<TableHead>
+											<TableHead
+												className="cursor-pointer hover:bg-muted/50 select-none"
+												onClick={() => handleSortClick("difficulty")}
+											>
 												<Tooltip>
 													<TooltipTrigger className="flex items-center gap-1">
 														Difficulty
+														{sortColumn === "difficulty" && (
+															sortDirection === "asc" ?
+																<ArrowUp className="h-4 w-4" /> :
+																<ArrowDown className="h-4 w-4" />
+														)}
 														<AlertCircle className="h-3 w-3 text-muted-foreground" />
 													</TooltipTrigger>
 													<TooltipContent className="max-w-xs">
@@ -668,10 +768,18 @@ export default function KeywordsPage() {
 													</TooltipContent>
 												</Tooltip>
 											</TableHead>
-											<TableHead>
+											<TableHead
+												className="cursor-pointer hover:bg-muted/50 select-none"
+												onClick={() => handleSortClick("volume")}
+											>
 												<Tooltip>
 													<TooltipTrigger className="flex items-center gap-1">
 														Volume
+														{sortColumn === "volume" && (
+															sortDirection === "asc" ?
+																<ArrowUp className="h-4 w-4" /> :
+																<ArrowDown className="h-4 w-4" />
+														)}
 														<AlertCircle className="h-3 w-3 text-muted-foreground" />
 													</TooltipTrigger>
 													<TooltipContent className="max-w-xs">
@@ -682,11 +790,31 @@ export default function KeywordsPage() {
 													</TooltipContent>
 												</Tooltip>
 											</TableHead>
-											<TableHead>Recommended Title</TableHead>
-											<TableHead>
+											<TableHead
+												className="cursor-pointer hover:bg-muted/50 select-none"
+												onClick={() => handleSortClick("recommendedTitle")}
+											>
+												<div className="flex items-center gap-1">
+													Recommended Title
+													{sortColumn === "recommendedTitle" && (
+														sortDirection === "asc" ?
+															<ArrowUp className="h-4 w-4" /> :
+															<ArrowDown className="h-4 w-4" />
+													)}
+												</div>
+											</TableHead>
+											<TableHead
+												className="cursor-pointer hover:bg-muted/50 select-none"
+												onClick={() => handleSortClick("parent")}
+											>
 												<Tooltip>
 													<TooltipTrigger className="flex items-center gap-1">
 														Parent
+														{sortColumn === "parent" && (
+															sortDirection === "asc" ?
+																<ArrowUp className="h-4 w-4" /> :
+																<ArrowDown className="h-4 w-4" />
+														)}
 														<AlertCircle className="h-3 w-3 text-muted-foreground" />
 													</TooltipTrigger>
 													<TooltipContent className="max-w-xs">
@@ -697,12 +825,24 @@ export default function KeywordsPage() {
 													</TooltipContent>
 												</Tooltip>
 											</TableHead>
-											<TableHead>Status</TableHead>
+											<TableHead
+												className="cursor-pointer hover:bg-muted/50 select-none"
+												onClick={() => handleSortClick("status")}
+											>
+												<div className="flex items-center gap-1">
+													Status
+													{sortColumn === "status" && (
+														sortDirection === "asc" ?
+															<ArrowUp className="h-4 w-4" /> :
+															<ArrowDown className="h-4 w-4" />
+													)}
+												</div>
+											</TableHead>
 											<TableHead className="text-right">Actions</TableHead>
 										</TableRow>
 									</TableHeader>
 									<TableBody>
-										{filteredKeywords.map((keyword) => (
+										{sortedKeywords.map((keyword) => (
 											<TableRow key={keyword.keywordId}>
 												<TableCell>
 													<Checkbox
@@ -914,14 +1054,12 @@ export default function KeywordsPage() {
 					</CardContent>
 				</Card>
 
-				{/* Add Keywords Modal */}
 				<AddKeywordsModal
 					open={isAddModalOpen}
 					onOpenChange={setIsAddModalOpen}
 					onSuccess={fetchKeywords}
 				/>
 
-				{/* Generate Article Modal */}
 				{selectedKeywordForArticle && (
 					<GenerateArticleModal
 						open={isGenerateModalOpen}
@@ -935,7 +1073,6 @@ export default function KeywordsPage() {
 					/>
 				)}
 
-				{/* Delete Confirmation Dialog */}
 				<AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
 					<AlertDialogContent>
 						<AlertDialogHeader>
@@ -946,13 +1083,42 @@ export default function KeywordsPage() {
 							</AlertDialogDescription>
 						</AlertDialogHeader>
 						<AlertDialogFooter>
-							<AlertDialogCancel disabled={!!deletingId}>Cancel</AlertDialogCancel>
+							<AlertDialogCancel className="cursor-pointer" onClick={() => setIsDeleteDialogOpen(false)}>Cancel</AlertDialogCancel>
 							<AlertDialogAction
 								onClick={handleConfirmDelete}
-								className="bg-red-600 hover:bg-red-700"
+								className="bg-red-600 hover:bg-red-700 cursor-pointer"
 								disabled={!!deletingId}
 							>
 								{deletingId ? (
+									<>
+										<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+										Deleting...
+									</>
+								) : (
+									"Delete"
+								)}
+							</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
+
+				<AlertDialog open={isDeleteMultipleDialogOpen} onOpenChange={setIsDeleteMultipleDialogOpen}>
+					<AlertDialogContent>
+						<AlertDialogHeader>
+							<AlertDialogTitle>Delete Keywords</AlertDialogTitle>
+							<AlertDialogDescription>
+								Are you sure you want to delete {selectedIds.size} keyword{selectedIds.size > 1 ? "s" : ""}?
+								This action cannot be undone.
+							</AlertDialogDescription>
+						</AlertDialogHeader>
+						<AlertDialogFooter>
+							<AlertDialogCancel className="cursor-pointer" onClick={() => setIsDeleteMultipleDialogOpen(false)}>Cancel</AlertDialogCancel>
+							<AlertDialogAction
+								onClick={handleDeleteSelected}
+								className="bg-red-600 hover:bg-red-700 cursor-pointer"
+								disabled={isDeletingMultiple}
+							>
+								{isDeletingMultiple ? (
 									<>
 										<Loader2 className="h-4 w-4 mr-2 animate-spin" />
 										Deleting...

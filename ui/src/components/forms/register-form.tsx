@@ -13,6 +13,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { authApi } from '@/lib/api/auth.api';
+import { GoogleAuthButton } from '@/components/auth/google-auth-button';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Eye, EyeOff, Lock, Mail, User } from 'lucide-react';
 import Link from 'next/link';
@@ -281,6 +282,22 @@ export default function RegisterForm({ onSuccess, isModal = false }: Props) {
           >
             {isLoading ? 'Creating account...' : 'Create account'}
           </Button>
+        </div>
+
+        {/* Social Sign Up */}
+        <div className="mt-6">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-300" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-white text-gray-500">Or sign up with</span>
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <GoogleAuthButton mode="signup" />
+          </div>
         </div>
       </form>
     </Form>

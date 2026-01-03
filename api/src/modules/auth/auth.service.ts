@@ -11,6 +11,7 @@ import { MailService } from '../mail/mail.service';
 import { UsersService } from '../users/users.service';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { GoogleAuthDto, ConnectGoogleDto } from './dto/google-auth.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -30,6 +31,11 @@ export class AuthService {
 		const user = await this.usersService.findByEmail(email);
 		if (!user) {
 			throw new UnauthorizedException('Invalid credentials');
+		}
+
+		// Check if user has a password set (they might have signed up via OAuth only)
+		if (!user.password) {
+			throw new UnauthorizedException('No password set for this account. Please use Google sign-in or set a password first.');
 		}
 
 		const isPasswordValid = await this.validatePassword(password, user.password);
@@ -203,5 +209,77 @@ export class AuthService {
 
 	async updateLastLogin(userId: string): Promise<void> {
 		await this.usersService.updateLastLogin(userId);
+	}
+
+	/**
+	 * Authenticate user with Google OAuth
+	 */
+	async authenticateWithGoogle(googleDto: GoogleAuthDto): Promise<AuthResponseDto> {
+		const user = await this.usersService.findOrCreateFromGoogleProfile({
+			providerAccountId: googleDto.providerAccountId,
+			email: googleDto.email,
+			givenName: googleDto.givenName,
+			familyName: googleDto.familyName,
+			pictureUrl: googleDto.pictureUrl,
+		});
+
+		if (user.status !== UserStatus.ACTIVE) {
+			throw new UnauthorizedException('Your account is currently inactive.');
+		}
+
+		const payload: JwtPayload = {
+			sub: user.userId,
+			email: user.email,
+			role: user.roleId,
+			isAdminUser: user.userRole?.isAdminRole,
+		};
+
+		await this.updateLastLogin(user.userId);
+
+		return {
+			user,
+			accessToken: this.generateAccessToken(payload),
+			refreshToken: this.generateRefreshToken(payload),
+		};
+	}
+
+	/**
+	 * Connect Google account to existing authenticated user
+	 */
+	async connectGoogleAccount(userId: string, connectGoogleDto: ConnectGoogleDto): Promise<{ message: string }> {
+		await this.usersService.connectGoogleAccount(
+			userId,
+			connectGoogleDto.providerAccountId,
+			connectGoogleDto.email
+		);
+		return { message: 'Google account connected successfully' };
+	}
+
+	/**
+	 * Disconnect Google account from authenticated user
+	 */
+	async disconnectGoogleAccount(userId: string): Promise<{ message: string }> {
+		await this.usersService.disconnectGoogleAccount(userId);
+		return { message: 'Google account disconnected successfully' };
+	}
+
+	/**
+	 * Set password for OAuth users who don't have one
+	 */
+	async setPassword(userId: string, newPassword: string): Promise<{ message: string }> {
+		await this.usersService.setPassword(userId, newPassword);
+		return { message: 'Password set successfully' };
+	}
+
+	/**
+	 * Get user's authentication status (has password, has google connected)
+	 */
+	async getAuthStatus(userId: string): Promise<{ hasPassword: boolean; hasGoogleConnected: boolean }> {
+		const [hasPassword, hasGoogleConnected] = await Promise.all([
+			this.usersService.hasPasswordSet(userId),
+			this.usersService.hasGoogleConnected(userId),
+		]);
+
+		return { hasPassword, hasGoogleConnected };
 	}
 }

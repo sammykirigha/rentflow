@@ -16,9 +16,15 @@ export class User extends AbstractEntity<User> {
 	@Column({ unique: true })
 	email: string;
 
-	@Column()
+	@Column({ nullable: true })
 	@Exclude()
-	password: string;
+	password?: string;
+
+	@Column({ name: 'google_id', nullable: true, unique: true })
+	googleId?: string;
+
+	@Column({ name: 'auth_provider', default: 'local' })
+	authProvider: string; // 'local' | 'google'
 
 	@Column({ nullable: true })
 	firstName?: string;

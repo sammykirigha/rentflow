@@ -1,8 +1,9 @@
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { User } from "lucide-react";
+import { Shield, User } from "lucide-react";
 import UpdateUserProfileForm from "./components/update-user-form";
+import SecuritySettings from "./components/security-settings";
 
 export default function UsersPage() {
     return (
@@ -19,6 +20,22 @@ export default function UsersPage() {
                 </CardHeader>
                 <CardContent>
                     <UpdateUserProfileForm />
+                </CardContent>
+            </Card>
+
+            {/* Security Settings Section */}
+            <Card className='rounded-sm'>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Shield className="h-5 w-5" />
+                        Security Settings
+                    </CardTitle>
+                    <CardDescription>
+                        Manage your account security and connected accounts
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <SecuritySettings />
                 </CardContent>
             </Card>
         </div>

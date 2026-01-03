@@ -29,4 +29,7 @@ export interface User {
 	teacherProfile?: string | null;
 	userRole: Role;
 	teacherProfile?: Teacher;
+	// OAuth fields
+	googleId?: string | null;
+	authProvider?: string; // 'local' | 'google'
 }
