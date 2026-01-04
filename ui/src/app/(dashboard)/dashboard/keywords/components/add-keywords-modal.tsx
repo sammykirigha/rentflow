@@ -13,13 +13,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
-import {
 	Table,
 	TableBody,
 	TableCell,
@@ -98,7 +91,6 @@ export default function AddKeywordsModal({
 }: AddKeywordsModalProps) {
 	const [manualKeywords, setManualKeywords] = useState<ExtendedKeywordItem[]>([]);
 	const [inputValue, setInputValue] = useState("");
-	const [defaultKeywordType, setDefaultKeywordType] = useState<"primary" | "secondary">("primary");
 	const [isLoading, setIsLoading] = useState(false);
 	const [activeTab, setActiveTab] = useState<string>("manual");
 	const [fileKeywords, setFileKeywords] = useState<ExtendedKeywordItem[]>([]);
@@ -110,7 +102,7 @@ export default function AddKeywordsModal({
 		if (trimmed && !manualKeywords.some(k => k.keyword === trimmed)) {
 			setManualKeywords([...manualKeywords, {
 				keyword: trimmed,
-				isPrimary: defaultKeywordType === "primary"
+				isPrimary: false
 			}]);
 			setInputValue("");
 		}
@@ -147,7 +139,7 @@ export default function AddKeywordsModal({
 		if (pastedKeywords.length > 0) {
 			const newKeywords = pastedKeywords.map(k => ({
 				keyword: k,
-				isPrimary: defaultKeywordType === "primary"
+				isPrimary: false
 			}));
 			setManualKeywords([...manualKeywords, ...newKeywords]);
 		}
@@ -159,13 +151,6 @@ export default function AddKeywordsModal({
 		if (isNaN(numValue)) return undefined;
 		// Clamp between 0 and 100
 		return Math.max(0, Math.min(100, Math.round(numValue)));
-	};
-
-	const parseIsPrimary = (value: string | number | boolean | undefined): boolean => {
-		if (value === undefined || value === null || value === "") return defaultKeywordType === "primary";
-		if (typeof value === "boolean") return value;
-		const strValue = String(value).toLowerCase().trim();
-		return strValue === "true" || strValue === "1" || strValue === "yes" || strValue === "primary";
 	};
 
 	const parseFileData = (data: Record<string, unknown>[]): ExtendedKeywordItem[] => {
@@ -183,10 +168,6 @@ export default function AddKeywordsModal({
 			const volumeKey = Object.keys(row).find(
 				(k) => k.toLowerCase() === "volume" || k.toLowerCase() === "vol" || k.toLowerCase() === "search volume"
 			);
-			const typeKey = Object.keys(row).find(
-				(k) => k.toLowerCase() === "type" || k.toLowerCase() === "primary" ||
-					k.toLowerCase() === "isprimary" || k.toLowerCase() === "is_primary"
-			);
 
 			if (keywordKey && row[keywordKey]) {
 				const keyword = String(row[keywordKey]).trim().toLowerCase();
@@ -195,7 +176,7 @@ export default function AddKeywordsModal({
 						keyword,
 						difficulty: normalizeDifficulty(row[difficultyKey as string] as string | number),
 						volume: volumeKey && row[volumeKey] ? Number(row[volumeKey]) || undefined : undefined,
-						isPrimary: parseIsPrimary(row[typeKey as string] as string | number | boolean),
+						isPrimary: false,
 					});
 				}
 			}
@@ -342,26 +323,6 @@ export default function AddKeywordsModal({
 					{/* Manual Entry Tab */}
 					<TabsContent value="manual" className="space-y-4 mt-4">
 						<div className="space-y-2">
-							<div className="flex items-center justify-between">
-								<Label htmlFor="keyword-input">Keywords</Label>
-								<div className="flex items-center gap-2">
-									<Label htmlFor="default-type" className="text-xs text-muted-foreground">Default type:</Label>
-									<Select value={defaultKeywordType} onValueChange={(v: "primary" | "secondary") => setDefaultKeywordType(v)}>
-										<SelectTrigger id="default-type" className="h-8 w-32">
-											<SelectValue />
-										</SelectTrigger>
-										<SelectContent>
-											<SelectItem value="primary">
-												<span className="flex items-center gap-1">
-													<Crown className="h-3 w-3" />
-													Primary
-												</span>
-											</SelectItem>
-											<SelectItem value="secondary">Secondary</SelectItem>
-										</SelectContent>
-									</Select>
-								</div>
-							</div>
 							<div className="flex gap-2">
 								<Input
 									id="keyword-input"
@@ -467,7 +428,7 @@ export default function AddKeywordsModal({
 							<p className="text-xs text-muted-foreground">
 								File should have columns: <strong>Keyword</strong> (required),{" "}
 								<strong>Difficulty</strong> (0-100), <strong>Volume</strong> (number),{" "}
-								<strong>Type</strong> or <strong>isPrimary</strong> (true/false/primary/secondary)
+								{/* <strong>Type</strong> or <strong>isPrimary</strong> (true/false/primary/secondary) */}
 							</p>
 						</div>
 

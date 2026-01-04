@@ -108,6 +108,7 @@ export const authOptions: NextAuthOptions = {
           return false;
         }
       }
+
       return true;
     },
     async jwt({ token, user }) {

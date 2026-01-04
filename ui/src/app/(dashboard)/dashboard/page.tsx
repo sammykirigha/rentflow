@@ -3,27 +3,21 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getAdminDashboardData, type AdminDashboardData, type RecentUser } from "@/lib/api/admin.api";
-import { Loader2, TrendingDown, TrendingUp, Users } from "lucide-react";
+import { getUserDashboardData, type RecentArticle, type RecentKeyword, type UserDashboardData } from "@/lib/api/user-dashboard.api";
+import { FileText, Key, Loader2, PenTool, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-const statusColors = {
-  answered: "bg-green-100 text-green-800",
-  pending: "bg-yellow-100 text-yellow-800",
-  expert_assigned: "bg-blue-100 text-blue-800",
+const statusColors: Record<string, string> = {
+  draft: "bg-gray-100 text-gray-800",
+  generating: "bg-yellow-100 text-yellow-800",
+  generated: "bg-green-100 text-green-800",
+  published: "bg-blue-100 text-blue-800",
   failed: "bg-red-100 text-red-800",
 };
 
-const subscriptionColors: Record<string, string> = {
-  Premium: "bg-purple-100 text-purple-800",
-  Free: "bg-gray-100 text-gray-800",
-  Pro: "bg-blue-100 text-blue-800",
-  Basic: "bg-green-100 text-green-800",
-};
-
-export default function AdminDashboard() {
-  const [dashboardData, setDashboardData] = useState<AdminDashboardData | null>(null);
+export default function UserDashboard() {
+  const [dashboardData, setDashboardData] = useState<UserDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,7 +26,7 @@ export default function AdminDashboard() {
       try {
         setLoading(true);
         setError(null);
-        const data = await getAdminDashboardData();
+        const data = await getUserDashboardData();
         setDashboardData(data);
       } catch (err) {
         console.error("Failed to fetch dashboard data:", err);
@@ -66,22 +60,51 @@ export default function AdminDashboard() {
     return null;
   }
 
-  const { stats, recentUsers } = dashboardData;
+  const { stats, recentArticles, recentKeywords } = dashboardData;
 
   const statsDisplay = [
     {
-      title: "Total Users",
-      value: stats.totalUsers.toLocaleString(),
-      change: stats.usersChangePercent,
-      trend: stats.usersTrend,
-      icon: Users,
+      title: "Total Keywords",
+      value: stats.totalKeywords.toLocaleString(),
+      subtitle: `${stats.primaryKeywords} primary, ${stats.secondaryKeywords} secondary`,
+      icon: Key,
+      color: "text-purple-600",
+      bgColor: "bg-purple-100",
+    },
+    {
+      title: "Total Articles",
+      value: stats.totalArticles.toLocaleString(),
+      subtitle: `${stats.generatedArticles} generated`,
+      icon: FileText,
       color: "text-blue-600",
       bgColor: "bg-blue-100",
+    },
+    {
+      title: "Published",
+      value: stats.publishedArticles.toLocaleString(),
+      subtitle: "Articles published",
+      icon: TrendingUp,
+      color: "text-green-600",
+      bgColor: "bg-green-100",
+    },
+    {
+      title: "Drafts",
+      value: stats.draftArticles.toLocaleString(),
+      subtitle: "Articles in draft",
+      icon: PenTool,
+      color: "text-orange-600",
+      bgColor: "bg-orange-100",
     },
   ];
 
   return (
     <div>
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold text-gray-900">Overview</h2>
+        <p className="text-gray-600">Your content creation stats at a glance</p>
+      </div>
+
+      {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {statsDisplay.map((stat) => (
           <Card key={stat.title} className="border-0 shadow-md">
@@ -90,18 +113,7 @@ export default function AdminDashboard() {
                 <div>
                   <p className="text-sm font-medium text-gray-600 mb-1">{stat.title}</p>
                   <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                  <div className="flex items-center mt-2">
-                    {stat.trend === "up" ? (
-                      <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                    ) : (
-                      <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
-                    )}
-                    <span className={`text-sm font-medium ${stat.trend === "up" ? "text-green-600" : "text-red-600"
-                      }`}>
-                      {stat.change}
-                    </span>
-                    <span className="text-sm text-gray-500 ml-1">vs last month</span>
-                  </div>
+                  <p className="text-xs text-gray-500 mt-1">{stat.subtitle}</p>
                 </div>
                 <div className={`p-3 rounded-lg ${stat.bgColor}`}>
                   <stat.icon className={`h-6 w-6 ${stat.color}`} />
@@ -113,50 +125,86 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-
-        {/* Recent Users */}
+        {/* Recent Articles */}
         <Card className="border-0 shadow-md">
           <CardHeader>
-            <CardTitle className="text-lg font-semibold">Recent Users</CardTitle>
+            <CardTitle className="text-lg font-semibold">Recent Articles</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <div className="space-y-4">
-              {recentUsers.length === 0 ? (
+              {recentArticles.length === 0 ? (
                 <div className="px-6 py-8 text-center text-gray-500">
-                  No users yet
+                  No articles yet. Start by creating your first article!
                 </div>
               ) : (
-                recentUsers.map((user: RecentUser) => (
-                  <div key={user.id} className="px-6 py-4 border-b border-gray-100 last:border-b-0">
+                recentArticles.map((article: RecentArticle) => (
+                  <div key={article.articleId} className="px-6 py-4 border-b border-gray-100 last:border-b-0">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-linear-to-r from-purple-400 to-blue-400 rounded-full flex items-center justify-center">
-                          <span className="text-white font-semibold text-sm">
-                            {user.name.charAt(0)}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{user.name}</p>
-                          <p className="text-xs text-gray-500">{user.email}</p>
-                        </div>
+                      <div className="flex-1 min-w-0 pr-4">
+                        <p className="text-sm font-medium text-gray-900 truncate">{article.title}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {article.primaryKeyword?.keyword && (
+                            <span className="mr-2">Keyword: {article.primaryKeyword.keyword}</span>
+                          )}
+                          {article.wordCount > 0 && <span>{article.wordCount} words</span>}
+                        </p>
                       </div>
-                      <div className="text-right">
-                        <Badge
-                          className={`text-xs mb-1 ${subscriptionColors[user.subscription] || "bg-gray-100 text-gray-800"}`}
-                        >
-                          {user.subscription}
-                        </Badge>
-                        <p className="text-xs text-gray-500">{user.questionsCount} questions</p>
+                      <Badge className={`text-xs shrink-0 ${statusColors[article.status] || "bg-gray-100 text-gray-800"}`}>
+                        {article.status}
+                      </Badge>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="p-4 border-t border-gray-100">
+              <Link href="/dashboard/articles">
+                <Button variant="outline" className="w-full">
+                  View All Articles
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Recent Keywords */}
+        <Card className="border-0 shadow-md">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold">Recent Keywords</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="space-y-4">
+              {recentKeywords.length === 0 ? (
+                <div className="px-6 py-8 text-center text-gray-500">
+                  No keywords yet. Add your first keyword to get started!
+                </div>
+              ) : (
+                recentKeywords.map((keyword: RecentKeyword) => (
+                  <div key={keyword.keywordId} className="px-6 py-4 border-b border-gray-100 last:border-b-0">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0 pr-4">
+                        <p className="text-sm font-medium text-gray-900 truncate">{keyword.keyword}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Difficulty: {keyword.difficulty} | Volume: {keyword.volume}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {keyword.isPrimary && (
+                          <Badge className="text-xs bg-purple-100 text-purple-800">Primary</Badge>
+                        )}
+                        {keyword.isAnalyzed && (
+                          <Badge className="text-xs bg-green-100 text-green-800">Analyzed</Badge>
+                        )}
                       </div>
                     </div>
                   </div>
                 ))
               )}
             </div>
-            <div className="px-6 py-4 border-t border-gray-100">
-              <Link href="/dashboard/users">
+            <div className="p-4 border-t border-gray-100">
+              <Link href="/dashboard/keywords">
                 <Button variant="outline" className="w-full">
-                  View All Users
+                  View All Keywords
                 </Button>
               </Link>
             </div>

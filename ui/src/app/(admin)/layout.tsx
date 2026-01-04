@@ -11,16 +11,16 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function Layout({ children }: PropsWithChildren) {
+export default async function AdminLayout({ children }: PropsWithChildren) {
   const currentUser = await getCurrentUser();
 
   if (!currentUser) {
     return redirect('/login');
   }
 
-  // Redirect admin users to admin panel
-  if (currentUser.isAdminUser) {
-    return redirect('/admin');
+  // Only allow admin users to access /admin routes
+  if (!currentUser.isAdminUser) {
+    return redirect('/dashboard');
   }
 
   return (

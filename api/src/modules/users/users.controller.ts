@@ -114,6 +114,12 @@ export class UsersController {
 		return this.usersService.findOne(user.sub);
 	}
 
+	@Get('dashboard')
+	@UseGuards(JwtAuthGuard)
+	async getDashboard(@CurrentUser() user: JwtPayload) {
+		return this.usersService.getUserDashboardData(user.sub);
+	}
+
 	@Patch('profile')
 	@UseGuards(JwtAuthGuard)
 	async updateProfile(

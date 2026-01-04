@@ -4,15 +4,16 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserStore } from "@/stores/user.store";
 import {
-  Brain,
-  ChevronDown,
-  LayoutDashboard,
-  LogOut,
-  Menu,
-  Settings,
-  Shield,
-  Users,
-  X
+    Brain,
+    ChevronDown,
+    FileText,
+    Key,
+    LayoutDashboard,
+    Link2,
+    LogOut,
+    Menu,
+    User,
+    X
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -30,29 +31,33 @@ interface MenuItem {
 const menuItems: MenuItem[] = [
   {
     title: "Dashboard",
-    href: "/admin",
+    href: "/dashboard",
     icon: LayoutDashboard,
   },
   {
-    title: "Users",
-    href: "/admin/users",
-    icon: Users,
+    title: "Keywords",
+    href: "/dashboard/keywords",
+    icon: Key,
   },
   {
-    title: "System Settings",
-    href: "/admin/settings",
-    icon: Settings,
+    title: "Articles",
+    href: "/dashboard/articles",
+    icon: FileText,
+  },
+  {
+    title: "Website Pages",
+    href: "/dashboard/pages",
+    icon: Link2,
+  },
+  {
+    title: "Profile",
+    href: "/dashboard/profile",
+    icon: User,
     children: []
-  },
-  {
-    title: "Activity logs",
-    href: "/admin/activity-logs",
-    icon: Shield,
-    children: [],
   },
 ];
 
-export default function AdminSidebar() {
+export default function UserSidebar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
   const pathname = usePathname();
@@ -70,7 +75,10 @@ export default function AdminSidebar() {
   };
 
   const isActive = (href: string) => {
-    return pathname === href || (href !== "/admin" && pathname.startsWith(href));
+    if (href === "/dashboard") {
+      return pathname === "/dashboard";
+    }
+    return pathname === href || pathname.startsWith(href);
   };
 
   const isExpanded = (title: string) => expandedItems.includes(title);
@@ -185,7 +193,7 @@ export default function AdminSidebar() {
             <div className="flex items-center justify-between w-full gap-2">
               <div className="flex items-center w-full truncate">
                 <div className="w-8 h-8 bg-primary shrink-0 rounded-full flex items-center justify-center">
-                  <Shield className="h-4 w-4 text-white" />
+                  <User className="h-4 w-4 text-white" />
                 </div>
                 <div className="ml-3 w-full ">
                   <p className="text-sm font-medium text-gray-900">{user?.firstName} {user?.lastName}</p>

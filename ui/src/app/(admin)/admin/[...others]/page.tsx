@@ -43,9 +43,9 @@ export default function NotFound() {
               </div>
               <h3 className="font-semibold text-gray-900 mb-2">Dashboard</h3>
               <p className="text-xs text-gray-600 mb-3">
-                Return to the main dashboard
+                Return to the main admin dashboard
               </p>
-              <Link href="/dashboard">
+              <Link href="/admin">
                 <Button variant="outline" className="w-full">
                   Go to Dashboard
                 </Button>

@@ -1,12 +1,12 @@
 "use client";
 
-import UserSidebar from "@/components/layout/user-sidebar";
+import AdminSidebar from "@/components/layout/admin-sidebar";
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { LogOut } from 'lucide-react';
 import { PropsWithChildren } from 'react';
 
-export default function DashboardLayout({ children }: PropsWithChildren) {
+export default function AdminDashboardLayout({ children }: PropsWithChildren) {
   const { logout } = useAuth();
 
   const handleLogout = async () => {
@@ -15,13 +15,13 @@ export default function DashboardLayout({ children }: PropsWithChildren) {
 
   return (
     <div className="flex overflow-y-hidden h-screen bg-gray-50">
-      <UserSidebar />
+      <AdminSidebar />
 
       <div className="flex-1 flex flex-col overflow-hidden lg:ml-0">
         {/* Header */}
         <header className="bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-gray-900">Welcome</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Admin Panel</h1>
 
             <Button variant="outline" onClick={handleLogout}>
               <LogOut className="h-4 w-4 mr-2" />

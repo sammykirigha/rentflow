@@ -1,6 +1,8 @@
 import { AuditAction } from '@/common/enums/audit-action.enum';
 import { AuditTargetType } from '@/common/enums/audit-target-type.enum';
 import authConfig from '@/config/auth.config';
+import { Article, ArticleStatus } from '@/modules/articles/entities/article.entity';
+import { Keyword } from '@/modules/keywords/entities/keyword.entity';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcryptjs';
@@ -23,6 +25,10 @@ export class UsersService {
 		private permissionsService: PermissionsService,
 		@InjectRepository(Role)
 		private readonly rolesRepository: Repository<Role>,
+		@InjectRepository(Keyword)
+		private readonly keywordsRepository: Repository<Keyword>,
+		@InjectRepository(Article)
+		private readonly articlesRepository: Repository<Article>,
 		private readonly auditService: AuditService
 	) { }
 
@@ -334,7 +340,7 @@ export class UsersService {
 		);
 	}
 
-	async updateProfile(userId: string, updateData: { firstName?: string; lastName?: string; email?: string; phone?: string; avatarUrl?: string }): Promise<User> {
+	async updateProfile(userId: string, updateData: { firstName?: string; lastName?: string; email?: string; phone?: string; avatarUrl?: string; }): Promise<User> {
 		const user = await this.usersRepository.findOne({ where: { userId } });
 
 		if (!user) {
@@ -528,5 +534,70 @@ export class UsersService {
 		}
 
 		return !!user.googleId;
+	}
+
+	/**
+	 * Get user dashboard data with stats, recent articles, and recent keywords
+	 */
+	async getUserDashboardData(userId: string) {
+		// Get keyword stats
+		const totalKeywords = await this.keywordsRepository.count({ where: { userId } });
+		const primaryKeywords = await this.keywordsRepository.count({ where: { userId, isPrimary: true } });
+		const secondaryKeywords = await this.keywordsRepository.count({ where: { userId, isPrimary: false } });
+
+		// Get article stats
+		const totalArticles = await this.articlesRepository.count({ where: { userId } });
+		const draftArticles = await this.articlesRepository.count({ where: { userId, status: ArticleStatus.DRAFT } });
+		const generatedArticles = await this.articlesRepository.count({ where: { userId, status: ArticleStatus.GENERATED } });
+		const publishedArticles = await this.articlesRepository.count({ where: { userId, status: ArticleStatus.PUBLISHED } });
+
+		// Get recent articles
+		const recentArticles = await this.articlesRepository.find({
+			where: { userId },
+			order: { createdAt: 'DESC' },
+			take: 5,
+			relations: ['primaryKeyword'],
+			select: {
+				articleId: true,
+				title: true,
+				status: true,
+				wordCount: true,
+				createdAt: true,
+				primaryKeyword: {
+					keyword: true,
+				},
+			},
+		});
+
+		// Get recent keywords
+		const recentKeywords = await this.keywordsRepository.find({
+			where: { userId },
+			order: { createdAt: 'DESC' },
+			take: 5,
+			select: {
+				keywordId: true,
+				keyword: true,
+				difficulty: true,
+				volume: true,
+				isPrimary: true,
+				isAnalyzed: true,
+				createdAt: true,
+			},
+		});
+
+		return {
+			stats: {
+				totalKeywords,
+				primaryKeywords,
+				secondaryKeywords,
+				totalArticles,
+				draftArticles,
+				generatedArticles,
+				publishedArticles,
+			},
+			recentArticles,
+			recentKeywords,
+
+		};
 	}
 }
