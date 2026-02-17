@@ -3,6 +3,7 @@ import { config } from 'dotenv';
 import { PermissionsSeed } from '../src/database/seeds/001-permissions.seed';
 import { InitialUsersSeed } from '../src/database/seeds/002-initial-users.seed';
 import { SystemSettingsSeed } from '../src/database/seeds/003-system-settings.seed';
+import { PropertiesUnitsTenantsSeed } from '../src/database/seeds/004-properties-units-tenants.seed';
 
 // Load environment variables
 config();
@@ -21,6 +22,7 @@ async function runSeeds() {
       new PermissionsSeed(),
       new InitialUsersSeed(),
       new SystemSettingsSeed(),
+      new PropertiesUnitsTenantsSeed(),
     ];
 
     for (const seed of seeds) {

@@ -1,216 +1,278 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getUserDashboardData, type RecentArticle, type RecentKeyword, type UserDashboardData } from "@/lib/api/user-dashboard.api";
-import { FileText, Key, Loader2, PenTool, TrendingUp } from "lucide-react";
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Card, Col, Row, Statistic, Typography, Table, Tag, Progress } from 'antd';
+import {
+  HomeOutlined,
+  TeamOutlined,
+  FileTextOutlined,
+  DollarOutlined,
+  WarningOutlined,
+  CheckCircleOutlined,
+} from '@ant-design/icons';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/contexts/AuthContext';
+import { dashboardApi, type DashboardStats } from '@/lib/api/dashboard.api';
+import { formatKES } from '@/lib/format-kes';
+import type { ColumnsType } from 'antd/es/table';
+import dayjs from 'dayjs';
 
-const statusColors: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-800",
-  generating: "bg-yellow-100 text-yellow-800",
-  generated: "bg-green-100 text-green-800",
-  published: "bg-blue-100 text-blue-800",
-  failed: "bg-red-100 text-red-800",
+const { Title, Text } = Typography;
+
+const STATUS_COLOR_MAP: Record<string, string> = {
+  paid: 'green',
+  partially_paid: 'blue',
+  unpaid: 'orange',
+  overdue: 'red',
+  cancelled: 'default',
+  completed: 'green',
+  pending: 'orange',
+  failed: 'red',
 };
 
-export default function UserDashboard() {
-  const [dashboardData, setDashboardData] = useState<UserDashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+const STATUS_LABEL_MAP: Record<string, string> = {
+  paid: 'Paid',
+  partially_paid: 'Partially Paid',
+  unpaid: 'Unpaid',
+  overdue: 'Overdue',
+  cancelled: 'Cancelled',
+  completed: 'Completed',
+  pending: 'Pending',
+  failed: 'Failed',
+};
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const data = await getUserDashboardData();
-        setDashboardData(data);
-      } catch (err) {
-        console.error("Failed to fetch dashboard data:", err);
-        setError("Failed to load dashboard data. Please try again.");
-      } finally {
-        setLoading(false);
-      }
-    };
+const METHOD_LABEL_MAP: Record<string, string> = {
+  mpesa_paybill: 'M-Pesa',
+  mpesa_stk_push: 'STK Push',
+  wallet_deduction: 'Wallet',
+  manual: 'Manual',
+};
 
-    fetchDashboardData();
-  }, []);
+export default function DashboardPage() {
+  const { isAuthenticated } = useAuth();
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
-      </div>
-    );
-  }
+  const { data: stats, isLoading } = useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: () => dashboardApi.getStats(),
+    enabled: isAuthenticated,
+  });
 
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
-        <p className="text-red-600">{error}</p>
-        <Button onClick={() => window.location.reload()}>Retry</Button>
-      </div>
-    );
-  }
-
-  if (!dashboardData) {
-    return null;
-  }
-
-  const { stats, recentArticles, recentKeywords } = dashboardData;
-
-  const statsDisplay = [
+  const invoiceColumns: ColumnsType<NonNullable<DashboardStats['recentInvoices']>[0]> = [
     {
-      title: "Total Keywords",
-      value: stats.totalKeywords.toLocaleString(),
-      subtitle: `${stats.primaryKeywords} primary, ${stats.secondaryKeywords} secondary`,
-      icon: Key,
-      color: "text-purple-600",
-      bgColor: "bg-purple-100",
+      title: 'Invoice #',
+      dataIndex: 'invoiceNumber',
+      key: 'invoiceNumber',
     },
     {
-      title: "Total Articles",
-      value: stats.totalArticles.toLocaleString(),
-      subtitle: `${stats.generatedArticles} generated`,
-      icon: FileText,
-      color: "text-blue-600",
-      bgColor: "bg-blue-100",
+      title: 'Tenant',
+      key: 'tenant',
+      render: (_: unknown, record) => {
+        const name = `${record.tenant?.user?.firstName || ''} ${record.tenant?.user?.lastName || ''}`.trim();
+        return name || '-';
+      },
     },
     {
-      title: "Published",
-      value: stats.publishedArticles.toLocaleString(),
-      subtitle: "Articles published",
-      icon: TrendingUp,
-      color: "text-green-600",
-      bgColor: "bg-green-100",
+      title: 'Amount',
+      dataIndex: 'totalAmount',
+      key: 'totalAmount',
+      render: (value: number) => formatKES(value),
+      align: 'right',
     },
     {
-      title: "Drafts",
-      value: stats.draftArticles.toLocaleString(),
-      subtitle: "Articles in draft",
-      icon: PenTool,
-      color: "text-orange-600",
-      bgColor: "bg-orange-100",
+      title: 'Balance',
+      dataIndex: 'balanceDue',
+      key: 'balanceDue',
+      render: (value: number) => formatKES(value),
+      align: 'right',
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status: string) => (
+        <Tag color={STATUS_COLOR_MAP[status] || 'default'}>
+          {STATUS_LABEL_MAP[status] || status}
+        </Tag>
+      ),
+    },
+  ];
+
+  const paymentColumns: ColumnsType<NonNullable<DashboardStats['recentPayments']>[0]> = [
+    {
+      title: 'Tenant',
+      key: 'tenant',
+      render: (_: unknown, record) => {
+        const name = `${record.tenant?.user?.firstName || ''} ${record.tenant?.user?.lastName || ''}`.trim();
+        return name || '-';
+      },
+    },
+    {
+      title: 'Amount',
+      dataIndex: 'amount',
+      key: 'amount',
+      render: (value: number) => formatKES(value),
+      align: 'right',
+    },
+    {
+      title: 'Method',
+      dataIndex: 'method',
+      key: 'method',
+      render: (method: string) => METHOD_LABEL_MAP[method] || method,
+    },
+    {
+      title: 'Date',
+      dataIndex: 'transactionDate',
+      key: 'transactionDate',
+      render: (value: string) => value ? dayjs(value).format('DD MMM') : '-',
     },
   ];
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Overview</h2>
-        <p className="text-gray-600">Your content creation stats at a glance</p>
+      <div style={{ marginBottom: 24 }}>
+        <Title level={4} style={{ margin: 0 }}>Overview</Title>
+        <Text type="secondary">Welcome to RentFlow property management</Text>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {statsDisplay.map((stat) => (
-          <Card key={stat.title} className="border-0 shadow-md">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">{stat.title}</p>
-                  <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                  <p className="text-xs text-gray-500 mt-1">{stat.subtitle}</p>
-                </div>
-                <div className={`p-3 rounded-lg ${stat.bgColor}`}>
-                  <stat.icon className={`h-6 w-6 ${stat.color}`} />
-                </div>
-              </div>
-            </CardContent>
+      {/* KPI Cards */}
+      <Row gutter={[16, 16]}>
+        <Col xs={24} sm={12} lg={6}>
+          <Card loading={isLoading}>
+            <Statistic
+              title="Properties"
+              value={stats?.totalProperties ?? 0}
+              prefix={<HomeOutlined />}
+              suffix={
+                <Text type="secondary" style={{ fontSize: 14 }}>
+                  ({stats?.occupiedUnits ?? 0}/{stats?.totalUnits ?? 0} units)
+                </Text>
+              }
+            />
           </Card>
-        ))}
-      </div>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card loading={isLoading}>
+            <Statistic
+              title="Active Tenants"
+              value={stats?.activeTenants ?? 0}
+              prefix={<TeamOutlined />}
+              suffix={
+                <Text type="secondary" style={{ fontSize: 14 }}>
+                  of {stats?.totalTenants ?? 0}
+                </Text>
+              }
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card loading={isLoading}>
+            <Statistic
+              title="Revenue"
+              value={stats?.totalRevenue ?? 0}
+              prefix={<DollarOutlined />}
+              formatter={(value) => formatKES(Number(value))}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card loading={isLoading}>
+            <Statistic
+              title="Outstanding"
+              value={stats?.outstandingBalance ?? 0}
+              prefix={<WarningOutlined />}
+              formatter={(value) => formatKES(Number(value))}
+              valueStyle={{ color: (stats?.outstandingBalance ?? 0) > 0 ? '#cf1322' : '#3f8600' }}
+            />
+          </Card>
+        </Col>
+      </Row>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Recent Articles */}
-        <Card className="border-0 shadow-md">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold">Recent Articles</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="space-y-4">
-              {recentArticles.length === 0 ? (
-                <div className="px-6 py-8 text-center text-gray-500">
-                  No articles yet. Start by creating your first article!
-                </div>
-              ) : (
-                recentArticles.map((article: RecentArticle) => (
-                  <div key={article.articleId} className="px-6 py-4 border-b border-gray-100 last:border-b-0">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0 pr-4">
-                        <p className="text-sm font-medium text-gray-900 truncate">{article.title}</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {article.primaryKeyword?.keyword && (
-                            <span className="mr-2">Keyword: {article.primaryKeyword.keyword}</span>
-                          )}
-                          {article.wordCount > 0 && <span>{article.wordCount} words</span>}
-                        </p>
-                      </div>
-                      <Badge className={`text-xs shrink-0 ${statusColors[article.status] || "bg-gray-100 text-gray-800"}`}>
-                        {article.status}
-                      </Badge>
-                    </div>
-                  </div>
-                ))
-              )}
+      {/* Occupancy & Collection Rates */}
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24} sm={12} lg={6}>
+          <Card loading={isLoading}>
+            <div style={{ textAlign: 'center' }}>
+              <Text type="secondary">Occupancy Rate</Text>
+              <Progress
+                type="circle"
+                percent={Math.round(stats?.occupancyRate ?? 0)}
+                size={80}
+                strokeColor="#1890ff"
+                style={{ marginTop: 8 }}
+              />
             </div>
-            <div className="p-4 border-t border-gray-100">
-              <Link href="/dashboard/articles">
-                <Button variant="outline" className="w-full">
-                  View All Articles
-                </Button>
-              </Link>
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card loading={isLoading}>
+            <div style={{ textAlign: 'center' }}>
+              <Text type="secondary">Collection Rate</Text>
+              <Progress
+                type="circle"
+                percent={Math.round(stats?.collectionRate ?? 0)}
+                size={80}
+                strokeColor={
+                  (stats?.collectionRate ?? 0) >= 80 ? '#52c41a' :
+                  (stats?.collectionRate ?? 0) >= 50 ? '#faad14' : '#ff4d4f'
+                }
+                style={{ marginTop: 8 }}
+              />
             </div>
-          </CardContent>
-        </Card>
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card loading={isLoading}>
+            <Statistic
+              title="Total Expenses"
+              value={stats?.totalExpenses ?? 0}
+              formatter={(value) => formatKES(Number(value))}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card loading={isLoading}>
+            <Statistic
+              title="Overdue Invoices"
+              value={stats?.overdueInvoices ?? 0}
+              prefix={<WarningOutlined />}
+              valueStyle={{ color: (stats?.overdueInvoices ?? 0) > 0 ? '#cf1322' : '#3f8600' }}
+            />
+          </Card>
+        </Col>
+      </Row>
 
-        {/* Recent Keywords */}
-        <Card className="border-0 shadow-md">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold">Recent Keywords</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="space-y-4">
-              {recentKeywords.length === 0 ? (
-                <div className="px-6 py-8 text-center text-gray-500">
-                  No keywords yet. Add your first keyword to get started!
-                </div>
-              ) : (
-                recentKeywords.map((keyword: RecentKeyword) => (
-                  <div key={keyword.keywordId} className="px-6 py-4 border-b border-gray-100 last:border-b-0">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0 pr-4">
-                        <p className="text-sm font-medium text-gray-900 truncate">{keyword.keyword}</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Difficulty: {keyword.difficulty} | Volume: {keyword.volume}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {keyword.isPrimary && (
-                          <Badge className="text-xs bg-purple-100 text-purple-800">Primary</Badge>
-                        )}
-                        {keyword.isAnalyzed && (
-                          <Badge className="text-xs bg-green-100 text-green-800">Analyzed</Badge>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-            <div className="p-4 border-t border-gray-100">
-              <Link href="/dashboard/keywords">
-                <Button variant="outline" className="w-full">
-                  View All Keywords
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Recent Activity Tables */}
+      <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
+        <Col xs={24} lg={12}>
+          <Card title="Recent Invoices" loading={isLoading}>
+            {(stats?.recentInvoices?.length ?? 0) > 0 ? (
+              <Table
+                columns={invoiceColumns}
+                dataSource={stats?.recentInvoices}
+                rowKey="invoiceId"
+                pagination={false}
+                size="small"
+              />
+            ) : (
+              <Text type="secondary">No invoices yet. Set up properties and tenants to get started.</Text>
+            )}
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card title="Recent Payments" loading={isLoading}>
+            {(stats?.recentPayments?.length ?? 0) > 0 ? (
+              <Table
+                columns={paymentColumns}
+                dataSource={stats?.recentPayments}
+                rowKey="paymentId"
+                pagination={false}
+                size="small"
+              />
+            ) : (
+              <Text type="secondary">No payments recorded yet.</Text>
+            )}
+          </Card>
+        </Col>
+      </Row>
     </div>
   );
 }

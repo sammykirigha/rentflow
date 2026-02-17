@@ -4,11 +4,18 @@ import { Role } from './role.entity';
 
 export enum PermissionResource {
 	USERS = 'users',
-	SETTINGS = 'settings',
-	AI_MODELS = 'ai_models',
-	QUESTIONS = 'questions',
+	PROPERTIES = 'properties',
+	UNITS = 'units',
+	TENANTS = 'tenants',
+	INVOICES = 'invoices',
+	PAYMENTS = 'payments',
+	WALLET = 'wallet',
+	EXPENSES = 'expenses',
+	VENDORS = 'vendors',
+	MAINTENANCE = 'maintenance',
+	COMMUNICATIONS = 'communications',
 	REPORTS = 'reports',
-	BILLING = 'billing',
+	SETTINGS = 'settings',
 }
 
 export enum PermissionAction {
@@ -16,9 +23,7 @@ export enum PermissionAction {
 	READ = 'read',
 	UPDATE = 'update',
 	DELETE = 'delete',
-	SUSPEND = 'suspend',
 	EXPORT = 'export',
-	VIEW_SENSITIVE = 'view_sensitive',
 }
 
 @Entity('permissions')

@@ -10,46 +10,64 @@ export class InitialUsersSeed {
         const userRepository = dataSource.getRepository(User);
         const roleRepository = dataSource.getRepository(Role);
 
-        console.log("🌱 Seeding initial users...");
+        console.log("Seeding initial RentFlow users...");
 
         const roles = await roleRepository.find();
 
-        // Define initial users
         const initialUsers: Partial<User>[] = [
             {
-                firstName: "Super",
-                lastName: "Admin",
-                email: "jamesnjungem@protonmail.com",
+                firstName: "Samuel",
+                lastName: "Kirigha",
+                email: "landlord@rentflow.co.ke",
                 emailVerified: true,
-                password: "jamesnjungem@protonmail.com!#",
+                password: "Password@254",
                 status: UserStatus.ACTIVE,
-                phone: "0712345678",
-                roleId: roles.find((r) => r.name === UserRole.SUPER_ADMIN)?.roleId,
+                phone: "0707256013",
+                roleId: roles.find((r) => r.name === UserRole.LANDLORD)?.roleId,
+                phoneVerified: true,
+            },
+            {
+                firstName: "Jane",
+                lastName: "Wanjiku",
+                email: "manager@rentflow.co.ke",
+                emailVerified: true,
+                password: "Password@254",
+                status: UserStatus.ACTIVE,
+                phone: "0722334455",
+                roleId: roles.find((r) => r.name === UserRole.MANAGER)?.roleId,
+                phoneVerified: true,
+            },
+            {
+                firstName: "John",
+                lastName: "Kamau",
+                email: "tenant@rentflow.co.ke",
+                emailVerified: true,
+                password: "Password@254",
+                status: UserStatus.ACTIVE,
+                phone: "0733445566",
+                roleId: roles.find((r) => r.name === UserRole.TENANT)?.roleId,
                 phoneVerified: true,
             },
         ];
 
-        // Process each user
         for (const userData of initialUsers) {
             const existingUser = await userRepository.findOne({
                 where: { email: userData.email },
             });
 
             if (!existingUser) {
-                // Hash password
                 const hashedPassword = await bcrypt.hash(userData.password, 12);
-                // Create user
                 const user = userRepository.create({
                     ...userData,
                     password: hashedPassword,
                 });
                 await userRepository.save(user);
-                console.log(`✅ Created ${userData.userRole?.name}: ${userData.email}`);
+                console.log(`  Created user: ${userData.email}`);
             } else {
-                console.log(`⏭️  User already exists: ${userData.email}`);
+                console.log(`  User already exists: ${userData.email}`);
             }
         }
 
-        console.log("🎉 Initial users seeding completed!");
+        console.log("Initial users seeding completed!");
     }
 }

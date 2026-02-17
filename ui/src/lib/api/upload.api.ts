@@ -9,10 +9,10 @@ export const uploadImage = async (file: File): Promise<{ url: string; key: strin
 			},
 		});
 
-		if (response.data?.data && response.data?.data.key) {
+		if (response.data && response.data.key) {
 			return {
-				...response.data?.data,
-				fullUrl: `${API_BASE}/storage/file/${response.data?.data.key}`
+				...response.data,
+				fullUrl: `${API_BASE}/storage/file/${response.data.key}`
 			};
 		}
 
@@ -27,9 +27,9 @@ export const getSignedUrl = async (key: string,): Promise<{ url: string } | null
 	try {
 		const response = await api.get(`/storage/signed-url/${key}`);
 
-		if (response.data?.data && response.data?.data.signedUrl) {
+		if (response.data && response.data.signedUrl) {
 			return {
-				url: response.data?.data.signedUrl
+				url: response.data.signedUrl
 			};
 		}
 

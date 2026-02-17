@@ -3,30 +3,34 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'Sign Up | MasomoDash',
-  description: 'Create your MasomoDash account to buy educational papers from teachers or sell your academic materials. Join Kenya\'s leading educational marketplace.',
-  keywords: 'register, sign up, education, papers, teachers, students, Kenya, academic marketplace',
-  openGraph: {
-    title: 'Sign Up | MasomoDash',
-    description: 'Join MasomoDash to access quality educational papers and connect with teachers across Kenya.',
-    type: 'website',
-  },
+  title: 'Sign Up | RentFlow',
+  description: 'Create your RentFlow account.',
 };
 
 export default function RegisterPage() {
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50 py-12 lg:py-24 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md lg:max-w-xl w-full space-y-8 bg-white z-20 rounded-md shadow-md p-6">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '100vh',
+      padding: '48px 16px',
+    }}>
+      <div style={{
+        maxWidth: 520,
+        width: '100%',
+        background: '#fff',
+        borderRadius: 8,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        padding: 32,
+      }}>
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>
             Create your account
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
+          <p style={{ color: '#666', marginTop: 8 }}>
             Already have an account?{' '}
-            <Link
-              href="/login"
-              className="font-medium text-blue-600 hover:text-blue-500"
-            >
+            <Link href="/login" style={{ color: '#1890ff' }}>
               Sign in
             </Link>
           </p>

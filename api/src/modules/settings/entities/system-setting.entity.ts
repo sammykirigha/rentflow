@@ -1,6 +1,5 @@
 import { AbstractEntity } from '@/database/abstract.entity';
-import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
-import { AiModelConfiguration } from './ai-model-configuration.entity';
+import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('system_settings')
 export class SystemSetting extends AbstractEntity<SystemSetting> {
@@ -8,10 +7,10 @@ export class SystemSetting extends AbstractEntity<SystemSetting> {
   systemSettingId: string;
 
   // General Settings
-  @Column({ name: 'platform_name', default: 'Edu AI Platform' })
+  @Column({ name: 'platform_name', default: 'RentFlow' })
   platformName: string;
 
-  @Column({ name: 'support_email', default: 'support@eduai.com' })
+  @Column({ name: 'support_email', default: 'support@rentflow.co.ke' })
   supportEmail: string;
 
   // Branding Settings
@@ -28,33 +27,12 @@ export class SystemSetting extends AbstractEntity<SystemSetting> {
   @Column({ name: 'contact_address', type: 'text', nullable: true })
   contactAddress?: string;
 
-  // Social Media Links
-  @Column({ name: 'social_facebook', type: 'varchar', length: 200, nullable: true })
-  socialFacebook?: string;
-
-  @Column({ name: 'social_twitter', type: 'varchar', length: 200, nullable: true })
-  socialTwitter?: string;
-
-  @Column({ name: 'social_linkedin', type: 'varchar', length: 200, nullable: true })
-  socialLinkedin?: string;
-
-  @Column({ name: 'social_instagram', type: 'varchar', length: 200, nullable: true })
-  socialInstagram?: string;
-
   // File Upload Settings
   @Column({ name: 'max_file_upload_size', type: 'integer', default: 10 })
   maxFileUploadSize: number;
 
   @Column({ name: 'allowed_file_types', type: 'simple-array', nullable: true })
   allowedFileTypes?: string[];
-
-  // AI Model Settings
-  @Column({ name: 'default_ai_model_id', type: 'integer', nullable: true })
-  defaultAiModelId?: number;
-
-  @ManyToOne(() => AiModelConfiguration)
-  @JoinColumn({ name: 'default_ai_model_id', referencedColumnName: 'modelId' })
-  defaultAiModel?: AiModelConfiguration;
 
   // User Signup Settings
   @Column({ name: 'allow_signup', type: 'boolean', default: false })
@@ -67,15 +45,11 @@ export class SystemSetting extends AbstractEntity<SystemSetting> {
   @Column({ name: 'email_notifications', type: 'boolean', default: true })
   emailNotifications: boolean;
 
-  @Column({ name: 'sms_notifications', type: 'boolean', default: false })
+  @Column({ name: 'sms_notifications', type: 'boolean', default: true })
   smsNotifications: boolean;
 
   @Column({ name: 'admin_alerts', type: 'boolean', default: true })
   adminAlerts: boolean;
-
-  // Content Settings
-  @Column({ name: 'content_briefing_prompt', type: 'text', nullable: true })
-  contentBriefingPrompt?: string;
 
   // Helper methods
   getFileUploadSizeInMB(): string {
@@ -84,9 +58,5 @@ export class SystemSetting extends AbstractEntity<SystemSetting> {
 
   getAllowedFileTypesString(): string {
     return this.allowedFileTypes?.join(', ') || 'No restrictions';
-  }
-
-  hasDefaultAiModel(): boolean {
-    return !!this.defaultAiModelId;
   }
 }

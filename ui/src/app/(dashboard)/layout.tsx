@@ -18,13 +18,14 @@ export default async function Layout({ children }: PropsWithChildren) {
     return redirect('/login');
   }
 
-  // Redirect admin users to admin panel
-  if (currentUser.isAdminUser) {
-    return redirect('/admin');
+  // Redirect tenant users to tenant portal
+  const roleName = (currentUser as unknown as Record<string, unknown>).roleName as string;
+  if (roleName === 'TENANT') {
+    return redirect('/tenant');
   }
 
   return (
-    <ProtectedRoute>
+    <ProtectedRoute allowedRoles={['LANDLORD', 'MANAGER']}>
       {children}
     </ProtectedRoute>
   );

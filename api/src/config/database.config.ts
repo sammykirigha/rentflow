@@ -1,13 +1,19 @@
-import { Article } from '@/modules/articles/entities/article.entity';
 import { AuditLog } from '@/modules/audit/entities/audit-log.entity';
-import { Keyword } from '@/modules/keywords/entities/keyword.entity';
-import { UserWebsite } from '@/modules/onboarding/entities/user-website.entity';
-import { WebsitePage } from '@/modules/onboarding/entities/website-page.entity';
+import { Invoice } from '@/modules/invoices/entities/invoice.entity';
+import { Payment } from '@/modules/payments/entities/payment.entity';
 import { Permission } from '@/modules/permissions/entities/permission.entity';
 import { Role } from '@/modules/permissions/entities/role.entity';
-import { AiModelConfiguration } from '@/modules/settings/entities/ai-model-configuration.entity';
+import { Property } from '@/modules/properties/entities/property.entity';
+import { Receipt } from '@/modules/receipts/entities/receipt.entity';
 import { SystemSetting } from '@/modules/settings/entities/system-setting.entity';
+import { Tenant } from '@/modules/tenants/entities/tenant.entity';
+import { Unit } from '@/modules/units/entities/unit.entity';
 import { User } from '@/modules/users/entities/user.entity';
+import { WalletTransaction } from '@/modules/wallet/entities/wallet-transaction.entity';
+import { Expense } from '@/modules/expenses/entities/expense.entity';
+import { Vendor } from '@/modules/vendors/entities/vendor.entity';
+import { MaintenanceRequest } from '@/modules/maintenance/entities/maintenance-request.entity';
+import { Notification } from '@/modules/notifications/entities/notification.entity';
 import { ConfigService } from '@nestjs/config';
 import { config } from 'dotenv';
 import { DataSource } from 'typeorm';
@@ -22,11 +28,17 @@ export const entities = [
   Permission,
   SystemSetting,
   AuditLog,
-  AiModelConfiguration,
-  UserWebsite,
-  WebsitePage,
-  Keyword,
-  Article
+  Property,
+  Unit,
+  Tenant,
+  Invoice,
+  Payment,
+  WalletTransaction,
+  Receipt,
+  Expense,
+  Vendor,
+  MaintenanceRequest,
+  Notification,
 ];
 
 export default new DataSource({

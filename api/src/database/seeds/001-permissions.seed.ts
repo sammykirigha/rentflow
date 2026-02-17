@@ -1,5 +1,5 @@
 import { UserRole } from '@/common/enums/user-role.enum';
-import { DEFAULT_ADMIN_PERMISSIONS, SYSTEM_PERMISSIONS } from '@/modules/permissions/constants/permissions.constant';
+import { MANAGER_PERMISSIONS, SYSTEM_PERMISSIONS } from '@/modules/permissions/constants/permissions.constant';
 import { Permission } from '@/modules/permissions/entities/permission.entity';
 import { Role } from '@/modules/permissions/entities/role.entity';
 import { DataSource } from 'typeorm';
@@ -27,90 +27,81 @@ export class PermissionsSeed {
 						name: permDef.name,
 						description: permDef.description,
 					});
-					console.log(`  ✓ Created permission: ${permDef.name}`);
+					console.log(`  Created permission: ${permDef.name}`);
 				}
 
 				const key = `${permDef.resource}:${permDef.action}`;
 				permissionsMap.set(key, permission);
 			}
 
-			// Create Super Admin role with all permissions
-			let superAdminRole = await roleRepository.findOne({
-				where: { name: UserRole.SUPER_ADMIN },
+			// Create Landlord role with all permissions
+			let landlordRole = await roleRepository.findOne({
+				where: { name: UserRole.LANDLORD },
 				relations: ['permissions'],
 			});
 
 			const allPermissions = await permissionRepository.find();
 
-			if (!superAdminRole) {
-				superAdminRole = await roleRepository.save({
-					name: UserRole.SUPER_ADMIN,
-					description: 'Full system access',
+			if (!landlordRole) {
+				landlordRole = await roleRepository.save({
+					name: UserRole.LANDLORD,
+					description: 'Full system access - property owner',
 					isSystemRole: true,
 					isAdminRole: true,
 					permissions: allPermissions,
 				});
-				console.log(`  ✓ Created role: ${UserRole.SUPER_ADMIN} with ${allPermissions.length} permissions`);
+				console.log(`  Created role: ${UserRole.LANDLORD} with ${allPermissions.length} permissions`);
 			} else {
-				try {
-					superAdminRole.permissions = allPermissions;
-					await roleRepository.save(superAdminRole);
-					console.log(`  ✓ Updated role: ${UserRole.SUPER_ADMIN}`);
-				} catch (error) {
-					console.error(`❌ Error updating role: ${UserRole.SUPER_ADMIN}:`, error.message);
-				}
+				landlordRole.permissions = allPermissions;
+				await roleRepository.save(landlordRole);
+				console.log(`  Updated role: ${UserRole.LANDLORD}`);
 			}
 
-			// Create Admin role with restricted permissions
-			let adminRole = await roleRepository.findOne({
-				where: { name: UserRole.ADMIN },
+			// Create Manager role with restricted permissions
+			let managerRole = await roleRepository.findOne({
+				where: { name: UserRole.MANAGER },
 				relations: ['permissions'],
 			});
 
-			const adminPermissions = Array.from(permissionsMap.entries())
-				.filter(([key]) => DEFAULT_ADMIN_PERMISSIONS.includes(key))
+			const managerPermissions = Array.from(permissionsMap.entries())
+				.filter(([key]) => MANAGER_PERMISSIONS.includes(key))
 				.map(([_, permission]) => permission);
 
-			if (!adminRole) {
-				adminRole = await roleRepository.save({
-					name: UserRole.ADMIN,
-					description: 'Standard admin access',
+			if (!managerRole) {
+				managerRole = await roleRepository.save({
+					name: UserRole.MANAGER,
+					description: 'Property manager access',
 					isSystemRole: true,
 					isAdminRole: true,
-					permissions: adminPermissions,
+					permissions: managerPermissions,
 				});
-				console.log(`  ✓ Created role: ${UserRole.ADMIN} with ${adminPermissions.length} permissions`);
+				console.log(`  Created role: ${UserRole.MANAGER} with ${managerPermissions.length} permissions`);
 			} else {
-				// Update permissions if role already exists
-				try {
-					adminRole.permissions = adminPermissions;
-					await roleRepository.save(adminRole);
-					console.log(`  ✓ Updated role: ${UserRole.ADMIN}`);
-				} catch (error) {
-					console.error(`❌ Error updating role: ${UserRole.ADMIN}:`, error.message);
-				}
+				managerRole.permissions = managerPermissions;
+				await roleRepository.save(managerRole);
+				console.log(`  Updated role: ${UserRole.MANAGER}`);
 			}
 
-			// Create userRole role (minimal permissions)
-			let userRole = await roleRepository.findOne({
-				where: { name: UserRole.USER },
+			// Create Tenant role (read own data only)
+			let tenantRole = await roleRepository.findOne({
+				where: { name: UserRole.TENANT },
 				relations: ['permissions'],
 			});
 
-			if (!userRole) {
-				userRole = await roleRepository.save({
-					name: UserRole.USER,
-					description: 'User access',
+			if (!tenantRole) {
+				tenantRole = await roleRepository.save({
+					name: UserRole.TENANT,
+					description: 'Tenant access - view own data',
 					isSystemRole: true,
 					isAdminRole: false,
 					permissions: [],
 				});
-				console.log(`  ✓ Created role: ${UserRole.USER}`);
+				console.log(`  Created role: ${UserRole.TENANT}`);
 			}
 
-			console.log('✅ Permissions and roles seeding complete!');
+			console.log('Permissions and roles seeding complete!');
 		} catch (error) {
-			console.error('❌ Error during permissions and roles seeding:', error.message);
+			console.error('Error during permissions and roles seeding:', error.message);
 		}
 	}
 }

@@ -1,39 +1,10 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
-import {
-	Form,
-	FormControl,
-	FormField,
-	FormItem,
-	FormLabel,
-	FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
 import { authApi } from '@/lib/api/auth.api';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { CheckCircle, Eye, EyeOff, Lock } from 'lucide-react';
+import { LockOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { Button, Form, Input, App, Result } from 'antd';
 import Link from 'next/link';
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { toast } from 'react-toastify';
-import { z } from 'zod';
-
-const resetPasswordSchema = z.object({
-  newPassword: z
-    .string()
-    .min(8, 'Password must be at least 8 characters long')
-    .regex(
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/,
-      'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'
-    ),
-  confirmPassword: z.string(),
-}).refine((data) => data.newPassword === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"],
-});
-
-type ResetPasswordForm = z.infer<typeof resetPasswordSchema>;
 
 interface ResetPasswordFormProps {
   token: string;
@@ -42,32 +13,24 @@ interface ResetPasswordFormProps {
 export default function ResetPasswordForm({ token }: ResetPasswordFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [form] = Form.useForm();
+  const { message: messageApi } = App.useApp();
 
-  const form = useForm<ResetPasswordForm>({
-    resolver: zodResolver(resetPasswordSchema),
-    defaultValues: {
-      newPassword: '',
-      confirmPassword: '',
-    },
-  });
-
-  const onSubmit = async (data: ResetPasswordForm) => {
+  const onFinish = async (values: { newPassword: string }) => {
     setIsLoading(true);
     try {
       const result = await authApi.resetPassword({
         token,
-        newPassword: data.newPassword,
+        newPassword: values.newPassword,
       });
-      
+
       setIsSubmitted(true);
-      toast.success(result.message || 'Password reset successfully!');
+      messageApi.success(result.message || 'Password reset successfully!');
     } catch (error) {
       console.error('Reset password error:', error);
       const err = error as { response?: { data?: { message?: string } } };
       const errorMessage = err.response?.data?.message || 'Failed to reset password. Please try again.';
-      toast.error(errorMessage);
+      messageApi.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -75,127 +38,81 @@ export default function ResetPasswordForm({ token }: ResetPasswordFormProps) {
 
   if (isSubmitted) {
     return (
-      <div className="max-w-md mx-auto text-center">
-        <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
-          <CheckCircle className="h-6 w-6 text-green-600" />
-        </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Password reset successful!</h2>
-        <p className="text-gray-600 mb-8">
-          Your password has been successfully reset. You can now sign in with your new password.
-        </p>
-        
-        <Link href="/login">
-          <Button className="w-full">
-            Continue to sign in
-          </Button>
-        </Link>
-      </div>
+      <Result
+        icon={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
+        title="Password reset successful!"
+        subTitle="Your password has been successfully reset. You can now sign in with your new password."
+        extra={
+          <Link href="/login">
+            <Button type="primary">Continue to sign in</Button>
+          </Link>
+        }
+      />
     );
   }
 
   return (
-    <div className="max-w-md mx-auto">
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Reset your password</h2>
-        <p className="text-gray-600">
-          Please enter your new password below.
-        </p>
+    <div>
+      <div style={{ textAlign: 'center', marginBottom: 24 }}>
+        <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Reset your password</h2>
+        <p style={{ color: '#666', marginTop: 8 }}>Please enter your new password below.</p>
       </div>
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <FormField
-            control={form.control}
-            name="newPassword"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>New Password</FormLabel>
-                <FormControl>
-                  <div className="relative">
-                    <Input
-                      type={showPassword ? 'text' : 'password'}
-                      className="pl-10 pr-10"
-                      placeholder="Enter your new password"
-                      {...field}
-                    />
-                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
-                    <button
-                      type="button"
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      onClick={() => setShowPassword(!showPassword)}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="w-5 h-5" />
-                      ) : (
-                        <Eye className="w-5 h-5" />
-                      )}
-                    </button>
-                  </div>
-                </FormControl>
-                <FormMessage />
-                <p className="text-xs text-gray-500 mt-1">
-                  Must contain at least 8 characters with uppercase, lowercase, number, and special character.
-                </p>
-              </FormItem>
-            )}
+      <Form form={form} layout="vertical" onFinish={onFinish}>
+        <Form.Item
+          name="newPassword"
+          label="New Password"
+          rules={[
+            { required: true, message: 'Please enter your new password' },
+            { min: 8, message: 'Password must be at least 8 characters' },
+            {
+              pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/,
+              message: 'Must contain uppercase, lowercase, number, and special character',
+            },
+          ]}
+          extra="Must contain at least 8 characters with uppercase, lowercase, number, and special character."
+        >
+          <Input.Password
+            prefix={<LockOutlined />}
+            placeholder="Enter your new password"
+            size="large"
           />
+        </Form.Item>
 
-          <FormField
-            control={form.control}
-            name="confirmPassword"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Confirm New Password</FormLabel>
-                <FormControl>
-                  <div className="relative">
-                    <Input
-                      type={showConfirmPassword ? 'text' : 'password'}
-                      className="pl-10 pr-10"
-                      placeholder="Confirm your new password"
-                      {...field}
-                    />
-                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
-                    <button
-                      type="button"
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    >
-                      {showConfirmPassword ? (
-                        <EyeOff className="w-5 h-5" />
-                      ) : (
-                        <Eye className="w-5 h-5" />
-                      )}
-                    </button>
-                  </div>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
+        <Form.Item
+          name="confirmPassword"
+          label="Confirm New Password"
+          dependencies={['newPassword']}
+          rules={[
+            { required: true, message: 'Please confirm your new password' },
+            ({ getFieldValue }) => ({
+              validator(_, value) {
+                if (!value || getFieldValue('newPassword') === value) {
+                  return Promise.resolve();
+                }
+                return Promise.reject(new Error("Passwords don't match"));
+              },
+            }),
+          ]}
+        >
+          <Input.Password
+            prefix={<LockOutlined />}
+            placeholder="Confirm your new password"
+            size="large"
           />
+        </Form.Item>
 
-          <Button
-            type="submit"
-            disabled={isLoading}
-            className="w-full"
-          >
-            {isLoading ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Resetting password...
-              </>
-            ) : (
-              'Reset password'
-            )}
+        <Form.Item>
+          <Button type="primary" htmlType="submit" loading={isLoading} block size="large">
+            Reset password
           </Button>
+        </Form.Item>
 
-          <div className="text-center">
-            <Link href="/login">
-              <Button variant="ghost" className="text-sm">
-                Back to sign in
-              </Button>
-            </Link>
-          </div>
-        </form>
+        <div style={{ textAlign: 'center' }}>
+          <Link href="/login">
+            <Button type="link">Back to sign in</Button>
+          </Link>
+        </div>
       </Form>
     </div>
   );

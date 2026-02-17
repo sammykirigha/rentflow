@@ -11,7 +11,6 @@ import { MailService } from '../mail/mail.service';
 import { UsersService } from '../users/users.service';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
-import { GoogleAuthDto, ConnectGoogleDto } from './dto/google-auth.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -33,9 +32,8 @@ export class AuthService {
 			throw new UnauthorizedException('Invalid credentials');
 		}
 
-		// Check if user has a password set (they might have signed up via OAuth only)
 		if (!user.password) {
-			throw new UnauthorizedException('No password set for this account. Please use Google sign-in or set a password first.');
+			throw new UnauthorizedException('No password set for this account.');
 		}
 
 		const isPasswordValid = await this.validatePassword(password, user.password);
@@ -69,7 +67,7 @@ export class AuthService {
 	async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
 		const userData = {
 			...registerDto,
-			role: UserRole.USER, // Default role for registration
+			role: UserRole.TENANT,
 		};
 
 		const user = await this.usersService.create(userData);
@@ -136,38 +134,34 @@ export class AuthService {
 			throw new BadRequestException('Account is not active. Please contact support.');
 		}
 
-		// Generate reset token
 		const resetToken = crypto.randomBytes(32).toString('hex');
-		const resetTokenExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes from now
+		const resetTokenExpires = new Date(Date.now() + 15 * 60 * 1000);
 
-		// Save reset token to user
 		await this.usersService.updateResetToken(user.userId, resetToken, resetTokenExpires);
 
-		// Get frontend URL from config
 		const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
 		const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
 
-		// Send reset email
 		const emailHtml = `
 			<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
 				<h2 style="color: #333;">Password Reset Request</h2>
 				<p>Hello ${user.firstName || 'User'},</p>
-				<p>You requested a password reset for your account. Click the button below to reset your password:</p>
+				<p>You requested a password reset for your RentFlow account. Click the button below to reset your password:</p>
 				<div style="text-align: center; margin: 30px 0;">
-					<a href="${resetUrl}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Reset Password</a>
+					<a href="${resetUrl}" style="background-color: #1890ff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Reset Password</a>
 				</div>
 				<p>Or copy and paste this link into your browser:</p>
 				<p style="word-break: break-all; color: #666;">${resetUrl}</p>
 				<p><strong>This link will expire in 15 minutes.</strong></p>
 				<p>If you didn't request this password reset, please ignore this email.</p>
 				<hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
-				<p style="color: #666; font-size: 12px;">This is an automated message, please do not reply.</p>
+				<p style="color: #666; font-size: 12px;">This is an automated message from RentFlow, please do not reply.</p>
 			</div>
 		`;
 
 		await this.mailService.sendEmail({
 			to: user.email,
-			subject: 'Password Reset Request',
+			subject: 'RentFlow - Password Reset Request',
 			html: emailHtml,
 		});
 
@@ -182,25 +176,23 @@ export class AuthService {
 			throw new BadRequestException('Invalid or expired reset token');
 		}
 
-		// Update password and clear reset token
 		await this.usersService.updatePassword(user.userId, newPassword);
 		await this.usersService.clearResetToken(user.userId);
 
-		// Send confirmation email
 		const emailHtml = `
 			<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
 				<h2 style="color: #333;">Password Reset Successful</h2>
 				<p>Hello ${user.firstName || 'User'},</p>
-				<p>Your password has been successfully reset.</p>
+				<p>Your RentFlow password has been successfully reset.</p>
 				<p>If you didn't make this change, please contact our support team immediately.</p>
 				<hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
-				<p style="color: #666; font-size: 12px;">This is an automated message, please do not reply.</p>
+				<p style="color: #666; font-size: 12px;">This is an automated message from RentFlow, please do not reply.</p>
 			</div>
 		`;
 
 		await this.mailService.sendEmail({
 			to: user.email,
-			subject: 'Password Reset Successful',
+			subject: 'RentFlow - Password Reset Successful',
 			html: emailHtml,
 		});
 
@@ -209,77 +201,5 @@ export class AuthService {
 
 	async updateLastLogin(userId: string): Promise<void> {
 		await this.usersService.updateLastLogin(userId);
-	}
-
-	/**
-	 * Authenticate user with Google OAuth
-	 */
-	async authenticateWithGoogle(googleDto: GoogleAuthDto): Promise<AuthResponseDto> {
-		const user = await this.usersService.findOrCreateFromGoogleProfile({
-			providerAccountId: googleDto.providerAccountId,
-			email: googleDto.email,
-			givenName: googleDto.givenName,
-			familyName: googleDto.familyName,
-			pictureUrl: googleDto.pictureUrl,
-		});
-
-		if (user.status !== UserStatus.ACTIVE) {
-			throw new UnauthorizedException('Your account is currently inactive.');
-		}
-
-		const payload: JwtPayload = {
-			sub: user.userId,
-			email: user.email,
-			role: user.roleId,
-			isAdminUser: user.userRole?.isAdminRole,
-		};
-
-		await this.updateLastLogin(user.userId);
-
-		return {
-			user,
-			accessToken: this.generateAccessToken(payload),
-			refreshToken: this.generateRefreshToken(payload),
-		};
-	}
-
-	/**
-	 * Connect Google account to existing authenticated user
-	 */
-	async connectGoogleAccount(userId: string, connectGoogleDto: ConnectGoogleDto): Promise<{ message: string }> {
-		await this.usersService.connectGoogleAccount(
-			userId,
-			connectGoogleDto.providerAccountId,
-			connectGoogleDto.email
-		);
-		return { message: 'Google account connected successfully' };
-	}
-
-	/**
-	 * Disconnect Google account from authenticated user
-	 */
-	async disconnectGoogleAccount(userId: string): Promise<{ message: string }> {
-		await this.usersService.disconnectGoogleAccount(userId);
-		return { message: 'Google account disconnected successfully' };
-	}
-
-	/**
-	 * Set password for OAuth users who don't have one
-	 */
-	async setPassword(userId: string, newPassword: string): Promise<{ message: string }> {
-		await this.usersService.setPassword(userId, newPassword);
-		return { message: 'Password set successfully' };
-	}
-
-	/**
-	 * Get user's authentication status (has password, has google connected)
-	 */
-	async getAuthStatus(userId: string): Promise<{ hasPassword: boolean; hasGoogleConnected: boolean }> {
-		const [hasPassword, hasGoogleConnected] = await Promise.all([
-			this.usersService.hasPasswordSet(userId),
-			this.usersService.hasGoogleConnected(userId),
-		]);
-
-		return { hasPassword, hasGoogleConnected };
 	}
 }

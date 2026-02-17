@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, MinLength, IsOptional } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, Matches, MinLength } from 'class-validator';
 
 export class RegisterDto {
   @IsEmail()
@@ -14,4 +14,8 @@ export class RegisterDto {
 
   @IsOptional()
   lastName?: string;
+
+  @IsOptional()
+  @Matches(/^(?:\+254|0)\d{9}$/, { message: 'Invalid Kenyan phone number' })
+  phone?: string;
 }

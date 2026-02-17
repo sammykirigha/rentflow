@@ -30,12 +30,12 @@ export class SystemSettingsRepository extends AbstractRepository<SystemSetting> 
     if (!settings) {
       // Create default settings
       settings = this.repository.create({
-        platformName: 'Edu AI Platform',
-        supportEmail: 'support@eduai.com',
+        platformName: 'RentFlow',
+        supportEmail: 'support@rentflow.co.ke',
         emailNotifications: true,
-        smsNotifications: false,
+        smsNotifications: true,
         adminAlerts: true,
-        requireVerification: true,
+        requireVerification: false,
       });
       settings = await this.repository.save(settings);
     }

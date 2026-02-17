@@ -1,40 +1,29 @@
 "use client";
 
 import UserSidebar from "@/components/layout/user-sidebar";
-import { Button } from '@/components/ui/button';
-import { useAuth } from '@/contexts/AuthContext';
-import { LogOut } from 'lucide-react';
+import { Layout } from 'antd';
 import { PropsWithChildren } from 'react';
 
+const { Content, Header } = Layout;
+
 export default function DashboardLayout({ children }: PropsWithChildren) {
-  const { logout } = useAuth();
-
-  const handleLogout = async () => {
-    await logout();
-  };
-
   return (
-    <div className="flex overflow-y-hidden h-screen bg-gray-50">
+    <Layout style={{ minHeight: '100vh' }}>
       <UserSidebar />
-
-      <div className="flex-1 flex flex-col overflow-hidden lg:ml-0">
-        {/* Header */}
-        <header className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-gray-900">Welcome</h1>
-
-            <Button variant="outline" onClick={handleLogout}>
-              <LogOut className="h-4 w-4 mr-2" />
-              Logout
-            </Button>
-          </div>
-        </header>
-
-        {/* Main Content */}
-        <main className="flex-1 overflow-y-auto p-6">
+      <Layout>
+        <Header style={{
+          background: '#fff',
+          padding: '0 24px',
+          borderBottom: '1px solid #f0f0f0',
+          display: 'flex',
+          alignItems: 'center',
+        }}>
+          <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>RentFlow Dashboard</h1>
+        </Header>
+        <Content style={{ margin: 24, minHeight: 280 }}>
           {children}
-        </main>
-      </div>
-    </div>
+        </Content>
+      </Layout>
+    </Layout>
   );
 }

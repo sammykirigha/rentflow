@@ -34,9 +34,9 @@ export const auditApi = {
 	 * Get audit logs with pagination and filters
 	 */
 	getAuditLogs: async (params?: GetAuditLogsParams): Promise<AuditLogsListResponse> => {
-		const response = await api.get<{data: AuditLogsListResponse}>('/audit-logs', {
+		const response = await api.get('/audit-logs', {
 			params,
 		});
-		return response.data?.data;
+		return response.data;
 	},
 };

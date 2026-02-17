@@ -13,22 +13,11 @@ async function bootstrap() {
 	const logger = WinstonModule.createLogger(winstonConfig);
 	const app = await NestFactory.create(AppModule, {
 		logger,
-		rawBody: true, // Enable raw body for Stripe webhooks
 	});
 
 	const configService = app.get(ConfigService);
 
-	// Configure body parser with raw body for webhooks
-	app.use(
-		json({
-			verify: (req: any, res, buf) => {
-				// Store raw body for webhook verification
-				if (req.url?.startsWith('/api/v1/webhooks/stripe')) {
-					req.rawBody = buf;
-				}
-			},
-		}),
-	);
+	app.use(json());
 	app.use(urlencoded({ extended: true }));
 
 	// Enable CORS
@@ -37,7 +26,6 @@ async function bootstrap() {
 			configService.get<string>('FRONTEND_URL', 'http://localhost:3001'),
 			'http://localhost:3001',
 			'http://localhost:3000',
-			'https://ai.edutized.com'
 		],
 		credentials: true,
 		methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -57,7 +45,6 @@ async function bootstrap() {
 	);
 
 	app.useGlobalFilters(new HttpExceptionFilter());
-	// Global interceptors
 	app.useGlobalInterceptors(new LoggingInterceptor());
 
 	// Set global prefix
@@ -66,14 +53,17 @@ async function bootstrap() {
 
 	// Swagger Documentation
 	const config = new DocumentBuilder()
-		.setTitle('Masomo Dash API')
-		.setDescription('Educational Materials Marketplace API')
+		.setTitle('RentFlow API')
+		.setDescription('Rental Property Management System API')
 		.setVersion('1.0')
 		.addTag('Auth', 'Authentication endpoints')
 		.addTag('Users', 'User management')
-		.addTag('Papers', 'Paper management')
-		.addTag('Credits', 'Credit wallet and purchases')
-		.addTag('Admin', 'Admin operations')
+		.addTag('Properties', 'Property management')
+		.addTag('Tenants', 'Tenant management')
+		.addTag('Invoices', 'Invoice management')
+		.addTag('Payments', 'Payment processing')
+		.addTag('Expenses', 'Expense tracking')
+		.addTag('Settings', 'System settings')
 		.addBearerAuth({
 			type: 'http',
 			scheme: 'bearer',
@@ -90,8 +80,8 @@ async function bootstrap() {
 	const PORT = configService.get<number>('PORT', 3000);
 	await app.listen(PORT);
 
-	console.log(`🚀 Application is running on: http://localhost:${PORT}/${PREFIX}`);
-	console.log(`📚 Swagger docs available at: http://localhost:${PORT}/api/docs`);
+	console.log(`Application is running on: http://localhost:${PORT}/${PREFIX}`);
+	console.log(`Swagger docs available at: http://localhost:${PORT}/api/docs`);
 }
 
 process.on('uncaughtException', (error) => {

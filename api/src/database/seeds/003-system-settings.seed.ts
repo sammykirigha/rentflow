@@ -3,30 +3,29 @@ import { DataSource } from 'typeorm';
 
 export class SystemSettingsSeed {
   public async run(dataSource: DataSource): Promise<void> {
-    console.log('🌱 Seeding system settings...');
-    
+    console.log('Seeding RentFlow system settings...');
+
     const systemSettingsRepository = dataSource.getRepository(SystemSetting);
 
-    // Check if system settings already exist
     const existingSettings = await systemSettingsRepository.findOne({ where: {} });
-    
+
     if (!existingSettings) {
-      // Create default system settings
-      // const defaultSettings = systemSettingsRepository.create({
-      //   platformName: 'Edu AI Platform',
-      //   supportEmail: 'support@eduai.com',
-      //   emailNotifications: true,
-      //   smsNotifications: false,
-      //   adminAlerts: true,
-      //   requireVerification: true,
-      // });
-      
-      // await systemSettingsRepository.save(defaultSettings);
-      console.log('✅ System settings created successfully');
+      const defaultSettings = systemSettingsRepository.create({
+        platformName: 'RentFlow',
+        supportEmail: 'support@rentflow.co.ke',
+        emailNotifications: true,
+        smsNotifications: true,
+        adminAlerts: true,
+        requireVerification: false,
+        allowSignup: false,
+      });
+
+      await systemSettingsRepository.save(defaultSettings);
+      console.log('  System settings created successfully');
     } else {
-      console.log('⏭️  System settings already exist, skipping...');
+      console.log('  System settings already exist, skipping...');
     }
 
-    console.log('✅ System settings seeding completed');
+    console.log('System settings seeding completed');
   }
 }

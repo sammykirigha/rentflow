@@ -36,8 +36,8 @@ export class PermissionsGuard implements CanActivate {
 			throw new ForbiddenException('User not authorized to access this resource');
 		}
 		
-		// Super Admin bypasses all permission checks
-		if (user.role === UserRole.SUPER_ADMIN || user.userRole?.name === UserRole.SUPER_ADMIN) {
+		// Landlord bypasses all permission checks
+		if (user.role === UserRole.LANDLORD || user.userRole?.name === UserRole.LANDLORD) {
 			return true;
 		}
 

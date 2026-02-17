@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import * as Joi from 'joi';
 
@@ -9,18 +10,27 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { DatabaseModule } from './database/database.module';
 import { AdminModule } from './modules/admin/admin.module';
-import { ArticlesModule } from './modules/articles/articles.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
-import { KeywordsModule } from './modules/keywords/keywords.module';
 import { LoggingModule } from './modules/logging/logging.module';
 import { MailModule } from './modules/mail/mail.module';
-import { OnboardingModule } from './modules/onboarding/onboarding.module';
-import { OpenAiModule } from './modules/openai/openai.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
+import { PropertiesModule } from './modules/properties/properties.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { StorageModule } from './modules/storage/storage.module';
+import { TenantsModule } from './modules/tenants/tenants.module';
+import { UnitsModule } from './modules/units/units.module';
+import { InvoicesModule } from './modules/invoices/invoices.module';
+import { PaymentsModule } from './modules/payments/payments.module';
+import { WalletModule } from './modules/wallet/wallet.module';
+import { ReceiptsModule } from './modules/receipts/receipts.module';
 import { UsersModule } from './modules/users/users.module';
+import { ExpensesModule } from './modules/expenses/expenses.module';
+import { VendorsModule } from './modules/vendors/vendors.module';
+import { MaintenanceModule } from './modules/maintenance/maintenance.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { SmsModule } from './modules/sms/sms.module';
 
 @Module({
 	imports: [
@@ -49,11 +59,11 @@ import { UsersModule } from './modules/users/users.module';
 				AWS_REGION: Joi.string().required(),
 				AWS_S3_BUCKET: Joi.string().required(),
 
-				MAIL_HOST: Joi.string().required(),
-				MAIL_PORT: Joi.number().required(),
-				MAIL_USER: Joi.string().required(),
-				MAIL_PASSWORD: Joi.string().required(),
+				RESEND_API_KEY: Joi.string().optional(),
 				MAIL_FROM: Joi.string().optional(),
+
+				AT_API_KEY: Joi.string().optional(),
+				AT_USERNAME: Joi.string().optional(),
 
 				FRONTEND_URL: Joi.string().required(),
 				BACKEND_URL: Joi.string().required(),
@@ -74,8 +84,12 @@ import { UsersModule } from './modules/users/users.module';
 			inject: [ConfigService],
 		}),
 
+		ScheduleModule.forRoot(),
 		UsersModule,
 		PermissionsModule,
+		PropertiesModule,
+		UnitsModule,
+		TenantsModule,
 		DatabaseModule,
 		LoggingModule,
 		MailModule,
@@ -83,11 +97,17 @@ import { UsersModule } from './modules/users/users.module';
 		StorageModule,
 		AuthModule,
 		SettingsModule,
-		OpenAiModule,
 		AdminModule,
-		ArticlesModule,
-		OnboardingModule,
-		KeywordsModule,
+		InvoicesModule,
+		PaymentsModule,
+		WalletModule,
+		ReceiptsModule,
+		ExpensesModule,
+		VendorsModule,
+		MaintenanceModule,
+		NotificationsModule,
+		DashboardModule,
+		SmsModule,
 	],
 	providers: [
 		// Global guards

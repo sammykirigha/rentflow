@@ -23,19 +23,19 @@ export interface AdminDashboardData {
 }
 
 export const getAdminDashboardData = async (): Promise<AdminDashboardData> => {
-	const response = await apiClient.get<{ data: AdminDashboardData; }>('/admin/stats');
-	return response.data.data;
+	const response = await apiClient.get('/admin/stats');
+	return response.data;
 };
 
 export const getAdminStatsOverview = async (): Promise<AdminStats> => {
-	const response = await apiClient.get<{ data: AdminStats; }>('/admin/stats/overview');
-	return response.data.data;
+	const response = await apiClient.get('/admin/stats/overview');
+	return response.data;
 };
 
 
 export const getRecentUsers = async (): Promise<RecentUser[]> => {
-	const response = await apiClient.get<{ data: RecentUser[]; }>('/admin/stats/recent-users');
-	return response.data.data;
+	const response = await apiClient.get('/admin/stats/recent-users');
+	return response.data;
 };
 
 const adminApi = {

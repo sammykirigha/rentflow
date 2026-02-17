@@ -95,8 +95,8 @@ export class PermissionsService {
 			throw new NotFoundException('Role not found');
 		}
 
-		if (role.isSystemRole && role.name === UserRole.SUPER_ADMIN) {
-			throw new BadRequestException('Cannot modify Super Admin role permissions');
+		if (role.isSystemRole && role.name === UserRole.LANDLORD) {
+			throw new BadRequestException('Cannot modify Landlord role permissions');
 		}
 
 		const permissions = await this.permissionsRepository.find({

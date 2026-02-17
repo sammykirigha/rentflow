@@ -1,39 +1,26 @@
 "use client";
 
 import { ReactNode } from 'react';
-
-import { Toaster } from "@/components/ui/sonner";
+import { ConfigProvider, App as AntApp } from 'antd';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { ToastContainer } from 'react-toastify';
+import { antdTheme } from '@/lib/antd-theme';
 
 const queryClient = new QueryClient();
 
-const Providers = ({ children }: { children: ReactNode; }) => {
-
+const Providers = ({ children }: { children: ReactNode }) => {
   return (
-    <QueryClientProvider client={queryClient} >
-      <AuthProvider>
-        {children}
-        {/* <SignInModal /> */}
-      </AuthProvider>
-
-      <ToastContainer
-        position="top-right"
-        autoClose={5000}
-        hideProgressBar={false}
-        newestOnTop={false}
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-        theme="light"
-      />
-      <Toaster />
-      <ReactQueryDevtools initialIsOpen={false} />
-    </QueryClientProvider>
+    <ConfigProvider theme={antdTheme}>
+      <AntApp>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+          <ReactQueryDevtools initialIsOpen={false} />
+        </QueryClientProvider>
+      </AntApp>
+    </ConfigProvider>
   );
 };
 

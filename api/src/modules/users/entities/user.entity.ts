@@ -20,12 +20,6 @@ export class User extends AbstractEntity<User> {
 	@Exclude()
 	password?: string;
 
-	@Column({ name: 'google_id', nullable: true, unique: true })
-	googleId?: string;
-
-	@Column({ name: 'auth_provider', default: 'local' })
-	authProvider: string; // 'local' | 'google'
-
 	@Column({ nullable: true })
 	firstName?: string;
 
@@ -48,20 +42,8 @@ export class User extends AbstractEntity<User> {
 	@Column({ name: 'phone_verified', default: false })
 	phoneVerified: boolean;
 
-	@Column({ name: "phone_verification_token", nullable: true })
-	phoneVerificationToken?: string;
-
-	@Column({ name: 'phone_verification_expires', nullable: true })
-	phoneVerificationExpires?: Date;
-
 	@Column({ name: 'email_verified', default: false })
 	emailVerified: boolean;
-
-	@Column({ name: 'email_verification_token', nullable: true })
-	emailVerificationToken?: string;
-
-	@Column({ name: 'email_verification_expires', nullable: true })
-	emailVerificationExpires?: Date;
 
 	@Column({ name: 'reset_password_token', nullable: true })
 	resetPasswordToken?: string;
@@ -71,9 +53,6 @@ export class User extends AbstractEntity<User> {
 
 	@Column({ name: 'suspension_reason', nullable: true, type: 'text' })
 	suspensionReason?: string;
-
-	@Column({ name: 'is_onboarded', default: false })
-	isOnboarded: boolean;
 
 	@Column({ name: 'last_login_at', nullable: true })
 	lastLoginAt?: Date;
@@ -88,7 +67,7 @@ export class User extends AbstractEntity<User> {
 	userRole: Role;
 
 	get fullName(): string {
-		return `${this.firstName} ${this.lastName}`.trim();
+		return `${this.firstName || ''} ${this.lastName || ''}`.trim();
 	}
 
 	// Virtual getter for permissions

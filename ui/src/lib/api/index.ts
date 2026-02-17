@@ -10,6 +10,19 @@ const api = axios.create({
   },
 });
 
+// Add response interceptor to unwrap the API's TransformInterceptor wrapper
+// API responses come as { success, data, statusCode, timestamp }
+// This extracts the inner `data` so callers get the actual payload directly
+// Only unwrap when both `success` and `data` keys are present (TransformInterceptor format)
+api.interceptors.response.use(
+  (response) => {
+    if (response.data && typeof response.data === 'object' && 'success' in response.data && 'data' in response.data) {
+      response.data = response.data.data;
+    }
+    return response;
+  },
+);
+
 // Add request interceptor to include auth token
 api.interceptors.request.use(
   (config) => {
