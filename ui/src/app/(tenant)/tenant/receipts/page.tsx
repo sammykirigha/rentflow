@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from 'react';
 import {
   Typography,
   Table,
@@ -35,17 +36,17 @@ const { Title } = Typography;
 
 export default function TenantReceiptsPage() {
   const { isAuthenticated } = useAuth();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['my-receipts'],
-    queryFn: async () => {
-      const result = await receiptsApi.getAll();
-      return result?.data;
-    },
+    queryKey: ['my-receipts', page, pageSize],
+    queryFn: () => receiptsApi.getMy({ page, limit: pageSize }),
     enabled: isAuthenticated,
   });
 
-  const receipts: Receipt[] = Array.isArray(data) ? data : [];
+  const receipts: Receipt[] = Array.isArray(data?.data) ? data.data : [];
+  const pagination = data?.pagination;
 
   const columns: ColumnsType<Receipt> = [
     {
@@ -112,9 +113,12 @@ export default function TenantReceiptsPage() {
           rowKey="receiptId"
           locale={{ emptyText: <Empty description="No receipts yet" /> }}
           pagination={{
-            defaultPageSize: 10,
+            current: page,
+            pageSize,
+            total: pagination?.total || 0,
             showSizeChanger: true,
             showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} receipts`,
+            onChange: (p, ps) => { setPage(p); setPageSize(ps); },
           }}
         />
       </Card>

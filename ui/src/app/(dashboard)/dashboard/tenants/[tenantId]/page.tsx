@@ -11,12 +11,15 @@ import {
   Modal,
   Form,
   DatePicker,
+  Input,
+  InputNumber,
   Select,
   App,
   Space,
   Spin,
   Empty,
   Tabs,
+  Divider,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -26,14 +29,28 @@ import {
   DollarOutlined,
   DeleteOutlined,
   ExclamationCircleOutlined,
+  SafetyOutlined,
+  PlusOutlined,
+  MinusCircleOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { tenantsApi } from '@/lib/api/tenants.api';
 import { invoicesApi } from '@/lib/api/invoices.api';
 import { paymentsApi, walletApi } from '@/lib/api/payments.api';
+import { propertiesApi, unitsApi } from '@/lib/api/properties.api';
+import { parseError } from '@/lib/api/parseError';
 import { formatKES } from '@/lib/format-kes';
-import type { Tenant, TenantStatus } from '@/types/tenants';
+import {
+  INVOICE_STATUS_COLOR,
+  INVOICE_STATUS_LABEL,
+  PAYMENT_STATUS_COLOR,
+  PAYMENT_METHOD_LABEL,
+  WALLET_TXN_TYPE_LABEL,
+  WALLET_TXN_TYPE_COLOR,
+} from '@/lib/constants/status-maps';
+import type { Tenant, DepositStatus } from '@/types/tenants';
+import type { Property, Unit } from '@/types/properties';
 import type { Invoice, InvoiceStatus } from '@/types/invoices';
 import type { Payment, PaymentMethod, PaymentStatus } from '@/types/payments';
 import type { WalletTransaction, WalletTxnType } from '@/types/payments';
@@ -55,48 +72,18 @@ const STATUS_LABEL_MAP: Record<string, string> = {
   vacated: 'Vacated',
 };
 
-const INVOICE_STATUS_COLOR: Record<string, string> = {
-  paid: 'green',
-  partially_paid: 'orange',
-  unpaid: 'red',
-  overdue: 'volcano',
-  cancelled: 'default',
-};
-
-const INVOICE_STATUS_LABEL: Record<string, string> = {
-  paid: 'Paid',
-  partially_paid: 'Partially Paid',
-  unpaid: 'Unpaid',
-  overdue: 'Overdue',
-  cancelled: 'Cancelled',
-};
-
-const PAYMENT_METHOD_LABEL: Record<string, string> = {
-  mpesa_paybill: 'M-Pesa Paybill',
-  mpesa_stk_push: 'M-Pesa STK Push',
-  wallet_deduction: 'Wallet Deduction',
-  manual: 'Manual',
-};
-
-const PAYMENT_STATUS_COLOR: Record<string, string> = {
+const DEPOSIT_STATUS_COLOR: Record<string, string> = {
   pending: 'orange',
-  completed: 'green',
-  failed: 'red',
-  reversed: 'default',
+  collected: 'green',
+  partially_refunded: 'blue',
+  fully_refunded: 'default',
 };
 
-const WALLET_TXN_TYPE_LABEL: Record<string, string> = {
-  credit: 'Credit',
-  debit_invoice: 'Invoice Deduction',
-  debit_penalty: 'Penalty Deduction',
-  refund: 'Refund',
-};
-
-const WALLET_TXN_TYPE_COLOR: Record<string, string> = {
-  credit: 'green',
-  debit_invoice: 'red',
-  debit_penalty: 'volcano',
-  refund: 'blue',
+const DEPOSIT_STATUS_LABEL: Record<string, string> = {
+  pending: 'Pending',
+  collected: 'Collected',
+  partially_refunded: 'Partially Refunded',
+  fully_refunded: 'Fully Refunded',
 };
 
 export default function TenantDetailPage() {
@@ -107,7 +94,11 @@ export default function TenantDetailPage() {
   const { isAuthenticated } = useAuth();
 
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isRefundOpen, setIsRefundOpen] = useState(false);
+  const [editFormStatus, setEditFormStatus] = useState<string | undefined>(undefined);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string | undefined>(undefined);
   const [editForm] = Form.useForm();
+  const [refundForm] = Form.useForm();
 
   const { data: tenant, isLoading } = useQuery({
     queryKey: ['tenant', tenantId],
@@ -117,13 +108,13 @@ export default function TenantDetailPage() {
 
   const { data: invoicesData, isLoading: isLoadingInvoices } = useQuery({
     queryKey: ['tenant-invoices', tenantId],
-    queryFn: () => invoicesApi.getByTenant(tenantId),
+    queryFn: () => invoicesApi.getByTenant(tenantId, { limit: 200 }),
     enabled: isAuthenticated && !!tenantId,
   });
 
   const { data: paymentsData, isLoading: isLoadingPayments } = useQuery({
     queryKey: ['tenant-payments', tenantId],
-    queryFn: () => paymentsApi.getByTenant(tenantId),
+    queryFn: () => paymentsApi.getByTenant(tenantId, { limit: 200 }),
     enabled: isAuthenticated && !!tenantId,
   });
 
@@ -133,21 +124,43 @@ export default function TenantDetailPage() {
     enabled: isAuthenticated && !!tenantId,
   });
 
-  const invoices: Invoice[] = Array.isArray(invoicesData) ? invoicesData : [];
-  const payments: Payment[] = Array.isArray(paymentsData) ? paymentsData : [];
-  const walletTxns: WalletTransaction[] = Array.isArray(walletTxnsData) ? walletTxnsData : [];
+  const isReactivating = tenant?.status === 'vacated' && editFormStatus === 'active';
+
+  const { data: propertiesData } = useQuery({
+    queryKey: ['properties', 'all'],
+    queryFn: () => propertiesApi.getAll({ limit: 200 }),
+    enabled: isEditOpen && isReactivating,
+  });
+
+  const propertiesList: Property[] = Array.isArray(propertiesData?.data) ? propertiesData.data : [];
+
+  const { data: vacantUnits } = useQuery({
+    queryKey: ['units', 'vacant', selectedPropertyId],
+    queryFn: () => unitsApi.getVacant(selectedPropertyId!),
+    enabled: isEditOpen && isReactivating && !!selectedPropertyId,
+  });
+
+  const vacantUnitsList: Unit[] = Array.isArray(vacantUnits) ? vacantUnits : [];
+
+  const invoices: Invoice[] = Array.isArray(invoicesData?.data) ? invoicesData.data : [];
+  const payments: Payment[] = Array.isArray(paymentsData?.data) ? paymentsData.data : [];
+  const walletTxnsRaw = walletTxnsData?.data ?? walletTxnsData;
+  const walletTxns: WalletTransaction[] = Array.isArray(walletTxnsRaw) ? walletTxnsRaw : [];
 
   const updateMutation = useMutation({
-    mutationFn: (values: Partial<{ leaseEnd: string; status: string }>) =>
+    mutationFn: (values: Partial<{ leaseEnd: string; status: string; unitId: string }>) =>
       tenantsApi.update(tenantId, values),
     onSuccess: () => {
       message.success('Tenant updated successfully');
       queryClient.invalidateQueries({ queryKey: ['tenant', tenantId] });
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      queryClient.invalidateQueries({ queryKey: ['units'] });
       setIsEditOpen(false);
+      setEditFormStatus(undefined);
+      setSelectedPropertyId(undefined);
     },
-    onError: () => {
-      message.error('Failed to update tenant');
+    onError: (error) => {
+      message.error(parseError(error, 'Failed to update tenant'));
     },
   });
 
@@ -158,8 +171,8 @@ export default function TenantDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['tenant', tenantId] });
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
     },
-    onError: () => {
-      message.error('Failed to vacate tenant');
+    onError: (error) => {
+      message.error(parseError(error, 'Failed to vacate tenant'));
     },
   });
 
@@ -170,17 +183,57 @@ export default function TenantDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
       router.push('/dashboard/tenants');
     },
-    onError: () => {
-      message.error('Failed to delete tenant');
+    onError: (error) => {
+      message.error(parseError(error, 'Failed to delete tenant'));
     },
   });
+
+  const refundMutation = useMutation({
+    mutationFn: (data: { amount: number; deductions?: { description: string; amount: number }[] }) =>
+      tenantsApi.refundDeposit(tenantId, data),
+    onSuccess: () => {
+      message.success('Deposit refunded successfully');
+      queryClient.invalidateQueries({ queryKey: ['tenant', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ['tenant-wallet-txns', tenantId] });
+      setIsRefundOpen(false);
+      refundForm.resetFields();
+    },
+    onError: (error) => {
+      message.error(parseError(error, 'Failed to refund deposit'));
+    },
+  });
+
+  const handleRefund = async () => {
+    try {
+      const values = await refundForm.validateFields();
+      const deductions: { description: string; amount: number }[] = (values.deductions || [])
+        .filter((d: { description?: string; amount?: number } | undefined) => d && d.description && d.amount);
+      const totalDeductions = deductions.reduce((sum: number, d: { amount: number }) => sum + d.amount, 0);
+      const deposit = tenant?.depositAmount ?? 0;
+
+      if (totalDeductions > deposit) {
+        message.error('Total deductions exceed the deposit amount');
+        return;
+      }
+
+      const netRefund = parseFloat((deposit - totalDeductions).toFixed(2));
+
+      refundMutation.mutate({
+        amount: netRefund,
+        deductions: deductions.length > 0 ? deductions : undefined,
+      });
+    } catch {
+      // validation inline
+    }
+  };
 
   const handleEdit = async () => {
     try {
       const values = await editForm.validateFields();
-      const payload: Partial<{ leaseEnd: string; status: string }> = {};
+      const payload: Partial<{ leaseEnd: string; status: string; unitId: string }> = {};
       if (values.leaseEnd) payload.leaseEnd = values.leaseEnd.toISOString();
       if (values.status) payload.status = values.status;
+      if (values.unitId) payload.unitId = values.unitId;
       updateMutation.mutate(payload);
     } catch {
       // validation inline
@@ -193,7 +246,9 @@ export default function TenantDetailPage() {
         status: tenant.status,
         leaseEnd: tenant.leaseEnd ? dayjs(tenant.leaseEnd) : undefined,
       });
+      setEditFormStatus(tenant.status);
     }
+    setSelectedPropertyId(undefined);
     setIsEditOpen(true);
   };
 
@@ -354,8 +409,8 @@ export default function TenantDetailPage() {
       dataIndex: 'amount',
       key: 'amount',
       render: (value: number, record: WalletTransaction) => (
-        <Text type={record.type === 'credit' || record.type === 'refund' ? 'success' : 'danger'}>
-          {record.type === 'credit' || record.type === 'refund' ? '+' : '-'}{formatKES(value)}
+        <Text type={record.type === 'credit' || record.type === 'credit_reconciliation' || record.type === 'refund' ? 'success' : 'danger'}>
+          {record.type === 'credit' || record.type === 'credit_reconciliation' || record.type === 'refund' ? '+' : '-'}{formatKES(value)}
         </Text>
       ),
       align: 'right',
@@ -404,9 +459,9 @@ export default function TenantDetailPage() {
   const totalOutstanding = invoices
     .filter((inv) => inv.status !== 'paid' && inv.status !== 'cancelled')
     .reduce((sum, inv) => sum + Number(inv.balanceDue), 0);
-  const totalPaid = payments
-    .filter((p) => p.status === 'completed')
-    .reduce((sum, p) => sum + Number(p.amount), 0);
+  const totalPaid = invoices
+    .filter((inv) => inv.status !== 'cancelled')
+    .reduce((sum, inv) => sum + Number(inv.amountPaid), 0);
 
   return (
     <div>
@@ -426,6 +481,17 @@ export default function TenantDetailPage() {
         </Space>
         <Space>
           <Button onClick={openEditModal}>Edit</Button>
+          {(tenant.depositStatus === 'collected' || tenant.depositStatus === 'partially_refunded') && (
+            <Button
+              icon={<SafetyOutlined />}
+              onClick={() => {
+                refundForm.resetFields();
+                setIsRefundOpen(true);
+              }}
+            >
+              Refund Deposit
+            </Button>
+          )}
           {tenant.status !== 'vacated' && (
             <Button danger onClick={confirmVacate} loading={vacateMutation.isPending}>
               Vacate
@@ -496,6 +562,19 @@ export default function TenantDetailPage() {
             {invoices.length}
           </Title>
         </Card>
+        {tenant.depositAmount > 0 && (
+          <Card style={{ flex: 1, textAlign: 'center' }}>
+            <SafetyOutlined style={{ fontSize: 24, color: '#722ed1', marginBottom: 8 }} />
+            <br />
+            <Text type="secondary">Deposit</Text>
+            <Title level={3} style={{ margin: '4px 0 0', color: '#722ed1' }}>
+              {formatKES(tenant.depositAmount)}
+            </Title>
+            <Tag color={DEPOSIT_STATUS_COLOR[tenant.depositStatus] || 'default'}>
+              {DEPOSIT_STATUS_LABEL[tenant.depositStatus] || tenant.depositStatus}
+            </Tag>
+          </Card>
+        )}
       </div>
 
       {/* Tabs for Invoices, Payments, Wallet */}
@@ -563,26 +642,192 @@ export default function TenantDetailPage() {
 
       {/* Edit Tenant Modal */}
       <Modal
-        title="Edit Tenant"
+        title={isReactivating ? 'Reactivate Tenant' : 'Edit Tenant'}
         open={isEditOpen}
         onOk={handleEdit}
-        onCancel={() => setIsEditOpen(false)}
+        onCancel={() => {
+          setIsEditOpen(false);
+          setEditFormStatus(undefined);
+          setSelectedPropertyId(undefined);
+        }}
         confirmLoading={updateMutation.isPending}
-        okText="Save Changes"
+        okText={isReactivating ? 'Reactivate' : 'Save Changes'}
       >
         <Form form={editForm} layout="vertical" style={{ marginTop: 16 }}>
           <Form.Item name="status" label="Status">
             <Select
-              options={[
-                { label: 'Active', value: 'active' },
-                { label: 'Notice Period', value: 'notice_period' },
-                { label: 'Vacated', value: 'vacated' },
-              ]}
+              onChange={(value) => {
+                setEditFormStatus(value);
+                if (value !== 'active' || tenant?.status !== 'vacated') {
+                  editForm.setFieldValue('unitId', undefined);
+                  setSelectedPropertyId(undefined);
+                }
+              }}
+              options={
+                tenant?.status === 'vacated'
+                  ? [
+                      { label: 'Active', value: 'active' },
+                      { label: 'Vacated', value: 'vacated' },
+                    ]
+                  : [
+                      { label: 'Active', value: 'active' },
+                      { label: 'Notice Period', value: 'notice_period' },
+                    ]
+              }
             />
           </Form.Item>
+
+          {isReactivating && (
+            <>
+              <Form.Item
+                label="Property"
+                rules={[{ required: true, message: 'Please select a property' }]}
+              >
+                <Select
+                  placeholder="Select a property"
+                  showSearch
+                  optionFilterProp="label"
+                  value={selectedPropertyId}
+                  onChange={(value) => {
+                    setSelectedPropertyId(value);
+                    editForm.setFieldValue('unitId', undefined);
+                  }}
+                  options={propertiesList.map((p) => ({
+                    label: `${p.name} — ${p.location}`,
+                    value: p.propertyId,
+                  }))}
+                />
+              </Form.Item>
+
+              <Form.Item
+                name="unitId"
+                label="Unit"
+                rules={[{ required: true, message: 'Please select a unit to assign' }]}
+              >
+                <Select
+                  placeholder={selectedPropertyId ? 'Select a vacant unit' : 'Select a property first'}
+                  disabled={!selectedPropertyId}
+                  showSearch
+                  optionFilterProp="label"
+                  options={vacantUnitsList.map((u) => ({
+                    label: `${u.unitNumber} — ${formatKES(u.rentAmount)}/mo`,
+                    value: u.unitId,
+                  }))}
+                  notFoundContent={selectedPropertyId ? 'No vacant units in this property' : undefined}
+                />
+              </Form.Item>
+            </>
+          )}
+
           <Form.Item name="leaseEnd" label="Lease End Date">
             <DatePicker style={{ width: '100%' }} />
           </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Refund Deposit Modal */}
+      <Modal
+        title="Refund Security Deposit"
+        open={isRefundOpen}
+        onOk={handleRefund}
+        onCancel={() => {
+          setIsRefundOpen(false);
+          refundForm.resetFields();
+        }}
+        confirmLoading={refundMutation.isPending}
+        okText="Refund"
+        width={600}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <Text>Deposit balance: <strong>{formatKES(tenant?.depositAmount ?? 0)}</strong></Text>
+        </div>
+        <Form form={refundForm} layout="vertical">
+          <Form.List name="deductions">
+            {(fields, { add, remove }) => (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <Text strong>Damage Deductions</Text>
+                  <Button type="dashed" onClick={() => add()} icon={<PlusOutlined />} size="small">
+                    Add Deduction
+                  </Button>
+                </div>
+                {fields.map(({ key, name, ...restField }) => (
+                  <div key={key} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'flex-start' }}>
+                    <Form.Item
+                      {...restField}
+                      name={[name, 'description']}
+                      rules={[{ required: true, message: 'Description required' }]}
+                      style={{ flex: 1, marginBottom: 0 }}
+                    >
+                      <Input placeholder="e.g. Broken window" />
+                    </Form.Item>
+                    <Form.Item
+                      {...restField}
+                      name={[name, 'amount']}
+                      rules={[
+                        { required: true, message: 'Amount required' },
+                        { type: 'number', min: 1, message: 'Min 1' },
+                      ]}
+                      style={{ width: 160, marginBottom: 0 }}
+                    >
+                      <InputNumber<number>
+                        style={{ width: '100%' }}
+                        placeholder="Amount"
+                        min={1}
+                        formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                        parser={(value) => Number(value?.replace(/,/g, '') || 0)}
+                      />
+                    </Form.Item>
+                    <MinusCircleOutlined
+                      onClick={() => remove(name)}
+                      style={{ marginTop: 8, color: '#ff4d4f', fontSize: 16 }}
+                    />
+                  </div>
+                ))}
+              </>
+            )}
+          </Form.List>
+
+          <Divider style={{ margin: '16px 0' }} />
+
+          <Form.Item noStyle shouldUpdate>
+            {() => {
+              const deductions: { amount?: number }[] = refundForm.getFieldValue('deductions') || [];
+              const totalDeductions = deductions.reduce(
+                (sum, d) => sum + (d?.amount || 0),
+                0,
+              );
+              const deposit = tenant?.depositAmount ?? 0;
+              const netRefund = Math.max(0, parseFloat((deposit - totalDeductions).toFixed(2)));
+              const overDeducted = totalDeductions > deposit;
+
+              return (
+                <div style={{ background: '#fafafa', padding: 16, borderRadius: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <Text>Deposit</Text>
+                    <Text>{formatKES(deposit)}</Text>
+                  </div>
+                  {totalDeductions > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <Text type="danger">Deductions</Text>
+                      <Text type="danger">-{formatKES(totalDeductions)}</Text>
+                    </div>
+                  )}
+                  <Divider style={{ margin: '8px 0' }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Text strong>Net Refund to Wallet</Text>
+                    <Text strong type={overDeducted ? 'danger' : undefined}>
+                      {overDeducted ? 'Deductions exceed deposit' : formatKES(netRefund)}
+                    </Text>
+                  </div>
+                </div>
+              );
+            }}
+          </Form.Item>
+
+          <Text type="secondary" style={{ display: 'block', marginTop: 12 }}>
+            The net refund will be credited to the tenant&apos;s wallet. Deductions are recorded in the audit trail.
+          </Text>
         </Form>
       </Modal>
     </div>

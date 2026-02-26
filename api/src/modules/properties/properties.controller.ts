@@ -1,7 +1,9 @@
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { Permission, RequirePermissions } from '@/common/decorators/permissions.decorator';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '@/common/guards/permissions.guard';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
+import { PermissionAction, PermissionResource } from '@/modules/permissions/entities/permission.entity';
 import {
 	Body,
 	ClassSerializerInterceptor,
@@ -31,6 +33,7 @@ export class PropertiesController {
 	constructor(private readonly propertiesService: PropertiesService) { }
 
 	@Post()
+	@RequirePermissions(Permission(PermissionResource.PROPERTIES, PermissionAction.CREATE))
 	@ApiOperation({ summary: 'Create a new property' })
 	@ApiResponse({ status: 201, description: 'Property created successfully' })
 	async create(
@@ -41,6 +44,7 @@ export class PropertiesController {
 	}
 
 	@Get()
+	@RequirePermissions(Permission(PermissionResource.PROPERTIES, PermissionAction.READ))
 	@ApiOperation({ summary: 'List all properties with pagination and search' })
 	@ApiResponse({ status: 200, description: 'Properties retrieved successfully' })
 	@ApiQuery({ name: 'page', required: false, type: Number })
@@ -57,6 +61,7 @@ export class PropertiesController {
 	}
 
 	@Get(':propertyId')
+	@RequirePermissions(Permission(PermissionResource.PROPERTIES, PermissionAction.READ))
 	@ApiOperation({ summary: 'Get a single property by ID' })
 	@ApiResponse({ status: 200, description: 'Property retrieved successfully' })
 	@ApiResponse({ status: 404, description: 'Property not found' })
@@ -65,6 +70,7 @@ export class PropertiesController {
 	}
 
 	@Patch(':propertyId')
+	@RequirePermissions(Permission(PermissionResource.PROPERTIES, PermissionAction.UPDATE))
 	@ApiOperation({ summary: 'Update a property' })
 	@ApiResponse({ status: 200, description: 'Property updated successfully' })
 	@ApiResponse({ status: 404, description: 'Property not found' })
@@ -77,6 +83,7 @@ export class PropertiesController {
 	}
 
 	@Get(':propertyId/units')
+	@RequirePermissions(Permission(PermissionResource.PROPERTIES, PermissionAction.READ))
 	@ApiOperation({ summary: 'Get units for a property' })
 	@ApiResponse({ status: 200, description: 'Property units retrieved successfully' })
 	@ApiResponse({ status: 404, description: 'Property not found' })

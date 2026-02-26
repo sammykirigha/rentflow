@@ -21,7 +21,7 @@ export const expensesApi = {
     limit?: number;
   }) => {
     const response = await api.get('/expenses', { params });
-    return response.data?.data;
+    return response.data;
   },
 
   getOne: async (expenseId: string): Promise<Expense> => {
@@ -47,7 +47,7 @@ export const vendorsApi = {
     limit?: number;
   }) => {
     const response = await api.get('/vendors', { params });
-    return response.data?.data;
+    return response.data;
   },
 
   getOne: async (vendorId: string): Promise<Vendor> => {
@@ -69,13 +69,24 @@ export const vendorsApi = {
 export const maintenanceApi = {
   getAll: async (params?: {
     tenantId?: string;
+    propertyId?: string;
     status?: string;
     category?: string;
     page?: number;
     limit?: number;
   }) => {
     const response = await api.get('/maintenance', { params });
-    return response.data?.data;
+    return response.data;
+  },
+
+  getMy: async (params?: {
+    status?: string;
+    category?: string;
+    page?: number;
+    limit?: number;
+  }) => {
+    const response = await api.get('/maintenance/my', { params });
+    return response.data;
   },
 
   getOne: async (id: string): Promise<MaintenanceRequest> => {

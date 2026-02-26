@@ -120,7 +120,7 @@ export class AuthService {
 	}
 
 	async getCurrentUser(id: string) {
-		return this.usersService.findOne(id);
+		return this.usersService.findOneWithTenant(id);
 	}
 
 	async forgotPassword(forgotPasswordDto: ForgotPasswordDto): Promise<{ message: string; }> {

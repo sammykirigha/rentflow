@@ -128,6 +128,12 @@ export default function BrandingTab() {
 
   return (
     <div style={{ maxWidth: 600 }}>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontWeight: 600, fontSize: 16 }}>Branding</div>
+        <div style={{ color: '#666', fontSize: 13 }}>
+          Customize your company logo and favicon. The uploaded logo will be displayed on all generated invoices, receipts, and statements.
+        </div>
+      </div>
       <ImageUploadCard
         label="Logo"
         description="Your company logo. Recommended size: 200x200px. Max 2MB. PNG, JPEG, or SVG."

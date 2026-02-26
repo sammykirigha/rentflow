@@ -59,12 +59,14 @@ function AuthContextProvider({ children }: { children: React.ReactNode; }) {
 		}
 	};
 
+	const accessToken = session?.accessToken as string | undefined;
+
 	useEffect(() => {
 		if (status !== 'loading') {
 			fetchUserData();
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [session, status]);
+	}, [accessToken, status]);
 
 	const login = async (email: string, password: string) => {
 		try {

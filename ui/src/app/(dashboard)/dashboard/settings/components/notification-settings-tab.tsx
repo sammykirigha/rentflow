@@ -60,6 +60,12 @@ export default function NotificationSettingsTab() {
 
   return (
     <div style={{ maxWidth: 600 }}>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontWeight: 600, fontSize: 16 }}>Notifications</div>
+        <div style={{ color: '#666', fontSize: 13 }}>
+          Control how tenants receive invoices, reminders, and receipts. Enable or disable each notification channel below.
+        </div>
+      </div>
       <Card>
         <NotificationRow
           icon={<MailOutlined />}

@@ -41,21 +41,29 @@ export class WalletService {
 		amount: number,
 		reference?: string,
 		description?: string,
+		userId?: string,
+		type: WalletTxnType = WalletTxnType.CREDIT,
 	): Promise<WalletTransaction> {
 		const queryRunner = this.dataSource.createQueryRunner();
 		await queryRunner.connect();
 		await queryRunner.startTransaction();
 
 		let txn: WalletTransaction;
+		let resolvedUserId = userId;
 
 		try {
-			const tenant = await queryRunner.manager.findOne(Tenant, {
-				where: { tenantId },
-				lock: { mode: 'pessimistic_write' },
-			});
+			const tenant = await queryRunner.manager
+				.createQueryBuilder(Tenant, 'tenant')
+				.setLock('pessimistic_write')
+				.where('tenant.tenantId = :tenantId', { tenantId })
+				.getOne();
 
 			if (!tenant) {
 				throw new NotFoundException('Tenant not found');
+			}
+
+			if (!resolvedUserId) {
+				resolvedUserId = tenant.userId;
 			}
 
 			const balanceBefore = Number(tenant.walletBalance);
@@ -64,7 +72,7 @@ export class WalletService {
 			txn = await queryRunner.manager.save(
 				queryRunner.manager.create(WalletTransaction, {
 					tenantId,
-					type: WalletTxnType.CREDIT,
+					type,
 					amount,
 					balanceBefore,
 					balanceAfter,
@@ -85,7 +93,7 @@ export class WalletService {
 
 		await this.auditService.createLog({
 			action: AuditAction.WALLET_CREDITED,
-			performedBy: tenantId,
+			performedBy: resolvedUserId,
 			targetType: AuditTargetType.WALLET,
 			targetId: txn.walletTransactionId,
 			details: `Wallet credited ${amount} for tenant ${tenantId}`,
@@ -100,21 +108,28 @@ export class WalletService {
 		amount: number,
 		reference?: string,
 		description?: string,
+		userId?: string,
 	): Promise<WalletTransaction> {
 		const queryRunner = this.dataSource.createQueryRunner();
 		await queryRunner.connect();
 		await queryRunner.startTransaction();
 
 		let txn: WalletTransaction;
+		let resolvedUserId = userId;
 
 		try {
-			const tenant = await queryRunner.manager.findOne(Tenant, {
-				where: { tenantId },
-				lock: { mode: 'pessimistic_write' },
-			});
+			const tenant = await queryRunner.manager
+				.createQueryBuilder(Tenant, 'tenant')
+				.setLock('pessimistic_write')
+				.where('tenant.tenantId = :tenantId', { tenantId })
+				.getOne();
 
 			if (!tenant) {
 				throw new NotFoundException('Tenant not found');
+			}
+
+			if (!resolvedUserId) {
+				resolvedUserId = tenant.userId;
 			}
 
 			const balanceBefore = Number(tenant.walletBalance);
@@ -144,7 +159,7 @@ export class WalletService {
 
 		await this.auditService.createLog({
 			action: AuditAction.WALLET_DEBITED,
-			performedBy: tenantId,
+			performedBy: resolvedUserId,
 			targetType: AuditTargetType.WALLET,
 			targetId: txn.walletTransactionId,
 			details: `Wallet debited ${amount} for invoice for tenant ${tenantId}`,
@@ -185,6 +200,118 @@ export class WalletService {
 				total,
 				totalPages: Math.ceil(total / limit),
 			},
+		};
+	}
+
+	async getLedger({
+		page = 1,
+		limit = 20,
+		tenantId,
+		type,
+		startDate,
+		endDate,
+	}: {
+		page?: number;
+		limit?: number;
+		tenantId?: string;
+		type?: WalletTxnType;
+		startDate?: string;
+		endDate?: string;
+	}) {
+		const skip = (page - 1) * limit;
+
+		const qb = this.walletTransactionsRepository
+			.createQueryBuilder('txn')
+			.leftJoinAndSelect('txn.tenant', 'tenant')
+			.leftJoinAndSelect('tenant.user', 'user')
+			.leftJoinAndSelect('tenant.unit', 'unit')
+			.leftJoinAndSelect('unit.property', 'property')
+			.orderBy('txn.createdAt', 'DESC')
+			.skip(skip)
+			.take(limit);
+
+		if (tenantId) {
+			qb.andWhere('txn.tenantId = :tenantId', { tenantId });
+		}
+		if (type) {
+			qb.andWhere('txn.type = :type', { type });
+		}
+		if (startDate) {
+			qb.andWhere('txn.createdAt >= :startDate', { startDate });
+		}
+		if (endDate) {
+			qb.andWhere('txn.createdAt <= :endDate', { endDate: `${endDate}T23:59:59.999Z` });
+		}
+
+		const [transactions, total] = await qb.getManyAndCount();
+
+		return {
+			data: transactions,
+			pagination: {
+				page,
+				limit,
+				total,
+				totalPages: Math.ceil(total / limit),
+			},
+		};
+	}
+
+	async getStatementData(
+		tenantId: string,
+		{ startDate, endDate }: { startDate?: string; endDate?: string },
+	) {
+		const tenant = await this.tenantRepository.findOne({
+			where: { tenantId },
+			relations: ['user', 'unit', 'unit.property'],
+		});
+		if (!tenant) {
+			throw new NotFoundException('Tenant not found');
+		}
+
+		const qb = this.walletTransactionsRepository
+			.createQueryBuilder('txn')
+			.where('txn.tenantId = :tenantId', { tenantId })
+			.orderBy('txn.createdAt', 'ASC');
+
+		if (startDate) {
+			qb.andWhere('txn.createdAt >= :startDate', { startDate });
+		}
+		if (endDate) {
+			qb.andWhere('txn.createdAt <= :endDate', { endDate: `${endDate}T23:59:59.999Z` });
+		}
+
+		const transactions = await qb.getMany();
+
+		let openingBalance = 0;
+		if (startDate && transactions.length > 0) {
+			openingBalance = Number(transactions[0].balanceBefore);
+		} else if (transactions.length > 0) {
+			openingBalance = Number(transactions[0].balanceBefore);
+		}
+
+		const closingBalance =
+			transactions.length > 0
+				? Number(transactions[transactions.length - 1].balanceAfter)
+				: Number(tenant.walletBalance);
+
+		let totalCredits = 0;
+		let totalDebits = 0;
+		for (const txn of transactions) {
+			const amount = Number(txn.amount);
+			if (txn.type === WalletTxnType.CREDIT || txn.type === WalletTxnType.CREDIT_RECONCILIATION || txn.type === WalletTxnType.REFUND) {
+				totalCredits += amount;
+			} else {
+				totalDebits += amount;
+			}
+		}
+
+		return {
+			tenant,
+			transactions,
+			openingBalance,
+			closingBalance,
+			totalCredits,
+			totalDebits,
 		};
 	}
 

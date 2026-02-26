@@ -4,6 +4,7 @@ import {
 	ExpensePriority,
 	ExpenseStatus,
 } from '@/modules/expenses/entities/expense.entity';
+import { Property } from '@/modules/properties/entities/property.entity';
 import { Tenant } from '@/modules/tenants/entities/tenant.entity';
 import {
 	Column,
@@ -17,12 +18,16 @@ import {
 @Entity('maintenance_requests')
 @Index(['tenantId'])
 @Index(['status'])
+@Index(['propertyId'])
 export class MaintenanceRequest extends AbstractEntity<MaintenanceRequest> {
 	@PrimaryGeneratedColumn('uuid', { name: 'maintenance_request_id' })
 	maintenanceRequestId: string;
 
-	@Column({ name: 'tenant_id', type: 'uuid' })
-	tenantId: string;
+	@Column({ name: 'tenant_id', type: 'uuid', nullable: true })
+	tenantId?: string | null;
+
+	@Column({ name: 'property_id', type: 'uuid', nullable: true })
+	propertyId?: string | null;
 
 	@Column()
 	description: string;
@@ -43,7 +48,11 @@ export class MaintenanceRequest extends AbstractEntity<MaintenanceRequest> {
 	resolvedAt?: Date;
 
 	// Relations
-	@ManyToOne(() => Tenant, { eager: false })
+	@ManyToOne(() => Tenant, { eager: false, nullable: true })
 	@JoinColumn({ name: 'tenant_id' })
-	tenant: Tenant;
+	tenant?: Tenant;
+
+	@ManyToOne(() => Property, { eager: false, nullable: true })
+	@JoinColumn({ name: 'property_id' })
+	property?: Property;
 }

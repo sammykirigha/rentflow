@@ -31,14 +31,14 @@ export class PermissionsGuard implements CanActivate {
 		if (!user) {
 			throw new ForbiddenException('User not authenticated');
 		}
-		
+
+		// Landlord bypasses all permission checks
+		if (user.roleName === UserRole.LANDLORD) {
+			return true;
+		}
+
 		if (!user.isAdminUser) {
 			throw new ForbiddenException('User not authorized to access this resource');
-		}
-		
-		// Landlord bypasses all permission checks
-		if (user.role === UserRole.LANDLORD || user.userRole?.name === UserRole.LANDLORD) {
-			return true;
 		}
 
 		// Check if user has required permissions

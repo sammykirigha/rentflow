@@ -6,6 +6,13 @@ export enum TenantStatus {
   VACATED = 'vacated',
 }
 
+export enum DepositStatus {
+  PENDING = 'pending',
+  COLLECTED = 'collected',
+  PARTIALLY_REFUNDED = 'partially_refunded',
+  FULLY_REFUNDED = 'fully_refunded',
+}
+
 export interface TenantUser {
   userId: string;
   email: string;
@@ -19,6 +26,8 @@ export interface Tenant {
   userId: string;
   unitId: string;
   walletBalance: number;
+  depositAmount: number;
+  depositStatus: DepositStatus;
   status: TenantStatus;
   leaseStart: string;
   leaseEnd?: string;
@@ -35,4 +44,5 @@ export interface CreateTenantInput {
   unitId: string;
   leaseStart: string;
   leaseEnd?: string;
+  depositAmount?: number;
 }

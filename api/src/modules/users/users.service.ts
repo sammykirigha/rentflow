@@ -95,6 +95,17 @@ export class UsersService {
 		return user;
 	}
 
+	async findOneWithTenant(id: string): Promise<User> {
+		const user = await this.usersRepository.findOne({
+			where: { userId: id },
+			relations: { userRole: true, tenant: true },
+		});
+		if (!user) {
+			throw new NotFoundException('User not found');
+		}
+		return user;
+	}
+
 	async findByEmail(email: string): Promise<User> {
 		return await this.usersRepository.findOne({
 			where: { email },
@@ -222,18 +233,22 @@ export class UsersService {
 
 	async getAdmins(page: number = 1, limit: number = 10, search?: string) {
 		const skip = (page - 1) * limit;
-		let whereSearch: FindOptionsWhere<User>[] = [];
+		const adminRoleFilter = { userRole: { isAdminRole: true } };
+
+		let where: FindOptionsWhere<User> | FindOptionsWhere<User>[];
 
 		if (search) {
-			whereSearch = [
-				{ email: ILike(`%${search}%`) },
-				{ firstName: ILike(`%${search}%`) },
-				{ lastName: ILike(`%${search}%`) },
+			where = [
+				{ ...adminRoleFilter, email: ILike(`%${search}%`) },
+				{ ...adminRoleFilter, firstName: ILike(`%${search}%`) },
+				{ ...adminRoleFilter, lastName: ILike(`%${search}%`) },
 			];
+		} else {
+			where = adminRoleFilter;
 		}
 
 		const [users, total] = await this.usersRepository.findAndCount({
-			where: search ? whereSearch : {},
+			where,
 			skip,
 			take: limit,
 			order: { createdAt: 'DESC' },

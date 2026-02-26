@@ -16,11 +16,6 @@ export class RecordPaymentDto {
 	@IsNotEmpty()
 	tenantId: string;
 
-	@ApiProperty({ description: 'UUID of the invoice (optional)', required: false })
-	@IsUUID()
-	@IsOptional()
-	invoiceId?: string;
-
 	@ApiProperty({ description: 'Payment amount in KES', example: 35000 })
 	@IsNumber()
 	@Min(0.01)

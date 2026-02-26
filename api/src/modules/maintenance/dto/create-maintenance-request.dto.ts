@@ -10,13 +10,20 @@ import {
 	IsOptional,
 	IsString,
 	IsUUID,
+	ValidateIf,
 } from 'class-validator';
 
 export class CreateMaintenanceRequestDto {
-	@ApiProperty({ description: 'UUID of the tenant', example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
+	@ApiProperty({ description: 'UUID of the tenant (optional — resolved from JWT for tenant users)', example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', required: false })
+	@ValidateIf((o) => o.tenantId != null && o.tenantId !== '')
 	@IsUUID()
-	@IsNotEmpty()
-	tenantId: string;
+	tenantId?: string;
+
+	@ApiProperty({ description: 'UUID of the property (required for general/non-tenant maintenance)', example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', required: false })
+	@ValidateIf((o) => o.propertyId != null && o.propertyId !== '')
+	@IsUUID()
+	@IsOptional()
+	propertyId?: string;
 
 	@ApiProperty({ description: 'Description of the maintenance issue', example: 'Leaking kitchen faucet' })
 	@IsString()

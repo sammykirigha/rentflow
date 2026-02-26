@@ -11,6 +11,7 @@ import {
 
 export enum WalletTxnType {
 	CREDIT = 'credit',
+	CREDIT_RECONCILIATION = 'credit_reconciliation',
 	DEBIT_INVOICE = 'debit_invoice',
 	DEBIT_PENALTY = 'debit_penalty',
 	REFUND = 'refund',

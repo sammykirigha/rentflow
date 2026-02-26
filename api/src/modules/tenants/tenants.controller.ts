@@ -14,10 +14,13 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { Permission, RequirePermissions } from '@/common/decorators/permissions.decorator';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '@/common/guards/permissions.guard';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
+import { PermissionAction, PermissionResource } from '@/modules/permissions/entities/permission.entity';
 import { CreateTenantDto } from './dto/create-tenant.dto';
+import { RefundDepositDto } from './dto/refund-deposit.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { TenantStatus } from './entities/tenant.entity';
 import { TenantsService } from './tenants.service';
@@ -31,6 +34,7 @@ export class TenantsController {
 	constructor(private readonly tenantsService: TenantsService) {}
 
 	@Post()
+	@RequirePermissions(Permission(PermissionResource.TENANTS, PermissionAction.CREATE))
 	@ApiOperation({ summary: 'Create a new tenant' })
 	async create(
 		@Body() createTenantDto: CreateTenantDto,
@@ -40,27 +44,32 @@ export class TenantsController {
 	}
 
 	@Get()
+	@RequirePermissions(Permission(PermissionResource.TENANTS, PermissionAction.READ))
 	@ApiOperation({ summary: 'List tenants with pagination, search, and status filter' })
 	@ApiQuery({ name: 'page', required: false, type: Number })
 	@ApiQuery({ name: 'limit', required: false, type: Number })
 	@ApiQuery({ name: 'status', required: false, enum: TenantStatus })
 	@ApiQuery({ name: 'search', required: false, type: String })
+	@ApiQuery({ name: 'propertyId', required: false, type: String })
 	async findAll(
 		@Query('page', new ParseIntPipe({ optional: true })) page: number = 1,
 		@Query('limit', new ParseIntPipe({ optional: true })) limit: number = 10,
 		@Query('status') status?: TenantStatus,
 		@Query('search') search?: string,
+		@Query('propertyId') propertyId?: string,
 	) {
-		return this.tenantsService.findAll({ page, limit, status, search });
+		return this.tenantsService.findAll({ page, limit, status, search, propertyId });
 	}
 
 	@Get(':tenantId')
+	@RequirePermissions(Permission(PermissionResource.TENANTS, PermissionAction.READ))
 	@ApiOperation({ summary: 'Get a single tenant by ID' })
 	async findOne(@Param('tenantId') tenantId: string) {
 		return this.tenantsService.findOne(tenantId);
 	}
 
 	@Patch(':tenantId')
+	@RequirePermissions(Permission(PermissionResource.TENANTS, PermissionAction.UPDATE))
 	@ApiOperation({ summary: 'Update tenant details' })
 	async update(
 		@Param('tenantId') tenantId: string,
@@ -70,7 +79,19 @@ export class TenantsController {
 		return this.tenantsService.update(tenantId, updateTenantDto, user.sub);
 	}
 
+	@Post(':tenantId/refund-deposit')
+	@RequirePermissions(Permission(PermissionResource.TENANTS, PermissionAction.UPDATE))
+	@ApiOperation({ summary: 'Refund security deposit to tenant wallet' })
+	async refundDeposit(
+		@Param('tenantId') tenantId: string,
+		@Body() dto: RefundDepositDto,
+		@CurrentUser() user: JwtPayload,
+	) {
+		return this.tenantsService.refundDeposit(tenantId, dto, user.sub);
+	}
+
 	@Post(':tenantId/vacate')
+	@RequirePermissions(Permission(PermissionResource.TENANTS, PermissionAction.UPDATE))
 	@ApiOperation({ summary: 'Vacate a tenant from their unit' })
 	async vacate(
 		@Param('tenantId') tenantId: string,
@@ -80,6 +101,7 @@ export class TenantsController {
 	}
 
 	@Delete(':tenantId')
+	@RequirePermissions(Permission(PermissionResource.TENANTS, PermissionAction.DELETE))
 	@ApiOperation({ summary: 'Permanently delete a vacated tenant and all associated records' })
 	async delete(
 		@Param('tenantId') tenantId: string,

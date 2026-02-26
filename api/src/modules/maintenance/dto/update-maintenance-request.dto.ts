@@ -8,8 +8,10 @@ import {
 	IsArray,
 	IsDateString,
 	IsEnum,
+	IsNumber,
 	IsOptional,
 	IsString,
+	Min,
 } from 'class-validator';
 
 export class UpdateMaintenanceRequestDto {
@@ -43,4 +45,10 @@ export class UpdateMaintenanceRequestDto {
 	@IsDateString()
 	@IsOptional()
 	resolvedAt?: string;
+
+	@ApiProperty({ description: 'Expense amount to record when completing the request (KES)', required: false })
+	@IsNumber()
+	@Min(0)
+	@IsOptional()
+	expenseAmount?: number;
 }

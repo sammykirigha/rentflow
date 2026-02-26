@@ -10,7 +10,7 @@ import {
 } from '@/modules/notifications/entities/notification.entity';
 import { Invoice } from '@/modules/invoices/entities/invoice.entity';
 import { Payment } from '@/modules/payments/entities/payment.entity';
-import { WalletTransaction } from '@/modules/wallet/entities/wallet-transaction.entity';
+import { WalletTransaction, WalletTxnType } from '@/modules/wallet/entities/wallet-transaction.entity';
 import { Receipt } from '@/modules/receipts/entities/receipt.entity';
 import { MaintenanceRequest } from '@/modules/maintenance/entities/maintenance-request.entity';
 import {
@@ -34,8 +34,9 @@ import { UnitsService } from '../units/units.service';
 import { SmsService } from '../sms/sms.service';
 import { MailService } from '../mail/mail.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
+import { RefundDepositDto } from './dto/refund-deposit.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
-import { Tenant, TenantStatus } from './entities/tenant.entity';
+import { Tenant, TenantStatus, DepositStatus } from './entities/tenant.entity';
 import { TenantsRepository } from './tenants.repository';
 
 @Injectable()
@@ -144,6 +145,8 @@ export class TenantsService {
 					leaseStart: new Date(dto.leaseStart),
 					leaseEnd: dto.leaseEnd ? new Date(dto.leaseEnd) : undefined,
 					status: TenantStatus.ACTIVE,
+					depositAmount: dto.depositAmount || 0,
+					depositStatus: DepositStatus.PENDING,
 				}),
 			);
 
@@ -172,7 +175,12 @@ export class TenantsService {
 			await queryRunner.release();
 		}
 
-		// 9. Log audit
+		// 9. If deposit > 0, generate the first invoice with deposit included
+		if (dto.depositAmount && dto.depositAmount > 0) {
+			await this.generateDepositInvoice(tenant.tenantId, unit, dto.depositAmount);
+		}
+
+		// 10. Log audit
 		await this.auditService.createLog({
 			action: AuditAction.TENANT_CREATED,
 			performedBy: adminUserId,
@@ -185,10 +193,11 @@ export class TenantsService {
 				unitId: dto.unitId,
 				unitNumber: unit.unitNumber,
 				email: dto.email,
+				depositAmount: dto.depositAmount || 0,
 			},
 		});
 
-		// 10. Send welcome credentials (fire-and-forget)
+		// 12. Send welcome credentials (fire-and-forget)
 		this.sendWelcomeCredentials({
 			tenantId: tenant.tenantId,
 			name: dto.name,
@@ -200,7 +209,7 @@ export class TenantsService {
 			this.logger.error(`Failed to send welcome credentials to ${dto.email}: ${err.message}`);
 		});
 
-		// 11. Return tenant with relations loaded
+		// 13. Return tenant with relations loaded
 		return this.tenantsRepository.findOne({
 			where: { tenantId: tenant.tenantId },
 			relations: { user: true, unit: { property: true } },
@@ -276,16 +285,167 @@ export class TenantsService {
 		this.logger.log(`Welcome credentials sent to ${name} (${email}) via SMS and Email`);
 	}
 
+	/**
+	 * Generate the first invoice for a tenant with the security deposit included as otherCharges.
+	 */
+	private async generateDepositInvoice(tenantId: string, unit: Unit, depositAmount: number): Promise<void> {
+		const now = new Date();
+		const billingMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
+		const dueDay = parseInt(process.env.INVOICE_DUE_DAY || '5', 10);
+		const dueDate = new Date(Date.UTC(billingMonth.getFullYear(), billingMonth.getMonth(), dueDay));
+
+		const rentAmount = parseFloat(String(unit.rentAmount));
+		const otherCharges = depositAmount;
+		const subtotal = rentAmount + otherCharges;
+		const totalAmount = subtotal;
+
+		const year = billingMonth.getFullYear();
+		const month = String(billingMonth.getMonth() + 1).padStart(2, '0');
+		const invoiceNumber = `INV-${unit.unitNumber}-${year}-${month}`;
+
+		const queryRunner = this.dataSource.createQueryRunner();
+		await queryRunner.connect();
+		await queryRunner.startTransaction();
+
+		try {
+			// Check if invoice already exists for this tenant/month (avoid duplicates)
+			const existing = await queryRunner.manager.findOne(Invoice, {
+				where: { tenantId, billingMonth },
+			});
+
+			if (existing) {
+				this.logger.warn(`Invoice already exists for tenant ${tenantId} for billing month ${billingMonth.toISOString()}, skipping deposit invoice`);
+				await queryRunner.rollbackTransaction();
+				return;
+			}
+
+			await queryRunner.manager.save(
+				queryRunner.manager.create(Invoice, {
+					invoiceNumber,
+					tenantId,
+					billingMonth,
+					rentAmount,
+					waterCharge: 0,
+					electricityCharge: 0,
+					otherCharges,
+					otherChargesDesc: 'Security Deposit',
+					subtotal,
+					penaltyAmount: 0,
+					totalAmount,
+					amountPaid: 0,
+					balanceDue: totalAmount,
+					status: 'unpaid' as any,
+					dueDate,
+				}),
+			);
+
+			await queryRunner.commitTransaction();
+			this.logger.log(`Generated deposit invoice ${invoiceNumber} for tenant ${tenantId}, deposit: KES ${depositAmount}`);
+		} catch (err) {
+			await queryRunner.rollbackTransaction();
+			this.logger.error(`Failed to generate deposit invoice for tenant ${tenantId}: ${err.message}`);
+		} finally {
+			await queryRunner.release();
+		}
+	}
+
+	async refundDeposit(tenantId: string, dto: RefundDepositDto, userId: string): Promise<Tenant> {
+		const tenant = await this.findOne(tenantId);
+
+		if (tenant.depositStatus !== DepositStatus.COLLECTED &&
+			tenant.depositStatus !== DepositStatus.PARTIALLY_REFUNDED) {
+			throw new BadRequestException('No collected deposit available to refund');
+		}
+
+		const depositAmount = parseFloat(String(tenant.depositAmount));
+		const deductions = dto.deductions || [];
+		const totalDeductions = deductions.reduce((sum, d) => sum + d.amount, 0);
+		const totalAccountedFor = parseFloat((dto.amount + totalDeductions).toFixed(2));
+
+		if (totalAccountedFor > depositAmount) {
+			throw new BadRequestException(
+				`Refund (${dto.amount}) + deductions (${totalDeductions}) = ${totalAccountedFor} exceeds remaining deposit of KES ${depositAmount}`,
+			);
+		}
+
+		const queryRunner = this.dataSource.createQueryRunner();
+		await queryRunner.connect();
+		await queryRunner.startTransaction();
+
+		try {
+			const currentBalance = parseFloat(String(tenant.walletBalance));
+			const newBalance = dto.amount > 0
+				? parseFloat((currentBalance + dto.amount).toFixed(2))
+				: currentBalance;
+			const remainingDeposit = parseFloat((depositAmount - totalAccountedFor).toFixed(2));
+
+			await queryRunner.manager.update(Tenant, { tenantId }, {
+				walletBalance: newBalance,
+				depositAmount: remainingDeposit,
+				depositStatus: remainingDeposit <= 0
+					? DepositStatus.FULLY_REFUNDED
+					: DepositStatus.PARTIALLY_REFUNDED,
+			} as any);
+
+			// Only create wallet transaction if there's an actual refund to wallet
+			if (dto.amount > 0) {
+				const deductionSummary = deductions.length > 0
+					? ` (after deductions: ${deductions.map(d => `${d.description} KES ${d.amount}`).join(', ')})`
+					: '';
+
+				await queryRunner.manager.save(
+					queryRunner.manager.create(WalletTransaction, {
+						tenantId,
+						type: WalletTxnType.REFUND,
+						amount: dto.amount,
+						balanceBefore: currentBalance,
+						balanceAfter: newBalance,
+						reference: 'DEPOSIT-REFUND',
+						description: `Security deposit refund of KES ${dto.amount}${deductionSummary}`,
+					}),
+				);
+			}
+
+			await queryRunner.commitTransaction();
+		} catch (err) {
+			await queryRunner.rollbackTransaction();
+			throw err;
+		} finally {
+			await queryRunner.release();
+		}
+
+		await this.auditService.createLog({
+			action: AuditAction.DEPOSIT_REFUNDED,
+			performedBy: userId,
+			targetType: AuditTargetType.TENANT,
+			targetId: tenantId,
+			details: deductions.length > 0
+				? `Refunded KES ${dto.amount} deposit to ${tenant.user?.firstName} ${tenant.user?.lastName} with KES ${totalDeductions} in damage deductions`
+				: `Refunded KES ${dto.amount} deposit to ${tenant.user?.firstName} ${tenant.user?.lastName}`,
+			metadata: {
+				tenantId,
+				refundAmount: dto.amount,
+				originalDeposit: depositAmount,
+				deductions: deductions.length > 0 ? deductions : undefined,
+				totalDeductions: deductions.length > 0 ? totalDeductions : undefined,
+			},
+		});
+
+		return this.findOne(tenantId);
+	}
+
 	async findAll({
 		page = 1,
 		limit = 10,
 		status,
 		search,
+		propertyId,
 	}: {
 		page: number;
 		limit: number;
 		status?: TenantStatus;
 		search?: string;
+		propertyId?: string;
 	}): Promise<{
 		data: Tenant[];
 		pagination: {
@@ -317,6 +477,10 @@ export class TenantsService {
 			);
 		}
 
+		if (propertyId) {
+			queryBuilder.andWhere('property.propertyId = :propertyId', { propertyId });
+		}
+
 		const [tenants, total] = await queryBuilder.getManyAndCount();
 
 		return {
@@ -346,6 +510,32 @@ export class TenantsService {
 	async update(tenantId: string, dto: UpdateTenantDto, userId: string): Promise<Tenant> {
 		const tenant = await this.findOne(tenantId);
 
+		const isReactivating =
+			tenant.status === TenantStatus.VACATED &&
+			dto.status !== undefined &&
+			dto.status !== TenantStatus.VACATED;
+
+		// Reactivating a vacated tenant requires a unit assignment
+		if (isReactivating && !dto.unitId) {
+			throw new BadRequestException(
+				'A unit must be assigned when reactivating a vacated tenant',
+			);
+		}
+
+		// Prevent setting status to vacated via update — use the vacate endpoint instead
+		if (dto.status === TenantStatus.VACATED && tenant.status !== TenantStatus.VACATED) {
+			throw new BadRequestException(
+				'Use the vacate endpoint to vacate a tenant',
+			);
+		}
+
+		// unitId should only be provided when reactivating
+		if (dto.unitId && !isReactivating) {
+			throw new BadRequestException(
+				'Unit reassignment is only allowed when reactivating a vacated tenant',
+			);
+		}
+
 		const updateData: Partial<Tenant> = {};
 
 		if (dto.leaseEnd !== undefined) {
@@ -361,7 +551,28 @@ export class TenantsService {
 		await queryRunner.startTransaction();
 
 		try {
-			await queryRunner.manager.update(Tenant, { tenantId }, updateData as any);
+			if (isReactivating) {
+				// Verify the target unit exists and is not occupied
+				const unit = await queryRunner.manager.findOne(Unit, {
+					where: { unitId: dto.unitId },
+				});
+
+				if (!unit) {
+					throw new NotFoundException('Unit not found');
+				}
+
+				if (unit.isOccupied) {
+					throw new BadRequestException('Unit is already occupied');
+				}
+
+				updateData.unitId = dto.unitId;
+
+				await queryRunner.manager.update(Tenant, { tenantId }, updateData as any);
+				await queryRunner.manager.update(Unit, dto.unitId, { isOccupied: true });
+			} else {
+				await queryRunner.manager.update(Tenant, { tenantId }, updateData as any);
+			}
+
 			await queryRunner.commitTransaction();
 		} catch (err) {
 			await queryRunner.rollbackTransaction();
@@ -370,15 +581,20 @@ export class TenantsService {
 			await queryRunner.release();
 		}
 
+		const tenantName = `${tenant.user?.firstName || ''} ${tenant.user?.lastName || ''}`.trim();
+
 		await this.auditService.createLog({
 			action: AuditAction.TENANT_UPDATED,
 			performedBy: userId,
 			targetType: AuditTargetType.TENANT,
 			targetId: tenantId,
-			details: `Updated tenant "${tenant.user?.firstName} ${tenant.user?.lastName}"`,
+			details: isReactivating
+				? `Reactivated tenant "${tenantName}" and assigned to unit ${dto.unitId}`
+				: `Updated tenant "${tenantName}"`,
 			metadata: {
 				tenantId,
 				updatedFields: Object.keys(updateData),
+				...(isReactivating ? { unitId: dto.unitId } : {}),
 			},
 		});
 
@@ -390,6 +606,12 @@ export class TenantsService {
 
 		if (tenant.status === TenantStatus.VACATED) {
 			throw new BadRequestException('Tenant is already vacated');
+		}
+
+		if (!tenant.unitId) {
+			throw new BadRequestException(
+				'Cannot vacate tenant: no unit is currently assigned. The tenant may have already been disassociated from their unit.',
+			);
 		}
 
 		const queryRunner = this.dataSource.createQueryRunner();
@@ -411,7 +633,7 @@ export class TenantsService {
 		} catch (err) {
 			await queryRunner.rollbackTransaction();
 			this.logger.error(`Failed to vacate tenant: ${err.message}`);
-			throw err;
+			throw new BadRequestException('Failed to vacate tenant. Please try again or contact support.');
 		} finally {
 			await queryRunner.release();
 		}

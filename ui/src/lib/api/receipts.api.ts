@@ -5,6 +5,10 @@ export const receiptsApi = {
     const response = await api.get('/receipts', { params });
     return response.data;
   },
+  getMy: async (params?: { page?: number; limit?: number }) => {
+    const response = await api.get('/receipts/my', { params });
+    return response.data;
+  },
   getOne: async (receiptId: string) => {
     const response = await api.get(`/receipts/${receiptId}`);
     return response.data;

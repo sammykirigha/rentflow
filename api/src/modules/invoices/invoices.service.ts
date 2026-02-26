@@ -9,7 +9,7 @@ import { MailService } from '../mail/mail.service';
 import { WalletService } from '../wallet/wallet.service';
 import { PdfService } from '../pdf/pdf.service';
 import { SettingsService } from '../settings/settings.service';
-import { Tenant } from '@/modules/tenants/entities/tenant.entity';
+import { Tenant, DepositStatus } from '@/modules/tenants/entities/tenant.entity';
 import { Receipt } from '@/modules/receipts/entities/receipt.entity';
 import { Notification, NotificationChannel, NotificationStatus, NotificationType } from '@/modules/notifications/entities/notification.entity';
 import { InvoicePdfData } from '../pdf/interfaces/pdf-data.interface';
@@ -123,10 +123,36 @@ export class InvoicesService {
 			relations: { tenant: true },
 		});
 
-		// Send notification (fire-and-forget)
-		this.sendInvoiceNotification(updatedInvoice).catch((err) =>
-			this.logger.error(`Failed to send invoice notification: ${err.message}`),
-		);
+		// Send notifications based on settlement result (fire-and-forget)
+		if (updatedInvoice.status === InvoiceStatus.PAID) {
+			// Fully auto-settled: send receipt only (no invoice)
+			const receipt = await this.receiptRepository.findOne({
+				where: { invoiceId: updatedInvoice.invoiceId },
+			});
+			if (receipt) {
+				this.sendReceiptNotification(receipt.receiptId).catch((err) =>
+					this.logger.error(`Failed to send receipt notification: ${err.message}`),
+				);
+			}
+		} else if (updatedInvoice.status === InvoiceStatus.PARTIALLY_PAID) {
+			// Partial settlement: send invoice (remaining balance) + receipt (partial payment)
+			this.sendInvoiceNotification(updatedInvoice).catch((err) =>
+				this.logger.error(`Failed to send invoice notification: ${err.message}`),
+			);
+			const receipt = await this.receiptRepository.findOne({
+				where: { invoiceId: updatedInvoice.invoiceId },
+			});
+			if (receipt) {
+				this.sendReceiptNotification(receipt.receiptId).catch((err) =>
+					this.logger.error(`Failed to send receipt notification: ${err.message}`),
+				);
+			}
+		} else {
+			// Unpaid: send invoice only
+			this.sendInvoiceNotification(updatedInvoice).catch((err) =>
+				this.logger.error(`Failed to send invoice notification: ${err.message}`),
+			);
+		}
 
 		return updatedInvoice;
 	}
@@ -155,6 +181,7 @@ export class InvoicesService {
 			companyEmail: settings.supportEmail || 'support@rentflow.co.ke',
 			companyPhone: settings.contactPhone || undefined,
 			companyAddress: settings.contactAddress || undefined,
+			companyLogoUrl: settings.appLogo || undefined,
 
 			invoiceNumber: invoice.invoiceNumber,
 			invoiceDate: new Date(invoice.createdAt).toLocaleDateString('en-KE'),
@@ -215,6 +242,7 @@ export class InvoicesService {
 				totalAmount,
 				invoiceNumber,
 				`Auto-deduction for invoice ${invoiceNumber}`,
+				userId,
 			);
 
 			// Invoice update + receipt creation in a transaction
@@ -230,11 +258,7 @@ export class InvoicesService {
 					paidAt: new Date(),
 				} as any);
 
-				const unitNumber = tenant.unit?.unitNumber || 'UNKNOWN';
-				const billingMonth = invoice.billingMonth;
-				const rcpYear = new Date(billingMonth).getFullYear();
-				const rcpMonth = String(new Date(billingMonth).getMonth() + 1).padStart(2, '0');
-				const receiptNumber = `RCP-${unitNumber}-${rcpYear}-${rcpMonth}`;
+				const receiptNumber = invoiceNumber.replace(/^INV-/, 'RCP-');
 
 				await queryRunner.manager.save(
 					queryRunner.manager.create(Receipt, {
@@ -243,6 +267,16 @@ export class InvoicesService {
 						totalPaid: totalAmount,
 					}),
 				);
+
+				// Update deposit status to COLLECTED if this invoice contains a security deposit
+				if (invoice.otherChargesDesc?.includes('Security Deposit')) {
+					const currentTenant = await queryRunner.manager.findOne(Tenant, { where: { tenantId } });
+					if (currentTenant && currentTenant.depositStatus === DepositStatus.PENDING) {
+						await queryRunner.manager.update(Tenant, tenantId, {
+							depositStatus: DepositStatus.COLLECTED,
+						});
+					}
+				}
 
 				await queryRunner.commitTransaction();
 			} catch (err) {
@@ -280,6 +314,7 @@ export class InvoicesService {
 				walletBalance,
 				invoiceNumber,
 				`Partial auto-deduction for invoice ${invoiceNumber}`,
+				userId,
 			);
 
 			const queryRunner = this.dataSource.createQueryRunner();
@@ -292,6 +327,16 @@ export class InvoicesService {
 					balanceDue: remaining,
 					status: InvoiceStatus.PARTIALLY_PAID,
 				} as any);
+
+				// Generate receipt for partial payment
+				const receiptNumber = invoiceNumber.replace(/^INV-/, 'RCP-');
+				await queryRunner.manager.save(
+					queryRunner.manager.create(Receipt, {
+						receiptNumber,
+						invoiceId: invoice.invoiceId,
+						totalPaid: walletBalance,
+					}),
+				);
 
 				await queryRunner.commitTransaction();
 			} catch (err) {
@@ -325,7 +370,7 @@ export class InvoicesService {
 	}
 
 	/**
-	 * Send invoice notification via SMS + Email (with PDF) + WhatsApp (fire-and-forget).
+	 * Send invoice notification via SMS + Email (with PDF attachment).
 	 * Creates Notification records in the database.
 	 */
 	async sendInvoiceNotification(invoice: Invoice): Promise<void> {
@@ -366,81 +411,58 @@ export class InvoicesService {
 			(Number(invoice.balanceDue) > 0 ? ` Balance due: KES ${Number(invoice.balanceDue).toLocaleString()}.` : '');
 
 		if (user.phone) {
-			const smsResult = await this.smsService.sendSms(user.phone, smsMessage);
-			await this.notificationRepository.save(
-				this.notificationRepository.create({
-					tenantId: invoice.tenantId,
-					invoiceId: invoice.invoiceId,
-					type: NotificationType.INVOICE_SENT,
-					channel: NotificationChannel.SMS,
-					message: smsMessage,
-					...(smsResult.success
-						? { sentAt: new Date(), status: NotificationStatus.SENT }
-						: { failReason: 'SMS delivery failed', status: NotificationStatus.FAILED, retryCount: 0 }),
-				}),
-			);
+			try {
+				const smsResult = await this.smsService.sendSms(user.phone, smsMessage);
+				await this.notificationRepository.save(
+					this.notificationRepository.create({
+						tenantId: invoice.tenantId,
+						invoiceId: invoice.invoiceId,
+						type: NotificationType.INVOICE_SENT,
+						channel: NotificationChannel.SMS,
+						message: smsMessage,
+						...(smsResult.success
+							? { sentAt: new Date(), status: NotificationStatus.SENT }
+							: { failReason: 'SMS delivery failed', status: NotificationStatus.FAILED, retryCount: 0 }),
+					}),
+				);
+			} catch (err) {
+				this.logger.error(`SMS notification failed for invoice ${invoice.invoiceNumber}: ${err.message}`);
+			}
 		}
 
 		// 2. Email notification (with PDF attachment)
 		if (user.email) {
-			const subject = `RentFlow Invoice ${invoice.invoiceNumber} — ${billingMonthStr}`;
-			const html = this.buildInvoiceEmailHtml(invoice, tenantName, billingMonthStr, dueDateStr);
+			try {
+				const subject = `RentFlow Invoice ${invoice.invoiceNumber} — ${billingMonthStr}`;
+				const html = this.buildInvoiceEmailHtml(invoice, tenantName, billingMonthStr, dueDateStr);
 
-			const attachments = pdfBuffer
-				? [{ filename: `${invoice.invoiceNumber}.pdf`, content: pdfBuffer }]
-				: undefined;
+				const attachments = pdfBuffer
+					? [{ filename: `${invoice.invoiceNumber}.pdf`, content: pdfBuffer }]
+					: undefined;
 
-			const emailResult = await this.mailService.sendEmail({ to: user.email, subject, html, attachments });
-			await this.notificationRepository.save(
-				this.notificationRepository.create({
-					tenantId: invoice.tenantId,
-					invoiceId: invoice.invoiceId,
-					type: NotificationType.INVOICE_SENT,
-					channel: NotificationChannel.EMAIL,
-					subject,
-					message: `Invoice email sent to ${user.email}`,
-					...(emailResult
-						? { sentAt: new Date(), status: NotificationStatus.SENT }
-						: { failReason: 'Email delivery failed', status: NotificationStatus.FAILED, retryCount: 0 }),
-				}),
-			);
+				const emailResult = await this.mailService.sendEmail({ to: user.email, subject, html, attachments });
+				await this.notificationRepository.save(
+					this.notificationRepository.create({
+						tenantId: invoice.tenantId,
+						invoiceId: invoice.invoiceId,
+						type: NotificationType.INVOICE_SENT,
+						channel: NotificationChannel.EMAIL,
+						subject,
+						message: `Invoice email sent to ${user.email}`,
+						...(emailResult
+							? { sentAt: new Date(), status: NotificationStatus.SENT }
+							: { failReason: 'Email delivery failed', status: NotificationStatus.FAILED, retryCount: 0 }),
+					}),
+				);
+			} catch (err) {
+				this.logger.error(`Email notification failed for invoice ${invoice.invoiceNumber}: ${err.message}`);
+			}
 		}
 
-		// 3. WhatsApp notification (rich text summary)
-		if (user.phone) {
-			const whatsappMessage =
-				`*RentFlow Invoice*\n\n` +
-				`Invoice: *${invoice.invoiceNumber}*\n` +
-				`Period: ${billingMonthStr}\n` +
-				`Due Date: ${dueDateStr}\n\n` +
-				`Rent: KES ${Number(invoice.rentAmount).toLocaleString()}\n` +
-				(Number(invoice.waterCharge) > 0 ? `Water: KES ${Number(invoice.waterCharge).toLocaleString()}\n` : '') +
-				(Number(invoice.electricityCharge) > 0 ? `Electricity: KES ${Number(invoice.electricityCharge).toLocaleString()}\n` : '') +
-				(Number(invoice.otherCharges) > 0 ? `Other: KES ${Number(invoice.otherCharges).toLocaleString()}\n` : '') +
-				(Number(invoice.penaltyAmount) > 0 ? `Penalty: KES ${Number(invoice.penaltyAmount).toLocaleString()}\n` : '') +
-				`\n*Total: KES ${Number(invoice.totalAmount).toLocaleString()}*\n` +
-				(Number(invoice.amountPaid) > 0 ? `Paid: KES ${Number(invoice.amountPaid).toLocaleString()}\n` : '') +
-				(Number(invoice.balanceDue) > 0 ? `*Balance Due: KES ${Number(invoice.balanceDue).toLocaleString()}*\n` : '') +
-				`\nStatus: ${invoice.status.toUpperCase()}`;
-
-			const waResult = await this.smsService.sendWhatsApp(user.phone, whatsappMessage);
-			await this.notificationRepository.save(
-				this.notificationRepository.create({
-					tenantId: invoice.tenantId,
-					invoiceId: invoice.invoiceId,
-					type: NotificationType.INVOICE_SENT,
-					channel: NotificationChannel.WHATSAPP,
-					message: whatsappMessage,
-					...(waResult.success
-						? { sentAt: new Date(), status: NotificationStatus.SENT }
-						: { failReason: 'WhatsApp delivery failed', status: NotificationStatus.FAILED, retryCount: 0 }),
-				}),
-			);
-		}
 	}
 
 	/**
-	 * Send receipt notification via SMS + Email (with PDF) + WhatsApp.
+	 * Send receipt notification via SMS + Email (with PDF attachment).
 	 */
 	async sendReceiptNotification(receiptId: string): Promise<void> {
 		const receipt = await this.receiptRepository.findOne({
@@ -471,6 +493,7 @@ export class InvoicesService {
 				companyEmail: settings.supportEmail || 'support@rentflow.co.ke',
 				companyPhone: settings.contactPhone || undefined,
 				companyAddress: settings.contactAddress || undefined,
+				companyLogoUrl: settings.appLogo || undefined,
 
 				receiptNumber: receipt.receiptNumber,
 				receiptDate: new Date(receipt.createdAt).toLocaleDateString('en-KE'),
@@ -502,83 +525,66 @@ export class InvoicesService {
 			`Invoice ${invoice.invoiceNumber} is now PAID. Thank you!`;
 
 		if (user.phone) {
-			const smsResult = await this.smsService.sendSms(user.phone, smsMessage);
-			await this.notificationRepository.save(
-				this.notificationRepository.create({
-					tenantId: tenant.tenantId,
-					invoiceId: invoice.invoiceId,
-					type: NotificationType.RECEIPT_SENT,
-					channel: NotificationChannel.SMS,
-					message: smsMessage,
-					...(smsResult.success
-						? { sentAt: new Date(), status: NotificationStatus.SENT }
-						: { failReason: 'SMS delivery failed', status: NotificationStatus.FAILED }),
-				}),
-			);
+			try {
+				const smsResult = await this.smsService.sendSms(user.phone, smsMessage);
+				await this.notificationRepository.save(
+					this.notificationRepository.create({
+						tenantId: tenant.tenantId,
+						invoiceId: invoice.invoiceId,
+						type: NotificationType.RECEIPT_SENT,
+						channel: NotificationChannel.SMS,
+						message: smsMessage,
+						...(smsResult.success
+							? { sentAt: new Date(), status: NotificationStatus.SENT }
+							: { failReason: 'SMS delivery failed', status: NotificationStatus.FAILED }),
+					}),
+				);
+			} catch (err) {
+				this.logger.error(`SMS receipt notification failed for ${receipt.receiptNumber}: ${err.message}`);
+			}
 		}
 
 		// 2. Email with PDF
 		if (user.email) {
-			const subject = `RentFlow Receipt ${receipt.receiptNumber} — ${billingMonthStr}`;
-			const html = `
-				<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-					<h2 style="color:#52c41a">Payment Receipt</h2>
-					<p>Dear ${tenantName},</p>
-					<p>Thank you for your payment! Your receipt <strong>${receipt.receiptNumber}</strong> for <strong>${billingMonthStr}</strong> is attached.</p>
-					<p><strong>Total Paid:</strong> KES ${Number(receipt.totalPaid).toLocaleString()}</p>
-					<p><strong>Invoice:</strong> ${invoice.invoiceNumber}</p>
-					<p style="color:#52c41a;font-weight:bold">This invoice has been fully paid.</p>
-					${pdfBuffer ? '<p>Please find the receipt PDF attached to this email.</p>' : ''}
-					<hr style="border:none;border-top:1px solid #eee;margin:24px 0" />
-					<p style="color:#999;font-size:12px">This is an automated message from RentFlow.</p>
-				</div>
-			`;
+			try {
+				const subject = `RentFlow Receipt ${receipt.receiptNumber} — ${billingMonthStr}`;
+				const html = `
+					<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+						<h2 style="color:#52c41a">Payment Receipt</h2>
+						<p>Dear ${tenantName},</p>
+						<p>Thank you for your payment! Your receipt <strong>${receipt.receiptNumber}</strong> for <strong>${billingMonthStr}</strong> is attached.</p>
+						<p><strong>Total Paid:</strong> KES ${Number(receipt.totalPaid).toLocaleString()}</p>
+						<p><strong>Invoice:</strong> ${invoice.invoiceNumber}</p>
+						<p style="color:#52c41a;font-weight:bold">This invoice has been fully paid.</p>
+						${pdfBuffer ? '<p>Please find the receipt PDF attached to this email.</p>' : ''}
+						<hr style="border:none;border-top:1px solid #eee;margin:24px 0" />
+						<p style="color:#999;font-size:12px">This is an automated message from RentFlow.</p>
+					</div>
+				`;
 
-			const attachments = pdfBuffer
-				? [{ filename: `${receipt.receiptNumber}.pdf`, content: pdfBuffer }]
-				: undefined;
+				const attachments = pdfBuffer
+					? [{ filename: `${receipt.receiptNumber}.pdf`, content: pdfBuffer }]
+					: undefined;
 
-			const emailResult = await this.mailService.sendEmail({ to: user.email, subject, html, attachments });
-			await this.notificationRepository.save(
-				this.notificationRepository.create({
-					tenantId: tenant.tenantId,
-					invoiceId: invoice.invoiceId,
-					type: NotificationType.RECEIPT_SENT,
-					channel: NotificationChannel.EMAIL,
-					subject,
-					message: `Receipt email sent to ${user.email}`,
-					...(emailResult
-						? { sentAt: new Date(), status: NotificationStatus.SENT }
-						: { failReason: 'Email delivery failed', status: NotificationStatus.FAILED }),
-				}),
-			);
+				const emailResult = await this.mailService.sendEmail({ to: user.email, subject, html, attachments });
+				await this.notificationRepository.save(
+					this.notificationRepository.create({
+						tenantId: tenant.tenantId,
+						invoiceId: invoice.invoiceId,
+						type: NotificationType.RECEIPT_SENT,
+						channel: NotificationChannel.EMAIL,
+						subject,
+						message: `Receipt email sent to ${user.email}`,
+						...(emailResult
+							? { sentAt: new Date(), status: NotificationStatus.SENT }
+							: { failReason: 'Email delivery failed', status: NotificationStatus.FAILED }),
+					}),
+				);
+			} catch (err) {
+				this.logger.error(`Email receipt notification failed for ${receipt.receiptNumber}: ${err.message}`);
+			}
 		}
 
-		// 3. WhatsApp
-		if (user.phone) {
-			const waMessage =
-				`*RentFlow Payment Receipt*\n\n` +
-				`Receipt: *${receipt.receiptNumber}*\n` +
-				`Invoice: ${invoice.invoiceNumber}\n` +
-				`Period: ${billingMonthStr}\n` +
-				`Total Paid: *KES ${Number(receipt.totalPaid).toLocaleString()}*\n\n` +
-				`Status: PAID IN FULL\n` +
-				`Thank you for your payment!`;
-
-			const waResult = await this.smsService.sendWhatsApp(user.phone, waMessage);
-			await this.notificationRepository.save(
-				this.notificationRepository.create({
-					tenantId: tenant.tenantId,
-					invoiceId: invoice.invoiceId,
-					type: NotificationType.RECEIPT_SENT,
-					channel: NotificationChannel.WHATSAPP,
-					message: waMessage,
-					...(waResult.success
-						? { sentAt: new Date(), status: NotificationStatus.SENT }
-						: { failReason: 'WhatsApp delivery failed', status: NotificationStatus.FAILED }),
-				}),
-			);
-		}
 	}
 
 	private buildInvoiceEmailHtml(
@@ -768,6 +774,16 @@ export class InvoicesService {
 				status: newStatus,
 				...(newStatus === InvoiceStatus.PAID ? { paidAt: new Date() } : {}),
 			} as any);
+
+			// Update deposit status to COLLECTED if this invoice contains a security deposit
+			if (newStatus === InvoiceStatus.PAID && invoice.otherChargesDesc?.includes('Security Deposit')) {
+				const tenant = await queryRunner.manager.findOne(Tenant, { where: { tenantId: invoice.tenantId } });
+				if (tenant && tenant.depositStatus === DepositStatus.PENDING) {
+					await queryRunner.manager.update(Tenant, invoice.tenantId, {
+						depositStatus: DepositStatus.COLLECTED,
+					});
+				}
+			}
 
 			await queryRunner.commitTransaction();
 		} catch (err) {

@@ -42,6 +42,38 @@ export class ReceiptsService {
 		};
 	}
 
+	async findByTenant(
+		tenantId: string,
+		{ page = 1, limit = 10 }: { page: number; limit: number },
+	): Promise<{
+		data: Receipt[];
+		pagination: { page: number; limit: number; total: number; totalPages: number };
+	}> {
+		const skip = (page - 1) * limit;
+
+		const queryBuilder = this.receiptsRepository
+			.createQueryBuilder('receipt')
+			.leftJoinAndSelect('receipt.invoice', 'invoice')
+			.leftJoinAndSelect('invoice.tenant', 'tenant')
+			.leftJoinAndSelect('tenant.user', 'user')
+			.where('invoice.tenantId = :tenantId', { tenantId })
+			.orderBy('receipt.createdAt', 'DESC')
+			.skip(skip)
+			.take(limit);
+
+		const [receipts, total] = await queryBuilder.getManyAndCount();
+
+		return {
+			data: receipts,
+			pagination: {
+				page,
+				limit,
+				total,
+				totalPages: Math.ceil(total / limit),
+			},
+		};
+	}
+
 	async findOne(receiptId: string): Promise<Receipt> {
 		const receipt = await this.receiptsRepository.findOne({
 			where: { receiptId },
@@ -71,6 +103,7 @@ export class ReceiptsService {
 			companyEmail: settings.supportEmail || 'support@rentflow.co.ke',
 			companyPhone: settings.contactPhone || undefined,
 			companyAddress: settings.contactAddress || undefined,
+			companyLogoUrl: settings.appLogo || undefined,
 
 			receiptNumber: receipt.receiptNumber,
 			receiptDate: new Date(receipt.createdAt).toLocaleDateString('en-KE'),

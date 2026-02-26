@@ -1,9 +1,11 @@
 'use client';
 
 import { useSettings, useUpdateSettings } from '@/hooks/useSettings';
-import { MailOutlined, PhoneOutlined, HomeOutlined, AppstoreOutlined } from '@ant-design/icons';
-import { Button, Form, Input, Spin, App } from 'antd';
+import { MailOutlined, PhoneOutlined, AppstoreOutlined } from '@ant-design/icons';
+import { Button, Divider, Form, Input, Spin, Typography, App } from 'antd';
 import { useEffect } from 'react';
+
+const { Text } = Typography;
 
 export default function GeneralSettingsTab() {
   const { data: settings, isLoading } = useSettings();
@@ -42,7 +44,18 @@ export default function GeneralSettingsTab() {
 
   return (
     <div style={{ maxWidth: 600 }}>
+      <div style={{ marginBottom: 24 }}>
+        <Text strong style={{ fontSize: 16 }}>General Settings</Text>
+        <br />
+        <Text type="secondary">Configure your platform name and contact details.</Text>
+      </div>
+
       <Form form={form} layout="vertical" onFinish={onFinish}>
+        <Text strong style={{ textTransform: 'uppercase', fontSize: 11, color: '#999', letterSpacing: 0.5 }}>
+          Platform Information
+        </Text>
+        <Divider style={{ margin: '8px 0 16px' }} />
+
         <Form.Item
           name="platformName"
           label="Platform Name"
@@ -50,6 +63,11 @@ export default function GeneralSettingsTab() {
         >
           <Input prefix={<AppstoreOutlined />} placeholder="e.g. RentFlow" />
         </Form.Item>
+
+        <Text strong style={{ textTransform: 'uppercase', fontSize: 11, color: '#999', letterSpacing: 0.5 }}>
+          Contact Details
+        </Text>
+        <Divider style={{ margin: '8px 0 16px' }} />
 
         <Form.Item
           name="supportEmail"

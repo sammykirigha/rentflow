@@ -10,6 +10,7 @@ import {
   Modal,
   Form,
   Input,
+  InputNumber,
   Select,
   DatePicker,
   Card,
@@ -48,25 +49,28 @@ export default function TenantsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | undefined>(undefined);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [form] = Form.useForm();
 
   const { isAuthenticated } = useAuth();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['tenants', searchText],
-    queryFn: () => tenantsApi.getAll({ search: searchText || undefined }),
+    queryKey: ['tenants', searchText, page, pageSize],
+    queryFn: () => tenantsApi.getAll({ search: searchText || undefined, page, limit: pageSize }),
     enabled: isAuthenticated,
   });
 
-  const tenants: Tenant[] = Array.isArray(data) ? data : [];
+  const tenants: Tenant[] = Array.isArray(data?.data) ? data.data : [];
+  const pagination = data?.pagination;
 
   const { data: propertiesData } = useQuery({
-    queryKey: ['properties'],
-    queryFn: () => propertiesApi.getAll(),
+    queryKey: ['properties', 'all'],
+    queryFn: () => propertiesApi.getAll({ limit: 200 }),
     enabled: isModalOpen,
   });
 
-  const propertiesList: Property[] = Array.isArray(propertiesData) ? propertiesData : [];
+  const propertiesList: Property[] = Array.isArray(propertiesData?.data) ? propertiesData.data : [];
 
   const { data: vacantUnitsData, isLoading: isLoadingUnits } = useQuery({
     queryKey: ['vacant-units', selectedPropertyId],
@@ -100,6 +104,7 @@ export default function TenantsPage() {
         unitId: values.unitId,
         leaseStart: values.leaseStart.toISOString(),
         leaseEnd: values.leaseEnd ? values.leaseEnd.toISOString() : undefined,
+        depositAmount: values.depositAmount || undefined,
       };
       createMutation.mutate(payload);
     } catch {
@@ -210,7 +215,7 @@ export default function TenantsPage() {
             placeholder="Search tenants by name, email, or phone..."
             prefix={<SearchOutlined />}
             value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
+            onChange={(e) => { setSearchText(e.target.value); setPage(1); }}
             allowClear
             style={{ maxWidth: 400 }}
           />
@@ -222,9 +227,12 @@ export default function TenantsPage() {
           loading={isLoading}
           rowKey="tenantId"
           pagination={{
-            defaultPageSize: 10,
+            current: page,
+            pageSize,
+            total: pagination?.total || 0,
             showSizeChanger: true,
             showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} tenants`,
+            onChange: (p, ps) => { setPage(p); setPageSize(ps); },
           }}
         />
       </Card>
@@ -347,6 +355,21 @@ export default function TenantsPage() {
               <DatePicker style={{ width: '100%' }} />
             </Form.Item>
           </Space>
+
+          <Form.Item
+            name="depositAmount"
+            label="Security Deposit (KES)"
+            tooltip="One-time security deposit included on the first invoice"
+          >
+            <InputNumber
+              style={{ width: '100%' }}
+              placeholder="e.g. 15000 (leave empty for no deposit)"
+              min={0}
+              max={10000000}
+              formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+              parser={(value) => Number(value?.replace(/,/g, '') || 0) as any}
+            />
+          </Form.Item>
         </Form>
       </Modal>
     </div>

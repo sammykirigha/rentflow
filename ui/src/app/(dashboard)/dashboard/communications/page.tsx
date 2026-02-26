@@ -32,6 +32,7 @@ import {
   type Notification,
   type SendNotificationInput,
   type SendBulkReminderInput,
+  type SendBulkMessageInput,
 } from '@/lib/api/communications.api';
 import { tenantsApi } from '@/lib/api/tenants.api';
 import { parseError } from '@/lib/api/parseError';
@@ -62,29 +63,34 @@ export default function CommunicationsPage() {
   const queryClient = useQueryClient();
   const [isSendModalOpen, setIsSendModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [isBulkMessageModalOpen, setIsBulkMessageModalOpen] = useState(false);
   const [viewNotification, setViewNotification] = useState<Notification | null>(null);
   const [typeFilter, setTypeFilter] = useState<string | undefined>(undefined);
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [sendForm] = Form.useForm();
   const [bulkForm] = Form.useForm();
+  const [bulkMessageForm] = Form.useForm();
 
   const { isAuthenticated } = useAuth();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['communications', typeFilter, statusFilter],
-    queryFn: () => communicationsApi.getAll({ type: typeFilter, status: statusFilter }),
+    queryKey: ['communications', typeFilter, statusFilter, page, pageSize],
+    queryFn: () => communicationsApi.getAll({ type: typeFilter, status: statusFilter, page, limit: pageSize }),
     enabled: isAuthenticated,
   });
 
-  const notifications: Notification[] = Array.isArray(data) ? data : [];
+  const notifications: Notification[] = Array.isArray(data?.data) ? data.data : [];
+  const paginationData = data?.pagination;
 
   const { data: tenantsData } = useQuery({
-    queryKey: ['tenants'],
-    queryFn: () => tenantsApi.getAll(),
+    queryKey: ['tenants', 'all'],
+    queryFn: () => tenantsApi.getAll({ limit: 200 }),
     enabled: isSendModalOpen,
   });
 
-  const tenantsList: Tenant[] = Array.isArray(tenantsData) ? tenantsData : [];
+  const tenantsList: Tenant[] = Array.isArray(tenantsData?.data) ? tenantsData.data : [];
 
   const sendMutation = useMutation({
     mutationFn: (values: SendNotificationInput) => communicationsApi.send(values),
@@ -109,6 +115,19 @@ export default function CommunicationsPage() {
     },
     onError: (error) => {
       message.error(parseError(error, 'Failed to send bulk reminder'));
+    },
+  });
+
+  const bulkMessageMutation = useMutation({
+    mutationFn: (values: SendBulkMessageInput) => communicationsApi.sendBulkMessage(values),
+    onSuccess: (result) => {
+      message.success(`Message sent to ${result.count} tenants`);
+      queryClient.invalidateQueries({ queryKey: ['communications'] });
+      setIsBulkMessageModalOpen(false);
+      bulkMessageForm.resetFields();
+    },
+    onError: (error) => {
+      message.error(parseError(error, 'Failed to send bulk message'));
     },
   });
 
@@ -147,6 +166,15 @@ export default function CommunicationsPage() {
     try {
       const values = await bulkForm.validateFields();
       bulkMutation.mutate(values);
+    } catch {
+      // validation errors shown inline
+    }
+  };
+
+  const handleBulkMessageSend = async () => {
+    try {
+      const values = await bulkMessageForm.validateFields();
+      bulkMessageMutation.mutate(values);
     } catch {
       // validation errors shown inline
     }
@@ -281,6 +309,12 @@ export default function CommunicationsPage() {
             Send Message
           </Button>
           <Button
+            icon={<MailOutlined />}
+            onClick={() => setIsBulkMessageModalOpen(true)}
+          >
+            Bulk Message
+          </Button>
+          <Button
             type="primary"
             icon={<NotificationOutlined />}
             onClick={() => setIsBulkModalOpen(true)}
@@ -296,7 +330,7 @@ export default function CommunicationsPage() {
             placeholder="Filter by type"
             allowClear
             value={typeFilter}
-            onChange={(value) => setTypeFilter(value)}
+            onChange={(value) => { setTypeFilter(value); setPage(1); }}
             style={{ width: 200 }}
             options={Object.entries(TYPE_LABEL_MAP).map(([value, label]) => ({
               label,
@@ -307,7 +341,7 @@ export default function CommunicationsPage() {
             placeholder="Filter by status"
             allowClear
             value={statusFilter}
-            onChange={(value) => setStatusFilter(value)}
+            onChange={(value) => { setStatusFilter(value); setPage(1); }}
             style={{ width: 160 }}
             options={[
               { label: 'Sent', value: 'sent' },
@@ -323,9 +357,12 @@ export default function CommunicationsPage() {
           loading={isLoading}
           rowKey="notificationId"
           pagination={{
-            defaultPageSize: 10,
+            current: page,
+            pageSize,
+            total: paginationData?.total || 0,
             showSizeChanger: true,
             showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} notifications`,
+            onChange: (p, ps) => { setPage(p); setPageSize(ps); },
           }}
         />
       </Card>
@@ -493,10 +530,12 @@ export default function CommunicationsPage() {
         okText="Send to All Unpaid"
         width={520}
       >
+        <p style={{ marginBottom: 16, color: '#666' }}>
+          This will send a payment reminder to all tenants with unpaid, overdue, or partially paid invoices.
+        </p>
         <Form
           form={bulkForm}
           layout="vertical"
-          style={{ marginTop: 16 }}
           initialValues={{ type: 'payment_reminder' }}
         >
           <Form.Item
@@ -529,6 +568,61 @@ export default function CommunicationsPage() {
             <Input.TextArea
               rows={4}
               placeholder="Dear tenant, this is a reminder that your rent payment is due..."
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Bulk Message Modal */}
+      <Modal
+        title="Send Bulk Message"
+        open={isBulkMessageModalOpen}
+        onOk={handleBulkMessageSend}
+        onCancel={() => {
+          setIsBulkMessageModalOpen(false);
+          bulkMessageForm.resetFields();
+        }}
+        confirmLoading={bulkMessageMutation.isPending}
+        okText="Send to All Tenants"
+        width={520}
+      >
+        <p style={{ marginBottom: 16, color: '#666' }}>
+          This will send a general message to all active tenants regardless of their payment status.
+        </p>
+        <Form
+          form={bulkMessageForm}
+          layout="vertical"
+        >
+          <Form.Item
+            name="channel"
+            label="Channel"
+            rules={[{ required: true, message: 'Please select a channel' }]}
+          >
+            <Select
+              placeholder="Select channel"
+              options={[
+                { label: 'SMS', value: 'sms' },
+                { label: 'Email', value: 'email' },
+                { label: 'Both', value: 'both' },
+              ]}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="subject"
+            label="Subject (for email)"
+          >
+            <Input placeholder="Important Notice from RentFlow" />
+          </Form.Item>
+
+          <Form.Item
+            name="message"
+            label="Message"
+            rules={[{ required: true, message: 'Please enter a message' }]}
+          >
+            <Input.TextArea
+              rows={4}
+              placeholder="Dear tenant, we would like to inform you..."
             />
           </Form.Item>
         </Form>

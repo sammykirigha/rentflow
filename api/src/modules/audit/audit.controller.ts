@@ -1,5 +1,7 @@
+import { Permission, RequirePermissions } from '@/common/decorators/permissions.decorator';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '@/common/guards/permissions.guard';
+import { PermissionAction, PermissionResource } from '@/modules/permissions/entities/permission.entity';
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { AuditService } from './audit.service';
@@ -14,7 +16,7 @@ export class AuditController {
 	constructor(private readonly auditService: AuditService) { }
 
 	@Get()
-	// @RequirePermissions(Permission(PermissionResource.SETTINGS, PermissionAction.READ))
+	@RequirePermissions(Permission(PermissionResource.SETTINGS, PermissionAction.READ))
 	@ApiOperation({ summary: 'Get audit logs with pagination and filters' })
 	@ApiResponse({
 		status: 200,

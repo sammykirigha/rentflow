@@ -9,6 +9,13 @@ export enum TenantStatus {
 	VACATED = 'vacated',
 }
 
+export enum DepositStatus {
+	PENDING = 'pending',
+	COLLECTED = 'collected',
+	PARTIALLY_REFUNDED = 'partially_refunded',
+	FULLY_REFUNDED = 'fully_refunded',
+}
+
 @Entity('tenants')
 @Index(['status'])
 export class Tenant extends AbstractEntity<Tenant> {
@@ -23,6 +30,12 @@ export class Tenant extends AbstractEntity<Tenant> {
 
 	@Column({ name: 'wallet_balance', type: 'decimal', precision: 10, scale: 2, default: 0 })
 	walletBalance: number;
+
+	@Column({ name: 'deposit_amount', type: 'decimal', precision: 10, scale: 2, default: 0 })
+	depositAmount: number;
+
+	@Column({ name: 'deposit_status', type: 'enum', enum: DepositStatus, default: DepositStatus.PENDING })
+	depositStatus: DepositStatus;
 
 	@Column({ type: 'enum', enum: TenantStatus, default: TenantStatus.ACTIVE })
 	status: TenantStatus;

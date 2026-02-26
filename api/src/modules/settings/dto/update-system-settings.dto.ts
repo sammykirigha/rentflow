@@ -1,6 +1,19 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsEmail, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsEmail, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+
+export class RecurringChargeDto {
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  amount: number;
+
+  @IsBoolean()
+  enabled: boolean;
+}
 
 export class UpdateSystemSettingsDto {
   @ApiPropertyOptional({ description: 'Platform name' })
@@ -73,4 +86,11 @@ export class UpdateSystemSettingsDto {
   @IsOptional()
   @IsBoolean()
   adminAlerts?: boolean;
+
+  @ApiPropertyOptional({ description: 'Recurring charges applied to monthly invoices', type: [RecurringChargeDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RecurringChargeDto)
+  recurringCharges?: RecurringChargeDto[];
 }

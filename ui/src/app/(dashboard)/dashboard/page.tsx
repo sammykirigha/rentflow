@@ -8,6 +8,7 @@ import {
   DollarOutlined,
   WarningOutlined,
   CheckCircleOutlined,
+  AlertOutlined,
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -93,6 +94,58 @@ export default function DashboardPage() {
           {STATUS_LABEL_MAP[status] || status}
         </Tag>
       ),
+    },
+  ];
+
+  const maintenanceColumns: ColumnsType<NonNullable<DashboardStats['recentMaintenance']>[0]> = [
+    {
+      title: 'Property',
+      key: 'property',
+      render: (_: unknown, record) => record.tenant?.unit?.property?.name || '-',
+    },
+    {
+      title: 'Unit',
+      key: 'unit',
+      render: (_: unknown, record) => record.tenant?.unit?.unitNumber || '-',
+    },
+    {
+      title: 'Tenant',
+      key: 'tenant',
+      render: (_: unknown, record) => {
+        const name = `${record.tenant?.user?.firstName || ''} ${record.tenant?.user?.lastName || ''}`.trim();
+        return name || '-';
+      },
+    },
+    {
+      title: 'Category',
+      dataIndex: 'category',
+      key: 'category',
+      render: (val: string) => val?.replace(/_/g, ' ') || '-',
+    },
+    {
+      title: 'Priority',
+      dataIndex: 'priority',
+      key: 'priority',
+      render: (priority: string) => {
+        const colorMap: Record<string, string> = { low: 'default', medium: 'blue', high: 'orange', urgent: 'red' };
+        return <Tag color={colorMap[priority] || 'default'}>{priority?.toUpperCase()}</Tag>;
+      },
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status: string) => (
+        <Tag color={STATUS_COLOR_MAP[status] || 'default'}>
+          {STATUS_LABEL_MAP[status] || status}
+        </Tag>
+      ),
+    },
+    {
+      title: 'Date',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      render: (value: string) => value ? dayjs(value).format('DD MMM') : '-',
     },
   ];
 
@@ -240,6 +293,30 @@ export default function DashboardPage() {
         </Col>
       </Row>
 
+      {/* Maintenance KPI */}
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24} sm={12} lg={6}>
+          <Card loading={isLoading}>
+            <Statistic
+              title="Pending Maintenance"
+              value={stats?.pendingMaintenance ?? 0}
+              prefix={<AlertOutlined />}
+              valueStyle={{ color: (stats?.pendingMaintenance ?? 0) > 0 ? '#fa8c16' : '#3f8600' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card loading={isLoading}>
+            <Statistic
+              title="Urgent Maintenance"
+              value={stats?.urgentMaintenance ?? 0}
+              prefix={<WarningOutlined />}
+              valueStyle={{ color: (stats?.urgentMaintenance ?? 0) > 0 ? '#cf1322' : '#3f8600' }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
       {/* Recent Activity Tables */}
       <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
         <Col xs={24} lg={12}>
@@ -269,6 +346,25 @@ export default function DashboardPage() {
               />
             ) : (
               <Text type="secondary">No payments recorded yet.</Text>
+            )}
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Recent Maintenance Table */}
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24}>
+          <Card title="Recent Maintenance Requests" loading={isLoading}>
+            {(stats?.recentMaintenance?.length ?? 0) > 0 ? (
+              <Table
+                columns={maintenanceColumns}
+                dataSource={stats?.recentMaintenance}
+                rowKey="maintenanceRequestId"
+                pagination={false}
+                size="small"
+              />
+            ) : (
+              <Text type="secondary">No maintenance requests yet.</Text>
             )}
           </Card>
         </Col>

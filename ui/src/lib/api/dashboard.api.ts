@@ -12,6 +12,8 @@ export interface DashboardStats {
   collectionRate: number;
   totalExpenses: number;
   overdueInvoices: number;
+  pendingMaintenance: number;
+  urgentMaintenance: number;
   recentPayments: Array<{
     paymentId: string;
     amount: number;
@@ -36,6 +38,26 @@ export interface DashboardStats {
       user?: {
         firstName: string;
         lastName: string;
+      };
+    };
+  }>;
+  recentMaintenance: Array<{
+    maintenanceRequestId: string;
+    description: string;
+    category: string;
+    priority: string;
+    status: string;
+    createdAt: string;
+    tenant?: {
+      user?: {
+        firstName: string;
+        lastName: string;
+      };
+      unit?: {
+        unitNumber: string;
+        property?: {
+          name: string;
+        };
       };
     };
   }>;

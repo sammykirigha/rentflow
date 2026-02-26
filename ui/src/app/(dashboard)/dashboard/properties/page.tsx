@@ -28,17 +28,20 @@ export default function PropertiesPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [form] = Form.useForm<CreatePropertyInput>();
 
   const { isAuthenticated } = useAuth();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['properties'],
-    queryFn: () => propertiesApi.getAll(),
+    queryKey: ['properties', page, pageSize],
+    queryFn: () => propertiesApi.getAll({ page, limit: pageSize }),
     enabled: isAuthenticated,
   });
 
-  const properties: Property[] = Array.isArray(data) ? data : [];
+  const properties: Property[] = Array.isArray(data?.data) ? data.data : [];
+  const pagination = data?.pagination;
 
   const createMutation = useMutation({
     mutationFn: (values: CreatePropertyInput) => propertiesApi.create(values),
@@ -139,9 +142,12 @@ export default function PropertiesPage() {
           loading={isLoading}
           rowKey="propertyId"
           pagination={{
-            defaultPageSize: 10,
+            current: page,
+            pageSize,
+            total: pagination?.total || 0,
             showSizeChanger: true,
             showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} properties`,
+            onChange: (p, ps) => { setPage(p); setPageSize(ps); },
           }}
         />
       </Card>

@@ -1,6 +1,12 @@
 import { AbstractEntity } from '@/database/abstract.entity';
 import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
+export interface RecurringCharge {
+  name: string;
+  amount: number;
+  enabled: boolean;
+}
+
 @Entity('system_settings')
 export class SystemSetting extends AbstractEntity<SystemSetting> {
   @PrimaryGeneratedColumn('uuid', { name: 'system_setting_id' })
@@ -50,6 +56,10 @@ export class SystemSetting extends AbstractEntity<SystemSetting> {
 
   @Column({ name: 'admin_alerts', type: 'boolean', default: true })
   adminAlerts: boolean;
+
+  // Invoice Settings
+  @Column({ name: 'recurring_charges', type: 'jsonb', default: [] })
+  recurringCharges: RecurringCharge[];
 
   // Helper methods
   getFileUploadSizeInMB(): string {

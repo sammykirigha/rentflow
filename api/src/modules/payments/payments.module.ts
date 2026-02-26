@@ -2,6 +2,8 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditModule } from '../audit/audit.module';
 import { InvoicesModule } from '../invoices/invoices.module';
+import { WalletModule } from '../wallet/wallet.module';
+import { Tenant } from '../tenants/entities/tenant.entity';
 import { Payment } from './entities/payment.entity';
 import { PaymentsController } from './payments.controller';
 import { PaymentsRepository } from './payments.repository';
@@ -9,9 +11,10 @@ import { PaymentsService } from './payments.service';
 
 @Module({
 	imports: [
-		TypeOrmModule.forFeature([Payment]),
+		TypeOrmModule.forFeature([Payment, Tenant]),
 		AuditModule,
 		forwardRef(() => InvoicesModule),
+		WalletModule,
 	],
 	controllers: [PaymentsController],
 	providers: [PaymentsService, PaymentsRepository],

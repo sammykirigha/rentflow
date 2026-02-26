@@ -36,6 +36,43 @@ export interface InvoicePdfData {
 	accountRef: string; // unit number
 }
 
+export interface StatementPdfData {
+	// Company info
+	companyName: string;
+	companyEmail: string;
+	companyPhone?: string;
+	companyAddress?: string;
+	companyLogoUrl?: string;
+
+	// Tenant info
+	tenantName: string;
+	tenantPhone: string;
+	tenantEmail: string;
+	unitNumber: string;
+	propertyName: string;
+
+	// Statement period
+	startDate: string;
+	endDate: string;
+
+	// Summary
+	openingBalance: number;
+	closingBalance: number;
+	totalCredits: number;
+	totalDebits: number;
+
+	// Transactions
+	transactions: Array<{
+		date: string;
+		type: string;
+		description: string;
+		reference: string;
+		debit: number;
+		credit: number;
+		balance: number;
+	}>;
+}
+
 export interface ReceiptPdfData {
 	// Company info
 	companyName: string;

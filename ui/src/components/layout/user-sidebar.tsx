@@ -8,7 +8,9 @@ import {
   TeamOutlined,
   FileTextOutlined,
   DollarOutlined,
+  WalletOutlined,
   ToolOutlined,
+  AlertOutlined,
   MailOutlined,
   SettingOutlined,
   UserOutlined,
@@ -49,9 +51,19 @@ const menuItems = [
     label: <Link href="/dashboard/payments">Payments</Link>,
   },
   {
+    key: "/dashboard/wallet",
+    icon: <WalletOutlined />,
+    label: <Link href="/dashboard/wallet">Wallet Ledger</Link>,
+  },
+  {
     key: "/dashboard/expenses",
     icon: <ToolOutlined />,
     label: <Link href="/dashboard/expenses">Expenses</Link>,
+  },
+  {
+    key: "/dashboard/maintenance",
+    icon: <AlertOutlined />,
+    label: <Link href="/dashboard/maintenance">Maintenance</Link>,
   },
   {
     key: "/dashboard/communications",

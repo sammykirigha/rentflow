@@ -44,3 +44,15 @@ export interface CreateInvoiceInput {
   dueDate: string;
   notes?: string;
 }
+
+export interface UpdateInvoiceInput {
+  billingMonth?: string;
+  rentAmount?: number;
+  waterCharge?: number;
+  electricityCharge?: number;
+  otherCharges?: number;
+  otherChargesDesc?: string;
+  dueDate?: string;
+  status?: InvoiceStatus;
+  notes?: string;
+}

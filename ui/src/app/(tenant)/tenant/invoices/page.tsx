@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from 'react';
 import {
   Typography,
   Table,
@@ -40,14 +41,17 @@ const STATUS_LABEL_MAP: Record<string, string> = {
 
 export default function TenantInvoicesPage() {
   const { isAuthenticated } = useAuth();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['my-invoices'],
-    queryFn: () => invoicesApi.getAll(),
+    queryKey: ['my-invoices', page, pageSize],
+    queryFn: () => invoicesApi.getMy({ page, limit: pageSize }),
     enabled: isAuthenticated,
   });
 
-  const invoices: Invoice[] = Array.isArray(data) ? data : [];
+  const invoices: Invoice[] = Array.isArray(data?.data) ? data.data : [];
+  const pagination = data?.pagination;
 
   const columns: ColumnsType<Invoice> = [
     {
@@ -131,9 +135,12 @@ export default function TenantInvoicesPage() {
           rowKey="invoiceId"
           locale={{ emptyText: <Empty description="No invoices yet" /> }}
           pagination={{
-            defaultPageSize: 10,
+            current: page,
+            pageSize,
+            total: pagination?.total || 0,
             showSizeChanger: true,
             showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} invoices`,
+            onChange: (p, ps) => { setPage(p); setPageSize(ps); },
           }}
         />
       </Card>

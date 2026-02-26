@@ -14,8 +14,6 @@ export enum NotificationChannel {
 	SMS = 'sms',
 	EMAIL = 'email',
 	BOTH = 'both',
-	WHATSAPP = 'whatsapp',
-	ALL = 'all',
 }
 
 export enum NotificationType {

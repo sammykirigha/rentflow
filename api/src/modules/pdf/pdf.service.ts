@@ -1,11 +1,14 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import puppeteer, { Browser } from 'puppeteer';
-import { InvoicePdfData, ReceiptPdfData } from './interfaces/pdf-data.interface';
+import { InvoicePdfData, ReceiptPdfData, StatementPdfData } from './interfaces/pdf-data.interface';
+import { S3Service } from '../storage/s3.service';
 
 @Injectable()
 export class PdfService implements OnModuleDestroy {
 	private readonly logger = new Logger(PdfService.name);
 	private browser: Browser | null = null;
+
+	constructor(private readonly s3Service: S3Service) {}
 
 	private async getBrowser(): Promise<Browser> {
 		if (!this.browser || !this.browser.connected) {
@@ -40,11 +43,50 @@ export class PdfService implements OnModuleDestroy {
 		}
 	}
 
+	private async getLogoBase64(logoKey?: string): Promise<string | null> {
+		if (!logoKey) return null;
+		try {
+			const result = await this.s3Service.getFileBuffer(logoKey);
+			if (!result?.file) return null;
+			const mimeType = result.mimeType || 'image/png';
+			const base64 = result.file.toString('base64');
+			return `data:${mimeType};base64,${base64}`;
+		} catch (err) {
+			this.logger.warn(`Failed to load logo from S3 key "${logoKey}": ${err.message}`);
+			return null;
+		}
+	}
+
+	private buildLogoHeader(logoDataUrl: string | null, companyHtml: string, titleHtml: string): string {
+		return `<div class="header">
+		<div style="display:flex;align-items:center;gap:12px;">
+			${logoDataUrl ? `<img src="${logoDataUrl}" style="max-height:50px;max-width:120px;object-fit:contain;" />` : ''}
+			<div>
+				${companyHtml}
+			</div>
+		</div>
+		<div>
+			${titleHtml}
+		</div>
+	</div>`;
+	}
+
 	async generateInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
 		const chargesRows = this.buildChargesRows(data);
+		const logoDataUrl = await this.getLogoBase64(data.companyLogoUrl);
 
 		const statusColor =
 			data.status === 'paid' ? '#52c41a' : data.status === 'overdue' ? '#ff4d4f' : '#333';
+
+		const companyHtml = `<div class="company-name">${this.esc(data.companyName)}</div>
+			${data.companyAddress ? `<div class="company-info">${this.esc(data.companyAddress)}</div>` : ''}
+			${data.companyPhone ? `<div class="company-info">Tel: ${this.esc(data.companyPhone)}</div>` : ''}
+			<div class="company-info">${this.esc(data.companyEmail)}</div>`;
+
+		const titleHtml = `<div class="invoice-title">INVOICE</div>
+			<div class="invoice-number">${this.esc(data.invoiceNumber)}</div>`;
+
+		const headerHtml = this.buildLogoHeader(logoDataUrl, companyHtml, titleHtml);
 
 		const html = `<!DOCTYPE html>
 <html>
@@ -84,18 +126,7 @@ export class PdfService implements OnModuleDestroy {
 </style>
 </head>
 <body>
-	<div class="header">
-		<div>
-			<div class="company-name">${this.esc(data.companyName)}</div>
-			${data.companyAddress ? `<div class="company-info">${this.esc(data.companyAddress)}</div>` : ''}
-			${data.companyPhone ? `<div class="company-info">Tel: ${this.esc(data.companyPhone)}</div>` : ''}
-			<div class="company-info">${this.esc(data.companyEmail)}</div>
-		</div>
-		<div>
-			<div class="invoice-title">INVOICE</div>
-			<div class="invoice-number">${this.esc(data.invoiceNumber)}</div>
-		</div>
-	</div>
+	${headerHtml}
 
 	<hr class="divider" />
 
@@ -154,6 +185,17 @@ export class PdfService implements OnModuleDestroy {
 
 	async generateReceiptPdf(data: ReceiptPdfData): Promise<Buffer> {
 		const chargesRows = this.buildReceiptChargesRows(data);
+		const logoDataUrl = await this.getLogoBase64(data.companyLogoUrl);
+
+		const companyHtml = `<div class="company-name">${this.esc(data.companyName)}</div>
+			${data.companyAddress ? `<div class="company-info">${this.esc(data.companyAddress)}</div>` : ''}
+			${data.companyPhone ? `<div class="company-info">Tel: ${this.esc(data.companyPhone)}</div>` : ''}
+			<div class="company-info">${this.esc(data.companyEmail)}</div>`;
+
+		const titleHtml = `<div class="receipt-title">RECEIPT</div>
+			<div class="receipt-number">${this.esc(data.receiptNumber)}</div>`;
+
+		const headerHtml = this.buildLogoHeader(logoDataUrl, companyHtml, titleHtml);
 
 		const html = `<!DOCTYPE html>
 <html>
@@ -187,18 +229,7 @@ export class PdfService implements OnModuleDestroy {
 </style>
 </head>
 <body>
-	<div class="header">
-		<div>
-			<div class="company-name">${this.esc(data.companyName)}</div>
-			${data.companyAddress ? `<div class="company-info">${this.esc(data.companyAddress)}</div>` : ''}
-			${data.companyPhone ? `<div class="company-info">Tel: ${this.esc(data.companyPhone)}</div>` : ''}
-			<div class="company-info">${this.esc(data.companyEmail)}</div>
-		</div>
-		<div>
-			<div class="receipt-title">RECEIPT</div>
-			<div class="receipt-number">${this.esc(data.receiptNumber)}</div>
-		</div>
-	</div>
+	${headerHtml}
 
 	<hr class="divider" />
 
@@ -234,6 +265,119 @@ export class PdfService implements OnModuleDestroy {
 	</div>
 
 	<div class="thank-you">Thank you for your payment!</div>
+	<div class="footer">Generated by ${this.esc(data.companyName)}</div>
+</body>
+</html>`;
+
+		return this.htmlToPdf(html);
+	}
+
+	async generateStatementPdf(data: StatementPdfData): Promise<Buffer> {
+		const logoDataUrl = await this.getLogoBase64(data.companyLogoUrl);
+		const transactionRows = data.transactions
+			.map(
+				(txn) => `
+			<tr>
+				<td>${this.esc(txn.date)}</td>
+				<td>${this.esc(txn.type)}</td>
+				<td>${this.esc(txn.description)}</td>
+				<td>${this.esc(txn.reference)}</td>
+				<td class="right">${txn.debit > 0 ? this.formatKES(txn.debit) : '-'}</td>
+				<td class="right">${txn.credit > 0 ? this.formatKES(txn.credit) : '-'}</td>
+				<td class="right">${this.formatKES(txn.balance)}</td>
+			</tr>`,
+			)
+			.join('');
+
+		const companyHtml = `<div class="company-name">${this.esc(data.companyName)}</div>
+			${data.companyAddress ? `<div class="company-info">${this.esc(data.companyAddress)}</div>` : ''}
+			${data.companyPhone ? `<div class="company-info">Tel: ${this.esc(data.companyPhone)}</div>` : ''}
+			<div class="company-info">${this.esc(data.companyEmail)}</div>`;
+
+		const titleHtml = `<div class="statement-title">STATEMENT</div>
+			<div class="statement-period">${this.esc(data.startDate)} — ${this.esc(data.endDate)}</div>`;
+
+		const headerHtml = this.buildLogoHeader(logoDataUrl, companyHtml, titleHtml);
+
+		const html = `<!DOCTYPE html>
+<html>
+<head>
+<style>
+	* { margin: 0; padding: 0; box-sizing: border-box; }
+	body { font-family: 'Segoe UI', Arial, sans-serif; color: #333; font-size: 12px; line-height: 1.5; }
+	.header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+	.company-name { font-size: 20px; font-weight: 700; color: #1a1a1a; }
+	.company-info { font-size: 11px; color: #666; }
+	.statement-title { font-size: 28px; font-weight: 700; color: #1a1a1a; text-align: right; }
+	.statement-period { font-size: 11px; color: #666; text-align: right; margin-top: 4px; }
+	.divider { border: none; border-top: 1px solid #ccc; margin: 12px 0; }
+	.meta-section { display: flex; justify-content: space-between; margin: 16px 0; }
+	.section-header { font-size: 11px; font-weight: 700; color: #333; text-transform: uppercase; margin-bottom: 6px; }
+	.tenant-name { font-size: 14px; font-weight: 600; color: #333; margin-bottom: 2px; }
+	.summary-box { display: flex; gap: 16px; margin: 16px 0; }
+	.summary-item { flex: 1; background: #f7f7f7; border-radius: 4px; padding: 10px 14px; }
+	.summary-label { font-size: 10px; color: #666; text-transform: uppercase; }
+	.summary-value { font-size: 15px; font-weight: 700; color: #333; }
+	.summary-value.credit { color: #52c41a; }
+	.summary-value.debit { color: #ff4d4f; }
+	table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+	th { font-size: 10px; font-weight: 700; color: #333; text-align: left; padding: 6px 8px; border-bottom: 2px solid #333; }
+	th.right { text-align: right; }
+	td { font-size: 11px; padding: 5px 8px; border-bottom: 1px solid #eee; }
+	td.right { text-align: right; }
+	.footer { text-align: center; font-size: 9px; color: #ccc; margin-top: 30px; }
+</style>
+</head>
+<body>
+	${headerHtml}
+
+	<hr class="divider" />
+
+	<div class="meta-section">
+		<div>
+			<div class="section-header">Account Holder</div>
+			<div class="tenant-name">${this.esc(data.tenantName)}</div>
+			<div class="company-info">${this.esc(data.tenantPhone)}</div>
+			<div class="company-info">${this.esc(data.tenantEmail)}</div>
+			<div class="company-info">Unit: ${this.esc(data.unitNumber)}</div>
+			<div class="company-info">${this.esc(data.propertyName)}</div>
+		</div>
+	</div>
+
+	<div class="summary-box">
+		<div class="summary-item">
+			<div class="summary-label">Opening Balance</div>
+			<div class="summary-value">${this.formatKES(data.openingBalance)}</div>
+		</div>
+		<div class="summary-item">
+			<div class="summary-label">Total Credits</div>
+			<div class="summary-value credit">${this.formatKES(data.totalCredits)}</div>
+		</div>
+		<div class="summary-item">
+			<div class="summary-label">Total Debits</div>
+			<div class="summary-value debit">${this.formatKES(data.totalDebits)}</div>
+		</div>
+		<div class="summary-item">
+			<div class="summary-label">Closing Balance</div>
+			<div class="summary-value">${this.formatKES(data.closingBalance)}</div>
+		</div>
+	</div>
+
+	<table>
+		<thead>
+			<tr>
+				<th>Date</th>
+				<th>Type</th>
+				<th>Description</th>
+				<th>Reference</th>
+				<th class="right">Debit (KES)</th>
+				<th class="right">Credit (KES)</th>
+				<th class="right">Balance (KES)</th>
+			</tr>
+		</thead>
+		<tbody>${transactionRows}</tbody>
+	</table>
+
 	<div class="footer">Generated by ${this.esc(data.companyName)}</div>
 </body>
 </html>`;

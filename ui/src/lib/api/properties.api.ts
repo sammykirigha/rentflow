@@ -4,7 +4,7 @@ import api from '.';
 export const propertiesApi = {
   getAll: async (params?: { page?: number; limit?: number; search?: string; isActive?: boolean }) => {
     const response = await api.get('/properties', { params });
-    return response.data?.data;
+    return response.data;
   },
   getOne: async (propertyId: string): Promise<Property> => {
     const response = await api.get(`/properties/${propertyId}`);

@@ -15,6 +15,7 @@ import {
   Card,
   App,
   Space,
+  Descriptions,
 } from 'antd';
 import {
   PlusOutlined,
@@ -29,6 +30,7 @@ import { formatKES } from '@/lib/format-kes';
 import type {
   Expense,
   CreateExpenseInput,
+  UpdateExpenseInput,
   ExpenseCategory,
   ExpenseStatus,
   ExpensePriority,
@@ -74,6 +76,26 @@ const CATEGORY_LABEL_MAP: Record<string, string> = {
   other: 'Other',
 };
 
+const VALID_TRANSITIONS: Record<string, { label: string; status: ExpenseStatus; type?: 'primary'; danger?: boolean; color?: string }[]> = {
+  pending: [
+    { label: 'Approve', status: 'approved', type: 'primary' },
+    { label: 'Mark In Progress', status: 'in_progress' },
+    { label: 'Mark Completed', status: 'completed', type: 'primary', color: '#52c41a' },
+    { label: 'Cancel', status: 'cancelled', danger: true },
+  ],
+  approved: [
+    { label: 'Mark In Progress', status: 'in_progress' },
+    { label: 'Mark Completed', status: 'completed', type: 'primary', color: '#52c41a' },
+    { label: 'Cancel', status: 'cancelled', danger: true },
+  ],
+  in_progress: [
+    { label: 'Mark Completed', status: 'completed', type: 'primary', color: '#52c41a' },
+    { label: 'Cancel', status: 'cancelled', danger: true },
+  ],
+  completed: [],
+  cancelled: [],
+};
+
 export default function ExpensesPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
@@ -81,36 +103,44 @@ export default function ExpensesPage() {
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const [categoryFilter, setCategoryFilter] = useState<string | undefined>(undefined);
   const [propertyFilter, setPropertyFilter] = useState<string | undefined>(undefined);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [form] = Form.useForm();
+
+  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
 
   const { isAuthenticated } = useAuth();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['expenses', statusFilter, categoryFilter, propertyFilter],
+    queryKey: ['expenses', statusFilter, categoryFilter, propertyFilter, page, pageSize],
     queryFn: () => expensesApi.getAll({
       status: statusFilter,
       category: categoryFilter,
       propertyId: propertyFilter,
+      page,
+      limit: pageSize,
     }),
     enabled: isAuthenticated,
   });
 
-  const expenses: Expense[] = Array.isArray(data) ? data : [];
+  const expenses: Expense[] = Array.isArray(data?.data) ? data.data : [];
+  const pagination = data?.pagination;
 
   const { data: propertiesData } = useQuery({
-    queryKey: ['properties'],
-    queryFn: () => propertiesApi.getAll(),
+    queryKey: ['properties', 'all'],
+    queryFn: () => propertiesApi.getAll({ limit: 200 }),
   });
 
-  const propertiesList: Property[] = Array.isArray(propertiesData) ? propertiesData : [];
+  const propertiesList: Property[] = Array.isArray(propertiesData?.data) ? propertiesData.data : [];
 
   const { data: vendorsData } = useQuery({
-    queryKey: ['vendors'],
-    queryFn: () => vendorsApi.getAll(),
+    queryKey: ['vendors', 'all'],
+    queryFn: () => vendorsApi.getAll({ limit: 200 }),
     enabled: isModalOpen,
   });
 
-  const vendorsList: Vendor[] = Array.isArray(vendorsData) ? vendorsData : [];
+  const vendorsList: Vendor[] = Array.isArray(vendorsData?.data) ? vendorsData.data : [];
 
   const createMutation = useMutation({
     mutationFn: (values: CreateExpenseInput) => expensesApi.create(values),
@@ -122,6 +152,21 @@ export default function ExpensesPage() {
     },
     onError: (error) => {
       message.error(parseError(error, 'Failed to create expense'));
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ expenseId, input }: { expenseId: string; input: UpdateExpenseInput }) =>
+      expensesApi.update(expenseId, input),
+    onSuccess: () => {
+      message.success('Expense updated successfully');
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      setDetailModalOpen(false);
+      setSelectedExpense(null);
+    },
+    onError: (error) => {
+      message.error(parseError(error, 'Failed to update expense'));
     },
   });
 
@@ -142,6 +187,20 @@ export default function ExpensesPage() {
     } catch {
       // validation errors are shown inline by Ant Design
     }
+  };
+
+  const handleStatusChange = (newStatus: ExpenseStatus) => {
+    if (!selectedExpense) return;
+    const input: UpdateExpenseInput = { status: newStatus };
+    if (newStatus === 'completed') {
+      input.completedDate = new Date().toISOString();
+    }
+    updateMutation.mutate({ expenseId: selectedExpense.expenseId, input });
+  };
+
+  const handleRowClick = (record: Expense) => {
+    setSelectedExpense(record);
+    setDetailModalOpen(true);
   };
 
   const columns: ColumnsType<Expense> = [
@@ -220,6 +279,8 @@ export default function ExpensesPage() {
     },
   ];
 
+  const statusActions = selectedExpense ? (VALID_TRANSITIONS[selectedExpense.status] || []) : [];
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
@@ -242,7 +303,7 @@ export default function ExpensesPage() {
             placeholder="Filter by property"
             allowClear
             value={propertyFilter}
-            onChange={(value) => setPropertyFilter(value)}
+            onChange={(value) => { setPropertyFilter(value); setPage(1); }}
             style={{ width: 200 }}
             options={propertiesList.map((p) => ({
               label: p.name,
@@ -253,7 +314,7 @@ export default function ExpensesPage() {
             placeholder="Filter by status"
             allowClear
             value={statusFilter}
-            onChange={(value) => setStatusFilter(value)}
+            onChange={(value) => { setStatusFilter(value); setPage(1); }}
             style={{ width: 160 }}
             options={Object.entries(STATUS_LABEL_MAP).map(([value, label]) => ({
               label,
@@ -264,7 +325,7 @@ export default function ExpensesPage() {
             placeholder="Filter by category"
             allowClear
             value={categoryFilter}
-            onChange={(value) => setCategoryFilter(value)}
+            onChange={(value) => { setCategoryFilter(value); setPage(1); }}
             style={{ width: 200 }}
             options={Object.entries(CATEGORY_LABEL_MAP).map(([value, label]) => ({
               label,
@@ -278,14 +339,22 @@ export default function ExpensesPage() {
           dataSource={expenses}
           loading={isLoading}
           rowKey="expenseId"
+          onRow={(record) => ({
+            onClick: () => handleRowClick(record),
+            style: { cursor: 'pointer' },
+          })}
           pagination={{
-            defaultPageSize: 10,
+            current: page,
+            pageSize,
+            total: pagination?.total || 0,
             showSizeChanger: true,
             showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} expenses`,
+            onChange: (p, ps) => { setPage(p); setPageSize(ps); },
           }}
         />
       </Card>
 
+      {/* Create Expense Modal */}
       <Modal
         title="Log Expense"
         open={isModalOpen}
@@ -401,6 +470,84 @@ export default function ExpensesPage() {
             <Input.TextArea rows={2} placeholder="Additional notes..." />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* Expense Detail Modal */}
+      <Modal
+        title="Expense Details"
+        open={detailModalOpen}
+        onCancel={() => { setDetailModalOpen(false); setSelectedExpense(null); }}
+        footer={null}
+        width={600}
+      >
+        {selectedExpense && (
+          <div>
+            <Descriptions bordered column={1} size="small" style={{ marginBottom: 16 }}>
+              <Descriptions.Item label="Property">
+                {selectedExpense.property?.name || '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="Category">
+                {CATEGORY_LABEL_MAP[selectedExpense.category] || selectedExpense.category}
+              </Descriptions.Item>
+              <Descriptions.Item label="Description">
+                {selectedExpense.description}
+              </Descriptions.Item>
+              <Descriptions.Item label="Amount">
+                {formatKES(selectedExpense.amount)}
+              </Descriptions.Item>
+              <Descriptions.Item label="Priority">
+                <Tag color={PRIORITY_COLOR_MAP[selectedExpense.priority] || 'default'}>
+                  {selectedExpense.priority?.toUpperCase()}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Status">
+                <Tag color={STATUS_COLOR_MAP[selectedExpense.status] || 'default'}>
+                  {STATUS_LABEL_MAP[selectedExpense.status] || selectedExpense.status}
+                </Tag>
+              </Descriptions.Item>
+              {selectedExpense.vendor && (
+                <Descriptions.Item label="Vendor">
+                  {selectedExpense.vendor.name} ({selectedExpense.vendor.specialty})
+                </Descriptions.Item>
+              )}
+              {selectedExpense.scheduledDate && (
+                <Descriptions.Item label="Scheduled Date">
+                  {dayjs(selectedExpense.scheduledDate).format('DD MMM YYYY')}
+                </Descriptions.Item>
+              )}
+              {selectedExpense.completedDate && (
+                <Descriptions.Item label="Completed Date">
+                  {dayjs(selectedExpense.completedDate).format('DD MMM YYYY')}
+                </Descriptions.Item>
+              )}
+              {selectedExpense.notes && (
+                <Descriptions.Item label="Notes">
+                  {selectedExpense.notes}
+                </Descriptions.Item>
+              )}
+              <Descriptions.Item label="Created">
+                {dayjs(selectedExpense.createdAt).format('DD MMM YYYY, HH:mm')}
+              </Descriptions.Item>
+            </Descriptions>
+
+            {statusActions.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                {statusActions.map((action) => (
+                  <Button
+                    key={action.status}
+                    type={action.type as 'primary' | undefined}
+                    danger={action.danger}
+                    style={action.color ? { background: action.color, borderColor: action.color } : undefined}
+                    onClick={() => handleStatusChange(action.status)}
+                    loading={updateMutation.isPending}
+                  >
+                    {action.label}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
     </div>
   );

@@ -1,7 +1,9 @@
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { Permission, RequirePermissions } from '@/common/decorators/permissions.decorator';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '@/common/guards/permissions.guard';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
+import { PermissionAction, PermissionResource } from '@/modules/permissions/entities/permission.entity';
 import {
 	Body,
 	ClassSerializerInterceptor,
@@ -16,6 +18,7 @@ import {
 	UseInterceptors,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger';
+import { SendBulkMessageDto } from './dto/send-bulk-message.dto';
 import { SendBulkReminderDto } from './dto/send-bulk-reminder.dto';
 import { SendNotificationDto } from './dto/send-notification.dto';
 import { NotificationChannel, NotificationStatus, NotificationType } from './entities/notification.entity';
@@ -31,6 +34,7 @@ export class NotificationsController {
 	constructor(private readonly notificationsService: NotificationsService) {}
 
 	@Get()
+	@RequirePermissions(Permission(PermissionResource.COMMUNICATIONS, PermissionAction.READ))
 	@ApiOperation({ summary: 'List notifications with pagination and filters' })
 	@ApiResponse({ status: 200, description: 'Notifications retrieved successfully' })
 	@ApiQuery({ name: 'page', required: false, type: Number })
@@ -51,6 +55,7 @@ export class NotificationsController {
 	}
 
 	@Post('send')
+	@RequirePermissions(Permission(PermissionResource.COMMUNICATIONS, PermissionAction.CREATE))
 	@ApiOperation({ summary: 'Send a notification to a specific tenant' })
 	@ApiResponse({ status: 201, description: 'Notification sent successfully' })
 	@ApiResponse({ status: 404, description: 'Tenant not found' })
@@ -62,6 +67,7 @@ export class NotificationsController {
 	}
 
 	@Post('bulk-reminder')
+	@RequirePermissions(Permission(PermissionResource.COMMUNICATIONS, PermissionAction.CREATE))
 	@ApiOperation({ summary: 'Send bulk reminders to all tenants with unpaid invoices' })
 	@ApiResponse({ status: 201, description: 'Bulk reminders sent successfully' })
 	async sendBulkReminder(
@@ -71,7 +77,19 @@ export class NotificationsController {
 		return this.notificationsService.sendBulkReminder(sendBulkReminderDto, user.sub);
 	}
 
+	@Post('bulk-message')
+	@RequirePermissions(Permission(PermissionResource.COMMUNICATIONS, PermissionAction.CREATE))
+	@ApiOperation({ summary: 'Send a general message to all active tenants' })
+	@ApiResponse({ status: 201, description: 'Bulk message sent successfully' })
+	async sendBulkMessage(
+		@Body() sendBulkMessageDto: SendBulkMessageDto,
+		@CurrentUser() user: JwtPayload,
+	) {
+		return this.notificationsService.sendBulkMessage(sendBulkMessageDto, user.sub);
+	}
+
 	@Post(':notificationId/resend')
+	@RequirePermissions(Permission(PermissionResource.COMMUNICATIONS, PermissionAction.CREATE))
 	@ApiOperation({ summary: 'Resend a failed notification' })
 	@ApiResponse({ status: 200, description: 'Notification resent successfully' })
 	@ApiResponse({ status: 404, description: 'Notification not found' })
@@ -83,6 +101,7 @@ export class NotificationsController {
 	}
 
 	@Delete(':notificationId')
+	@RequirePermissions(Permission(PermissionResource.COMMUNICATIONS, PermissionAction.CREATE))
 	@ApiOperation({ summary: 'Delete a notification' })
 	@ApiResponse({ status: 200, description: 'Notification deleted successfully' })
 	@ApiResponse({ status: 404, description: 'Notification not found' })

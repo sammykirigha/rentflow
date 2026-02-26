@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsOptional } from 'class-validator';
+import { IsDateString, IsEnum, IsOptional, IsUUID } from 'class-validator';
 import { TenantStatus } from '../entities/tenant.entity';
 
 export class UpdateTenantDto {
@@ -12,4 +12,9 @@ export class UpdateTenantDto {
 	@IsEnum(TenantStatus)
 	@IsOptional()
 	status?: TenantStatus;
+
+	@ApiProperty({ description: 'Unit ID to assign when reactivating a vacated tenant', required: false })
+	@IsUUID()
+	@IsOptional()
+	unitId?: string;
 }

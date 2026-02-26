@@ -16,6 +16,8 @@ import { InvoicesController } from './invoices.controller';
 import { InvoicesRepository } from './invoices.repository';
 import { InvoicesService } from './invoices.service';
 import { PenaltyEngineService } from './penalty-engine.service';
+import { ReminderService } from './reminder.service';
+import { WalletSettlementService } from './wallet-settlement.service';
 
 @Module({
 	imports: [
@@ -28,7 +30,7 @@ import { PenaltyEngineService } from './penalty-engine.service';
 		SettingsModule,
 	],
 	controllers: [InvoicesController],
-	providers: [InvoicesService, InvoicesRepository, InvoiceEngineService, PenaltyEngineService],
-	exports: [InvoicesService, InvoicesRepository, InvoiceEngineService, PenaltyEngineService],
+	providers: [InvoicesService, InvoicesRepository, InvoiceEngineService, PenaltyEngineService, ReminderService, WalletSettlementService],
+	exports: [InvoicesService, InvoicesRepository, InvoiceEngineService, PenaltyEngineService, ReminderService, WalletSettlementService],
 })
 export class InvoicesModule {}

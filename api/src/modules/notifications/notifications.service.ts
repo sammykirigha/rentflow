@@ -9,6 +9,7 @@ import { TenantsRepository } from '../tenants/tenants.repository';
 import { TenantStatus } from '../tenants/entities/tenant.entity';
 import { InvoicesRepository } from '../invoices/invoices.repository';
 import { InvoiceStatus } from '../invoices/entities/invoice.entity';
+import { SendBulkMessageDto } from './dto/send-bulk-message.dto';
 import { SendBulkReminderDto } from './dto/send-bulk-reminder.dto';
 import { SendNotificationDto } from './dto/send-notification.dto';
 import { Notification, NotificationChannel, NotificationStatus, NotificationType } from './entities/notification.entity';
@@ -204,15 +205,16 @@ export class NotificationsService {
 		// Find all active tenants who have unpaid/overdue/partially paid invoices
 		const tenantsWithUnpaidInvoices = await this.invoicesRepository
 			.createQueryBuilder('invoice')
-			.select('DISTINCT invoice.tenantId', 'tenantId')
+			.select('invoice.tenantId', 'tenantId')
+			.addSelect('user.phone', 'phone')
+			.addSelect('user.email', 'email')
 			.innerJoin('invoice.tenant', 'tenant')
 			.innerJoin('tenant.user', 'user')
 			.where('invoice.status IN (:...statuses)', {
 				statuses: [InvoiceStatus.UNPAID, InvoiceStatus.OVERDUE, InvoiceStatus.PARTIALLY_PAID],
 			})
 			.andWhere('tenant.status = :tenantStatus', { tenantStatus: TenantStatus.ACTIVE })
-			.addSelect('user.phone', 'phone')
-			.addSelect('user.email', 'email')
+			.distinct(true)
 			.getRawMany<{ tenantId: string; phone: string; email: string }>();
 
 		if (tenantsWithUnpaidInvoices.length === 0) {
@@ -229,20 +231,30 @@ export class NotificationsService {
 
 			// Attempt delivery and check return values
 			if ((dto.channel === NotificationChannel.SMS || dto.channel === NotificationChannel.BOTH) && row.phone) {
-				const smsResult = await this.smsService.sendSms(row.phone, dto.message);
-				if (!smsResult.success) {
-					errors.push('SMS delivery failed');
+				try {
+					const smsResult = await this.smsService.sendSms(row.phone, dto.message);
+					if (!smsResult.success) {
+						errors.push('SMS delivery failed');
+					}
+				} catch (err) {
+					errors.push(`SMS error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+					this.logger.error(`SMS send threw for tenant ${row.tenantId}`, err);
 				}
 			}
 
 			if ((dto.channel === NotificationChannel.EMAIL || dto.channel === NotificationChannel.BOTH) && row.email) {
-				const emailResult = await this.mailService.sendEmail({
-					to: row.email,
-					subject: dto.subject || 'RentFlow Payment Reminder',
-					html: dto.message,
-				});
-				if (!emailResult) {
-					errors.push('Email delivery failed');
+				try {
+					const emailResult = await this.mailService.sendEmail({
+						to: row.email,
+						subject: dto.subject || 'RentFlow Payment Reminder',
+						html: dto.message,
+					});
+					if (!emailResult) {
+						errors.push('Email delivery failed');
+					}
+				} catch (err) {
+					errors.push(`Email error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+					this.logger.error(`Email send threw for tenant ${row.tenantId}`, err);
 				}
 			}
 
@@ -289,6 +301,109 @@ export class NotificationsService {
 			details: `Sent bulk ${type} reminders via ${dto.channel} to ${notifications.length} tenants`,
 			metadata: {
 				type,
+				channel: dto.channel,
+				tenantCount: notifications.length,
+				sent: notifications.filter(n => n.status === NotificationStatus.SENT).length,
+				failed: notifications.filter(n => n.status === NotificationStatus.FAILED).length,
+			},
+		});
+
+		return { count: notifications.length };
+	}
+
+	async sendBulkMessage(dto: SendBulkMessageDto, userId: string): Promise<{ count: number }> {
+		// Find all active tenants with their contact info
+		const activeTenants = await this.tenantsRepository
+			.createQueryBuilder('tenant')
+			.innerJoin('tenant.user', 'user')
+			.select('tenant.tenantId', 'tenantId')
+			.addSelect('user.phone', 'phone')
+			.addSelect('user.email', 'email')
+			.where('tenant.status = :status', { status: TenantStatus.ACTIVE })
+			.getRawMany<{ tenantId: string; phone: string; email: string }>();
+
+		if (activeTenants.length === 0) {
+			return { count: 0 };
+		}
+
+		const notifications: Notification[] = [];
+
+		for (const row of activeTenants) {
+			let deliveryStatus = NotificationStatus.PENDING;
+			let sentAt: Date | undefined;
+			let failReason: string | undefined;
+			const errors: string[] = [];
+
+			if ((dto.channel === NotificationChannel.SMS || dto.channel === NotificationChannel.BOTH) && row.phone) {
+				try {
+					const smsResult = await this.smsService.sendSms(row.phone, dto.message);
+					if (!smsResult.success) {
+						errors.push('SMS delivery failed');
+					}
+				} catch (err) {
+					errors.push(`SMS error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+					this.logger.error(`SMS send threw for tenant ${row.tenantId}`, err);
+				}
+			}
+
+			if ((dto.channel === NotificationChannel.EMAIL || dto.channel === NotificationChannel.BOTH) && row.email) {
+				try {
+					const emailResult = await this.mailService.sendEmail({
+						to: row.email,
+						subject: dto.subject || 'Notice from RentFlow',
+						html: dto.message,
+					});
+					if (!emailResult) {
+						errors.push('Email delivery failed');
+					}
+				} catch (err) {
+					errors.push(`Email error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+					this.logger.error(`Email send threw for tenant ${row.tenantId}`, err);
+				}
+			}
+
+			if (errors.length === 0) {
+				deliveryStatus = NotificationStatus.SENT;
+				sentAt = new Date();
+			} else {
+				deliveryStatus = NotificationStatus.FAILED;
+				failReason = errors.join('; ');
+				this.logger.error(`Bulk message delivery failed for tenant ${row.tenantId}: ${failReason}`);
+			}
+
+			const queryRunner = this.dataSource.createQueryRunner();
+			await queryRunner.connect();
+			await queryRunner.startTransaction();
+
+			try {
+				const notification = await queryRunner.manager.save(
+					queryRunner.manager.create(Notification, {
+						tenantId: row.tenantId,
+						type: NotificationType.GENERAL,
+						channel: dto.channel,
+						subject: dto.subject,
+						message: dto.message,
+						sentAt,
+						status: deliveryStatus,
+						failReason,
+					}),
+				);
+				await queryRunner.commitTransaction();
+				notifications.push(notification);
+			} catch (err) {
+				await queryRunner.rollbackTransaction();
+				this.logger.error(`Failed to save bulk message notification for tenant ${row.tenantId}: ${err.message}`);
+			} finally {
+				await queryRunner.release();
+			}
+		}
+
+		await this.auditService.createLog({
+			action: AuditAction.BULK_MESSAGE_SENT,
+			performedBy: userId,
+			targetType: AuditTargetType.NOTIFICATION,
+			details: `Sent bulk message via ${dto.channel} to ${notifications.length} tenants`,
+			metadata: {
 				channel: dto.channel,
 				tenantCount: notifications.length,
 				sent: notifications.filter(n => n.status === NotificationStatus.SENT).length,

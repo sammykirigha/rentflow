@@ -1,8 +1,10 @@
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { Permission, RequirePermissions } from '@/common/decorators/permissions.decorator';
 import { Public } from '@/common/decorators/public.decorator';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '@/common/guards/permissions.guard';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
+import { PermissionAction, PermissionResource } from '@/modules/permissions/entities/permission.entity';
 import { Body, Controller, Get, HttpCode, HttpStatus, Ip, Patch, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { UsersService } from '../users/users.service';
@@ -30,6 +32,7 @@ export class SettingsController {
 
   @Patch()
   @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission(PermissionResource.SETTINGS, PermissionAction.UPDATE))
   @ApiOperation({ summary: 'Update system settings (Landlord only)' })
   @ApiResponse({ status: 200, description: 'System settings updated successfully' })
   @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })

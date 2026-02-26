@@ -98,7 +98,8 @@ export interface UpdateVendorInput {
 
 export interface MaintenanceRequest {
   maintenanceRequestId: string;
-  tenantId: string;
+  tenantId?: string | null;
+  propertyId?: string | null;
   description: string;
   category: ExpenseCategory;
   priority: ExpensePriority;
@@ -117,12 +118,23 @@ export interface MaintenanceRequest {
     };
     unit?: {
       unitNumber: string;
+      property?: {
+        propertyId: string;
+        name: string;
+        location: string;
+      };
     };
+  };
+  property?: {
+    propertyId: string;
+    name: string;
+    location: string;
   };
 }
 
 export interface CreateMaintenanceRequestInput {
-  tenantId: string;
+  tenantId?: string;
+  propertyId?: string;
   description: string;
   category: ExpenseCategory;
   priority?: ExpensePriority;
@@ -133,4 +145,5 @@ export interface UpdateMaintenanceRequestInput {
   priority?: ExpensePriority;
   notes?: string;
   resolvedAt?: string;
+  expenseAmount?: number;
 }

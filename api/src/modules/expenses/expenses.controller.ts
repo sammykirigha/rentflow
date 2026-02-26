@@ -13,9 +13,11 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { Permission, RequirePermissions } from '@/common/decorators/permissions.decorator';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '@/common/guards/permissions.guard';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
+import { PermissionAction, PermissionResource } from '@/modules/permissions/entities/permission.entity';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { UpdateExpenseDto } from './dto/update-expense.dto';
 import { ExpenseCategory, ExpensePriority, ExpenseStatus } from './entities/expense.entity';
@@ -30,6 +32,7 @@ export class ExpensesController {
 	constructor(private readonly expensesService: ExpensesService) {}
 
 	@Post()
+	@RequirePermissions(Permission(PermissionResource.EXPENSES, PermissionAction.CREATE))
 	@ApiOperation({ summary: 'Create a new expense' })
 	async create(
 		@Body() createExpenseDto: CreateExpenseDto,
@@ -39,6 +42,7 @@ export class ExpensesController {
 	}
 
 	@Get()
+	@RequirePermissions(Permission(PermissionResource.EXPENSES, PermissionAction.READ))
 	@ApiOperation({ summary: 'List expenses with pagination and filters' })
 	@ApiQuery({ name: 'page', required: false, type: Number })
 	@ApiQuery({ name: 'limit', required: false, type: Number })
@@ -58,12 +62,14 @@ export class ExpensesController {
 	}
 
 	@Get(':expenseId')
+	@RequirePermissions(Permission(PermissionResource.EXPENSES, PermissionAction.READ))
 	@ApiOperation({ summary: 'Get a single expense by ID' })
 	async findOne(@Param('expenseId') expenseId: string) {
 		return this.expensesService.findOne(expenseId);
 	}
 
 	@Patch(':expenseId')
+	@RequirePermissions(Permission(PermissionResource.EXPENSES, PermissionAction.UPDATE))
 	@ApiOperation({ summary: 'Update an expense' })
 	async update(
 		@Param('expenseId') expenseId: string,

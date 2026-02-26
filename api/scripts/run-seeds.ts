@@ -4,6 +4,7 @@ import { PermissionsSeed } from '../src/database/seeds/001-permissions.seed';
 import { InitialUsersSeed } from '../src/database/seeds/002-initial-users.seed';
 import { SystemSettingsSeed } from '../src/database/seeds/003-system-settings.seed';
 import { PropertiesUnitsTenantsSeed } from '../src/database/seeds/004-properties-units-tenants.seed';
+import { ReconciliationPaymentsSeed } from '../src/database/seeds/005-reconciliation-payments.seed';
 
 // Load environment variables
 config();
@@ -23,6 +24,7 @@ async function runSeeds() {
       new InitialUsersSeed(),
       new SystemSettingsSeed(),
       new PropertiesUnitsTenantsSeed(),
+      new ReconciliationPaymentsSeed(),
     ];
 
     for (const seed of seeds) {

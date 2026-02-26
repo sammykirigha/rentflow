@@ -5,7 +5,6 @@ import { ConfigService } from '@nestjs/config';
 export class SmsService {
 	private readonly logger = new Logger(SmsService.name);
 	private readonly sms: any;
-	private readonly whatsapp: any;
 
 	constructor(private readonly configService: ConfigService) {
 		// eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -15,16 +14,6 @@ export class SmsService {
 			username: this.configService.get('AT_USERNAME'),
 		});
 		this.sms = at.SMS;
-
-		// WhatsApp is optional — only available if product ID is configured
-		try {
-			if (this.configService.get('AT_WHATSAPP_PRODUCT_ID')) {
-				this.whatsapp = at.WHATSAPP;
-				this.logger.log('WhatsApp channel initialized');
-			}
-		} catch (err) {
-			this.logger.warn(`WhatsApp initialization failed: ${err.message}`);
-		}
 	}
 
 	async sendSms(to: string, message: string): Promise<{ success: boolean; messageId?: string }> {
@@ -75,30 +64,6 @@ export class SmsService {
 		}
 
 		return { sent, failed };
-	}
-
-	async sendWhatsApp(to: string, message: string): Promise<{ success: boolean }> {
-		const normalized = this.normalizePhone(to);
-
-		if (!this.whatsapp) {
-			this.logger.warn(`WhatsApp not configured, falling back to SMS for +${normalized}`);
-			return this.sendSms(to, message);
-		}
-
-		try {
-			const productId = this.configService.get<string>('AT_WHATSAPP_PRODUCT_ID');
-			await this.whatsapp.send({
-				productId,
-				to: `+${normalized}`,
-				message,
-			});
-
-			this.logger.log(`WhatsApp message sent to +${normalized}`);
-			return { success: true };
-		} catch (error) {
-			this.logger.warn(`WhatsApp failed for +${normalized}: ${error.message}, falling back to SMS`);
-			return this.sendSms(to, message);
-		}
 	}
 
 	private normalizePhone(phone: string): string {

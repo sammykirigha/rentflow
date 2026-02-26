@@ -21,9 +21,12 @@ import {
   Table,
   Tag,
   Tooltip,
+  Typography,
 } from 'antd';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { useCallback, useEffect, useState } from 'react';
+
+const { Text } = Typography;
 
 const statusColors: Record<string, string> = {
   active: 'green',
@@ -41,11 +44,7 @@ export default function TeamManagementTab() {
     pageSize: 10,
     total: 0,
   });
-  const [filters, setFilters] = useState<{ role: string; status: string; search: string }>({
-    role: 'all',
-    status: 'all',
-    search: '',
-  });
+  const [search, setSearch] = useState('');
 
   // Add manager modal
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -61,12 +60,10 @@ export default function TeamManagementTab() {
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const response: GetUsersResponse = await userApi.getUsers({
+      const response: GetUsersResponse = await userApi.getAdminUsers({
         page: pagination.current,
         limit: pagination.pageSize,
-        role: filters.role,
-        status: filters.status,
-        search: filters.search,
+        search: search || undefined,
       });
       setUsers(response.data);
       setPagination((prev) => ({ ...prev, total: response.pagination.total }));
@@ -75,7 +72,7 @@ export default function TeamManagementTab() {
     } finally {
       setLoading(false);
     }
-  }, [pagination.current, pagination.pageSize, filters, messageApi]);
+  }, [pagination.current, pagination.pageSize, search, messageApi]);
 
   const fetchRoles = useCallback(async () => {
     try {
@@ -225,6 +222,12 @@ export default function TeamManagementTab() {
 
   return (
     <div>
+      <div style={{ marginBottom: 24 }}>
+        <Text strong style={{ fontSize: 16 }}>Team</Text>
+        <br />
+        <Text type="secondary">Manage landlord and manager accounts with access to the admin dashboard.</Text>
+      </div>
+
       <div
         style={{
           display: 'flex',
@@ -235,45 +238,17 @@ export default function TeamManagementTab() {
           gap: 8,
         }}
       >
-        <Space wrap>
-          <Input
-            placeholder="Search by name or email"
-            prefix={<SearchOutlined />}
-            value={filters.search}
-            onChange={(e) => {
-              setFilters((prev) => ({ ...prev, search: e.target.value }));
-              setPagination((prev) => ({ ...prev, current: 1 }));
-            }}
-            style={{ width: 220 }}
-            allowClear
-          />
-          <Select
-            value={filters.role}
-            style={{ width: 140 }}
-            onChange={(val) => {
-              setFilters((prev) => ({ ...prev, role: val }));
-              setPagination((prev) => ({ ...prev, current: 1 }));
-            }}
-            options={[
-              { label: 'All Roles', value: 'all' },
-              ...roles.map((r) => ({ label: r.name, value: r.name.toLowerCase() })),
-            ]}
-          />
-          <Select
-            value={filters.status}
-            style={{ width: 140 }}
-            onChange={(val) => {
-              setFilters((prev) => ({ ...prev, status: val }));
-              setPagination((prev) => ({ ...prev, current: 1 }));
-            }}
-            options={[
-              { label: 'All Statuses', value: 'all' },
-              { label: 'Active', value: 'active' },
-              { label: 'Suspended', value: 'suspended' },
-              { label: 'Pending', value: 'pending' },
-            ]}
-          />
-        </Space>
+        <Input
+          placeholder="Search by name or email"
+          prefix={<SearchOutlined />}
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPagination((prev) => ({ ...prev, current: 1 }));
+          }}
+          style={{ width: 260 }}
+          allowClear
+        />
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setAddModalOpen(true)}>
           Add Manager
         </Button>

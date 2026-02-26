@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from 'react';
 import {
   Typography,
   Table,
@@ -43,14 +44,17 @@ const PAYMENT_METHOD_LABEL_MAP: Record<string, string> = {
 
 export default function TenantPaymentsPage() {
   const { isAuthenticated } = useAuth();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['my-payments'],
-    queryFn: () => paymentsApi.getAll(),
+    queryKey: ['my-payments', page, pageSize],
+    queryFn: () => paymentsApi.getMy({ page, limit: pageSize }),
     enabled: isAuthenticated,
   });
 
-  const payments: Payment[] = Array.isArray(data) ? data : [];
+  const payments: Payment[] = Array.isArray(data?.data) ? data.data : [];
+  const pagination = data?.pagination;
 
   const columns: ColumnsType<Payment> = [
     {
@@ -112,9 +116,12 @@ export default function TenantPaymentsPage() {
           rowKey="paymentId"
           locale={{ emptyText: <Empty description="No payments yet" /> }}
           pagination={{
-            defaultPageSize: 10,
+            current: page,
+            pageSize,
+            total: pagination?.total || 0,
             showSizeChanger: true,
             showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} payments`,
+            onChange: (p, ps) => { setPage(p); setPageSize(ps); },
           }}
         />
       </Card>

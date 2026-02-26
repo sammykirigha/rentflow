@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID, Matches } from 'class-validator';
+import { IsDateString, IsEmail, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, Min } from 'class-validator';
 
 export class CreateTenantDto {
 	@ApiProperty({ description: "Tenant's full name", example: 'John Doe' })
@@ -32,4 +32,11 @@ export class CreateTenantDto {
 	@IsDateString()
 	@IsOptional()
 	leaseEnd?: string;
+
+	@ApiProperty({ description: 'Security deposit amount (KES)', example: 15000, required: false })
+	@IsOptional()
+	@IsNumber({ maxDecimalPlaces: 2 })
+	@Min(0)
+	@Max(10000000)
+	depositAmount?: number;
 }

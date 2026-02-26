@@ -1,5 +1,11 @@
 // Settings Types
 
+export interface RecurringCharge {
+  name: string;
+  amount: number;
+  enabled: boolean;
+}
+
 export interface SystemSetting {
   systemSettingId: number;
   platformName: string;
@@ -25,6 +31,9 @@ export interface SystemSetting {
   emailNotifications: boolean;
   smsNotifications: boolean;
   adminAlerts: boolean;
+
+  // Invoice Settings
+  recurringCharges: RecurringCharge[];
 
   createdAt: string;
   updatedAt: string;

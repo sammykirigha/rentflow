@@ -1,7 +1,9 @@
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { Permission, RequirePermissions } from '@/common/decorators/permissions.decorator';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '@/common/guards/permissions.guard';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
+import { PermissionAction, PermissionResource } from '@/modules/permissions/entities/permission.entity';
 import {
 	Body,
 	ClassSerializerInterceptor,
@@ -31,6 +33,7 @@ export class VendorsController {
 	constructor(private readonly vendorsService: VendorsService) { }
 
 	@Post()
+	@RequirePermissions(Permission(PermissionResource.VENDORS, PermissionAction.CREATE))
 	@ApiOperation({ summary: 'Create a new vendor' })
 	@ApiResponse({ status: 201, description: 'Vendor created successfully' })
 	async create(
@@ -41,6 +44,7 @@ export class VendorsController {
 	}
 
 	@Get()
+	@RequirePermissions(Permission(PermissionResource.VENDORS, PermissionAction.READ))
 	@ApiOperation({ summary: 'List all vendors with pagination and search' })
 	@ApiResponse({ status: 200, description: 'Vendors retrieved successfully' })
 	@ApiQuery({ name: 'page', required: false, type: Number })
@@ -57,6 +61,7 @@ export class VendorsController {
 	}
 
 	@Get(':vendorId')
+	@RequirePermissions(Permission(PermissionResource.VENDORS, PermissionAction.READ))
 	@ApiOperation({ summary: 'Get a single vendor by ID' })
 	@ApiResponse({ status: 200, description: 'Vendor retrieved successfully' })
 	@ApiResponse({ status: 404, description: 'Vendor not found' })
@@ -65,6 +70,7 @@ export class VendorsController {
 	}
 
 	@Patch(':vendorId')
+	@RequirePermissions(Permission(PermissionResource.VENDORS, PermissionAction.UPDATE))
 	@ApiOperation({ summary: 'Update a vendor' })
 	@ApiResponse({ status: 200, description: 'Vendor updated successfully' })
 	@ApiResponse({ status: 404, description: 'Vendor not found' })

@@ -21,6 +21,7 @@ export enum AuditAction {
 	TENANT_UPDATED = 'tenant_updated',
 	TENANT_VACATED = 'tenant_vacated',
 	TENANT_DELETED = 'tenant_deleted',
+	DEPOSIT_REFUNDED = 'deposit_refunded',
 
 	// Invoice actions
 	INVOICE_GENERATED = 'invoice_generated',
@@ -34,6 +35,11 @@ export enum AuditAction {
 	PAYMENT_FAILED = 'payment_failed',
 	PAYMENT_REVERSED = 'payment_reversed',
 	STK_PUSH_INITIATED = 'stk_push_initiated',
+	STK_PUSH_CALLBACK_SUCCESS = 'stk_push_callback_success',
+	STK_PUSH_CALLBACK_FAILED = 'stk_push_callback_failed',
+	C2B_PAYMENT_RECEIVED = 'c2b_payment_received',
+	C2B_PAYMENT_UNMATCHED = 'c2b_payment_unmatched',
+	C2B_URLS_REGISTERED = 'c2b_urls_registered',
 
 	// Wallet actions
 	WALLET_CREDITED = 'wallet_credited',
@@ -57,6 +63,7 @@ export enum AuditAction {
 	NOTIFICATION_SENT = 'notification_sent',
 	REMINDER_SENT = 'reminder_sent',
 	BULK_REMINDER_SENT = 'bulk_reminder_sent',
+	BULK_MESSAGE_SENT = 'bulk_message_sent',
 
 	// Settings actions
 	SETTINGS_UPDATED = 'settings_updated',
@@ -65,6 +72,12 @@ export enum AuditAction {
 	ROLE_CREATED = 'role_created',
 	ROLE_UPDATED = 'role_updated',
 	ROLE_DELETED = 'role_deleted',
+
+	// Reconciliation actions
+	PAYMENT_RECONCILED = 'payment_reconciled',
+
+	// Wallet auto-settlement actions
+	WALLET_AUTO_SETTLEMENT_COMPLETED = 'wallet_auto_settlement_completed',
 
 	// Receipt actions
 	RECEIPT_GENERATED = 'receipt_generated',

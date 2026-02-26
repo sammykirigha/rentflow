@@ -17,14 +17,20 @@ export enum PaymentStatus {
 
 export interface Payment {
   paymentId: string;
-  tenantId: string;
+  tenantId?: string;
   invoiceId?: string;
   amount: number;
   method: PaymentMethod;
   status: PaymentStatus;
   mpesaReceiptNumber?: string;
   mpesaPhoneNumber?: string;
+  mpesaAccountReference?: string;
+  mpesaPaybillNumber?: string;
   transactionDate: string;
+  needsReconciliation: boolean;
+  reconciliationNote?: string;
+  reconciledAt?: string;
+  reconciledBy?: string;
   tenant?: Tenant;
   invoice?: Invoice;
   createdAt: string;
@@ -33,7 +39,6 @@ export interface Payment {
 
 export interface RecordPaymentInput {
   tenantId: string;
-  invoiceId?: string;
   amount: number;
   method: PaymentMethod;
   mpesaReceiptNumber?: string;
@@ -42,6 +47,7 @@ export interface RecordPaymentInput {
 
 export enum WalletTxnType {
   CREDIT = 'credit',
+  CREDIT_RECONCILIATION = 'credit_reconciliation',
   DEBIT_INVOICE = 'debit_invoice',
   DEBIT_PENALTY = 'debit_penalty',
   REFUND = 'refund',
@@ -62,4 +68,33 @@ export interface WalletTransaction {
 export interface TopupWalletInput {
   amount: number;
   mpesaReceiptNumber?: string;
+}
+
+export interface StkPushResponse {
+  paymentId: string;
+  checkoutRequestId: string;
+}
+
+export interface StkStatusResponse {
+  status: PaymentStatus;
+  resultDesc?: string;
+}
+
+export interface LedgerTransaction extends WalletTransaction {
+  tenant?: {
+    tenantId: string;
+    walletBalance: number;
+    user?: {
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+      phone?: string;
+    };
+    unit?: {
+      unitNumber: string;
+      property?: {
+        name: string;
+      };
+    };
+  };
 }

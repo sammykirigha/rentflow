@@ -12,18 +12,26 @@ import {
   Space,
   Spin,
   Empty,
+  Modal,
+  Form,
+  Input,
+  InputNumber,
+  DatePicker,
+  Select,
 } from 'antd';
 import {
   ArrowLeftOutlined,
   DownloadOutlined,
+  EditOutlined,
   FileTextOutlined,
 } from '@ant-design/icons';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { invoicesApi } from '@/lib/api/invoices.api';
 import { paymentsApi } from '@/lib/api/payments.api';
 import { formatKES } from '@/lib/format-kes';
-import type { Invoice } from '@/types/invoices';
+import { parseError } from '@/lib/api/parseError';
+import type { Invoice, InvoiceStatus, UpdateInvoiceInput } from '@/types/invoices';
 import type { Payment, PaymentMethod, PaymentStatus } from '@/types/payments';
 import type { ColumnsType } from 'antd/es/table';
 import { useParams, useRouter } from 'next/navigation';
@@ -65,9 +73,12 @@ const PAYMENT_STATUS_COLOR: Record<string, string> = {
 export default function InvoiceDetailPage() {
   const { invoiceId } = useParams<{ invoiceId: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { isAuthenticated } = useAuth();
   const { message } = App.useApp();
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editForm] = Form.useForm();
 
   const handleDownloadPdf = async () => {
     setDownloadingPdf(true);
@@ -88,11 +99,58 @@ export default function InvoiceDetailPage() {
 
   const { data: paymentsData, isLoading: isLoadingPayments } = useQuery({
     queryKey: ['invoice-payments', invoiceId],
-    queryFn: () => paymentsApi.getAll({ invoiceId }),
+    queryFn: () => paymentsApi.getAll({ invoiceId, limit: 200 }),
     enabled: isAuthenticated && !!invoiceId,
   });
 
-  const payments: Payment[] = Array.isArray(paymentsData) ? paymentsData : [];
+  const payments: Payment[] = Array.isArray(paymentsData?.data) ? paymentsData.data : [];
+
+  const updateMutation = useMutation({
+    mutationFn: (values: UpdateInvoiceInput) => invoicesApi.update(invoiceId, values),
+    onSuccess: () => {
+      message.success('Invoice updated successfully');
+      queryClient.invalidateQueries({ queryKey: ['invoice', invoiceId] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      setIsEditModalOpen(false);
+    },
+    onError: (error) => {
+      message.error(parseError(error, 'Failed to update invoice'));
+    },
+  });
+
+  const openEditModal = () => {
+    if (!invoice) return;
+    editForm.setFieldsValue({
+      rentAmount: Number(invoice.rentAmount),
+      waterCharge: Number(invoice.waterCharge) || undefined,
+      electricityCharge: Number(invoice.electricityCharge) || undefined,
+      otherCharges: Number(invoice.otherCharges) || undefined,
+      otherChargesDesc: invoice.otherChargesDesc || undefined,
+      dueDate: invoice.dueDate ? dayjs(invoice.dueDate) : undefined,
+      status: invoice.status,
+      notes: invoice.notes || undefined,
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdate = async () => {
+    try {
+      const values = await editForm.validateFields();
+      const payload: UpdateInvoiceInput = {
+        rentAmount: values.rentAmount,
+        waterCharge: values.waterCharge ?? 0,
+        electricityCharge: values.electricityCharge ?? 0,
+        otherCharges: values.otherCharges ?? 0,
+        otherChargesDesc: values.otherChargesDesc || undefined,
+        dueDate: values.dueDate?.toISOString(),
+        status: values.status,
+        notes: values.notes || undefined,
+      };
+      updateMutation.mutate(payload);
+    } catch {
+      // validation errors shown inline
+    }
+  };
 
   const paymentColumns: ColumnsType<Payment> = [
     {
@@ -172,14 +230,22 @@ export default function InvoiceDetailPage() {
             {STATUS_LABEL_MAP[invoice.status] || invoice.status}
           </Tag>
         </Space>
-        <Button
-          type="primary"
-          icon={<DownloadOutlined />}
-          loading={downloadingPdf}
-          onClick={handleDownloadPdf}
-        >
-          Download PDF
-        </Button>
+        <Space>
+          <Button
+            icon={<EditOutlined />}
+            onClick={openEditModal}
+          >
+            Edit Invoice
+          </Button>
+          <Button
+            type="primary"
+            icon={<DownloadOutlined />}
+            loading={downloadingPdf}
+            onClick={handleDownloadPdf}
+          >
+            Download PDF
+          </Button>
+        </Space>
       </div>
 
       {/* Invoice Details */}
@@ -261,6 +327,89 @@ export default function InvoiceDetailPage() {
           locale={{ emptyText: <Empty description="No payments recorded for this invoice" /> }}
         />
       </Card>
+
+      {/* Edit Invoice Modal */}
+      <Modal
+        title="Edit Invoice"
+        open={isEditModalOpen}
+        onOk={handleUpdate}
+        onCancel={() => {
+          setIsEditModalOpen(false);
+          editForm.resetFields();
+        }}
+        confirmLoading={updateMutation.isPending}
+        okText="Save Changes"
+        width={560}
+      >
+        <Form form={editForm} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item
+            name="rentAmount"
+            label="Rent Amount (KES)"
+            rules={[{ required: true, message: 'Please enter the rent amount' }]}
+          >
+            <InputNumber<number>
+              min={0}
+              style={{ width: '100%' }}
+              formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+              parser={(value) => Number(value!.replace(/,/g, ''))}
+            />
+          </Form.Item>
+
+          <Form.Item name="waterCharge" label="Water Charge (KES)">
+            <InputNumber<number>
+              min={0}
+              style={{ width: '100%' }}
+              placeholder="Optional"
+              formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+              parser={(value) => Number(value!.replace(/,/g, ''))}
+            />
+          </Form.Item>
+
+          <Form.Item name="electricityCharge" label="Electricity Charge (KES)">
+            <InputNumber<number>
+              min={0}
+              style={{ width: '100%' }}
+              placeholder="Optional"
+              formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+              parser={(value) => Number(value!.replace(/,/g, ''))}
+            />
+          </Form.Item>
+
+          <Form.Item name="otherCharges" label="Other Charges (KES)">
+            <InputNumber<number>
+              min={0}
+              style={{ width: '100%' }}
+              placeholder="Optional"
+              formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+              parser={(value) => Number(value!.replace(/,/g, ''))}
+            />
+          </Form.Item>
+
+          <Form.Item name="otherChargesDesc" label="Other Charges Description">
+            <Input placeholder="e.g. Garbage collection" />
+          </Form.Item>
+
+          <Form.Item name="dueDate" label="Due Date">
+            <DatePicker style={{ width: '100%' }} />
+          </Form.Item>
+
+          <Form.Item name="status" label="Status">
+            <Select
+              options={[
+                { label: 'Unpaid', value: 'unpaid' },
+                { label: 'Partially Paid', value: 'partially_paid' },
+                { label: 'Paid', value: 'paid' },
+                { label: 'Overdue', value: 'overdue' },
+                { label: 'Cancelled', value: 'cancelled' },
+              ]}
+            />
+          </Form.Item>
+
+          <Form.Item name="notes" label="Notes">
+            <Input.TextArea rows={3} placeholder="Optional notes" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 }

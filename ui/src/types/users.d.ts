@@ -19,4 +19,10 @@ export interface User {
 	suspensionReason?: string | null;
 	lastLoginAt?: string | null;
 	userRole: Role;
+	tenant?: {
+		tenantId: string;
+		unitId?: string;
+		walletBalance: number;
+		status: string;
+	};
 }

@@ -1,11 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, In, Not } from 'typeorm';
 import { Property } from '@/modules/properties/entities/property.entity';
 import { Unit } from '@/modules/units/entities/unit.entity';
 import { Tenant, TenantStatus } from '@/modules/tenants/entities/tenant.entity';
 import { Invoice, InvoiceStatus } from '@/modules/invoices/entities/invoice.entity';
 import { Payment } from '@/modules/payments/entities/payment.entity';
-import { Expense } from '@/modules/expenses/entities/expense.entity';
+import { Expense, ExpenseStatus } from '@/modules/expenses/entities/expense.entity';
+import { MaintenanceRequest } from '@/modules/maintenance/entities/maintenance-request.entity';
+import { ExpensePriority } from '@/modules/expenses/entities/expense.entity';
 
 @Injectable()
 export class DashboardService {
@@ -31,11 +33,11 @@ export class DashboardService {
 		const totalTenants = await tenantRepo.count();
 		const activeTenants = await tenantRepo.count({ where: { status: TenantStatus.ACTIVE } });
 
-		// Revenue (sum of all completed payments)
-		const revenueResult = await paymentRepo
-			.createQueryBuilder('payment')
-			.select('COALESCE(SUM(payment.amount), 0)', 'total')
-			.where('payment.status = :status', { status: 'completed' })
+		// Revenue (sum of amountPaid across all non-cancelled invoices)
+		const revenueResult = await invoiceRepo
+			.createQueryBuilder('invoice')
+			.select('COALESCE(SUM(invoice.amount_paid), 0)', 'total')
+			.where('invoice.status != :cancelled', { cancelled: InvoiceStatus.CANCELLED })
 			.getRawOne();
 		const totalRevenue = parseFloat(revenueResult?.total || '0');
 
@@ -83,6 +85,26 @@ export class DashboardService {
 			relations: ['tenant'],
 		});
 
+		// Maintenance stats
+		const maintenanceRepo = this.dataSource.getRepository(MaintenanceRequest);
+
+		const pendingMaintenance = await maintenanceRepo.count({
+			where: { status: ExpenseStatus.PENDING },
+		});
+
+		const urgentMaintenance = await maintenanceRepo.count({
+			where: {
+				priority: In([ExpensePriority.HIGH, ExpensePriority.URGENT]),
+				status: Not(In([ExpenseStatus.COMPLETED, ExpenseStatus.CANCELLED])),
+			},
+		});
+
+		const recentMaintenance = await maintenanceRepo.find({
+			order: { createdAt: 'DESC' },
+			take: 5,
+			relations: ['tenant', 'tenant.user', 'tenant.unit', 'tenant.unit.property'],
+		});
+
 		return {
 			totalProperties,
 			totalUnits,
@@ -97,6 +119,9 @@ export class DashboardService {
 			overdueInvoices,
 			recentInvoices,
 			recentPayments,
+			pendingMaintenance,
+			urgentMaintenance,
+			recentMaintenance,
 		};
 	}
 }

@@ -1,10 +1,14 @@
-import { Invoice, CreateInvoiceInput } from '@/types/invoices';
+import { Invoice, CreateInvoiceInput, UpdateInvoiceInput } from '@/types/invoices';
 import api from '.';
 
 export const invoicesApi = {
   getAll: async (params?: { page?: number; limit?: number; tenantId?: string; status?: string; billingMonth?: string }) => {
     const response = await api.get('/invoices', { params });
-    return response.data?.data;
+    return response.data;
+  },
+  getMy: async (params?: { page?: number; limit?: number; status?: string }) => {
+    const response = await api.get('/invoices/my', { params });
+    return response.data;
   },
   getOne: async (invoiceId: string): Promise<Invoice> => {
     const response = await api.get(`/invoices/${invoiceId}`);
@@ -12,10 +16,14 @@ export const invoicesApi = {
   },
   getByTenant: async (tenantId: string, params?: { page?: number; limit?: number }) => {
     const response = await api.get(`/invoices/tenant/${tenantId}`, { params });
-    return response.data?.data;
+    return response.data;
   },
   create: async (data: CreateInvoiceInput): Promise<Invoice> => {
     const response = await api.post('/invoices', data);
+    return response.data;
+  },
+  update: async (invoiceId: string, data: UpdateInvoiceInput): Promise<Invoice> => {
+    const response = await api.patch(`/invoices/${invoiceId}`, data);
     return response.data;
   },
   downloadPdf: async (invoiceId: string): Promise<void> => {

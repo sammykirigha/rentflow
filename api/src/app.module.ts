@@ -30,6 +30,7 @@ import { VendorsModule } from './modules/vendors/vendors.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { MpesaModule } from './modules/mpesa/mpesa.module';
 import { SmsModule } from './modules/sms/sms.module';
 
 @Module({
@@ -64,6 +65,13 @@ import { SmsModule } from './modules/sms/sms.module';
 
 				AT_API_KEY: Joi.string().optional(),
 				AT_USERNAME: Joi.string().optional(),
+
+				MPESA_CONSUMER_KEY: Joi.string().required(),
+				MPESA_CONSUMER_SECRET: Joi.string().required(),
+				MPESA_PASSKEY: Joi.string().required(),
+				MPESA_SHORTCODE: Joi.string().required(),
+				MPESA_CALLBACK_BASE_URL: Joi.string().required(),
+				MPESA_ENVIRONMENT: Joi.string().valid('sandbox', 'production').required(),
 
 				FRONTEND_URL: Joi.string().required(),
 				BACKEND_URL: Joi.string().required(),
@@ -108,6 +116,7 @@ import { SmsModule } from './modules/sms/sms.module';
 		NotificationsModule,
 		DashboardModule,
 		SmsModule,
+		MpesaModule,
 	],
 	providers: [
 		// Global guards

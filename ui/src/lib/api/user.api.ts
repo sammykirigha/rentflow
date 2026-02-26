@@ -70,6 +70,17 @@ export const userApi = {
     return response.data;
   },
 
+  // Get admin/manager users only
+  getAdminUsers: async (query?: { page?: number; limit?: number; search?: string }): Promise<GetUsersResponse> => {
+    const params = new URLSearchParams();
+    if (query?.page) params.append('page', query.page.toString());
+    if (query?.limit) params.append('limit', query.limit.toString());
+    if (query?.search) params.append('search', query.search);
+
+    const response = await api.get(`/users/admins?${params.toString()}`);
+    return response.data;
+  },
+
   // Create admin/manager user
   createAdmin: async (data: { email: string; password: string; firstName?: string; lastName?: string; roleId: string }): Promise<User> => {
     const response = await api.post('/users/admins', data);

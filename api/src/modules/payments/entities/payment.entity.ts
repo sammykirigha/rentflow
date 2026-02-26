@@ -28,12 +28,13 @@ export enum PaymentStatus {
 @Index(['tenantId'])
 @Index(['invoiceId'])
 @Index(['mpesaReceiptNumber'])
+@Index(['needsReconciliation'])
 export class Payment extends AbstractEntity<Payment> {
 	@PrimaryGeneratedColumn('uuid', { name: 'payment_id' })
 	paymentId: string;
 
-	@Column({ name: 'tenant_id', type: 'uuid' })
-	tenantId: string;
+	@Column({ name: 'tenant_id', type: 'uuid', nullable: true })
+	tenantId?: string;
 
 	@Column({ name: 'invoice_id', type: 'uuid', nullable: true })
 	invoiceId?: string;
@@ -53,13 +54,34 @@ export class Payment extends AbstractEntity<Payment> {
 	@Column({ name: 'mpesa_phone_number', nullable: true })
 	mpesaPhoneNumber?: string;
 
+	@Column({ name: 'mpesa_account_reference', nullable: true })
+	mpesaAccountReference?: string;
+
+	@Column({ name: 'mpesa_paybill_number', nullable: true })
+	mpesaPaybillNumber?: string;
+
+	@Column({ name: 'mpesa_checkout_request_id', nullable: true, unique: true })
+	mpesaCheckoutRequestId?: string;
+
 	@Column({ name: 'transaction_date', type: 'timestamp', default: () => 'NOW()' })
 	transactionDate: Date;
 
+	@Column({ name: 'needs_reconciliation', type: 'boolean', default: false })
+	needsReconciliation: boolean;
+
+	@Column({ name: 'reconciliation_note', nullable: true })
+	reconciliationNote?: string;
+
+	@Column({ name: 'reconciled_at', type: 'timestamp', nullable: true })
+	reconciledAt?: Date;
+
+	@Column({ name: 'reconciled_by', type: 'uuid', nullable: true })
+	reconciledBy?: string;
+
 	// Relations
-	@ManyToOne(() => Tenant, { eager: false })
+	@ManyToOne(() => Tenant, { eager: false, nullable: true })
 	@JoinColumn({ name: 'tenant_id' })
-	tenant: Tenant;
+	tenant?: Tenant;
 
 	@ManyToOne(() => Invoice, { nullable: true, eager: false })
 	@JoinColumn({ name: 'invoice_id' })

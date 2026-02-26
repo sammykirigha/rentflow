@@ -56,25 +56,28 @@ export default function InvoicesPage() {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [form] = Form.useForm();
 
   const { isAuthenticated } = useAuth();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['invoices', statusFilter],
-    queryFn: () => invoicesApi.getAll({ status: statusFilter }),
+    queryKey: ['invoices', statusFilter, page, pageSize],
+    queryFn: () => invoicesApi.getAll({ status: statusFilter, page, limit: pageSize }),
     enabled: isAuthenticated,
   });
 
-  const invoices: Invoice[] = Array.isArray(data) ? data : [];
+  const invoices: Invoice[] = Array.isArray(data?.data) ? data.data : [];
+  const pagination = data?.pagination;
 
   const { data: tenantsData } = useQuery({
-    queryKey: ['tenants'],
-    queryFn: () => tenantsApi.getAll(),
+    queryKey: ['tenants', 'all'],
+    queryFn: () => tenantsApi.getAll({ limit: 200 }),
     enabled: isModalOpen,
   });
 
-  const tenantsList: Tenant[] = Array.isArray(tenantsData) ? tenantsData : [];
+  const tenantsList: Tenant[] = Array.isArray(tenantsData?.data) ? tenantsData.data : [];
 
   const createMutation = useMutation({
     mutationFn: (values: CreateInvoiceInput) => invoicesApi.create(values),
@@ -231,7 +234,7 @@ export default function InvoicesPage() {
             placeholder="Filter by status"
             allowClear
             value={statusFilter}
-            onChange={(value) => setStatusFilter(value)}
+            onChange={(value) => { setStatusFilter(value); setPage(1); }}
             style={{ width: 200 }}
             options={[
               { label: 'Paid', value: 'paid' },
@@ -249,9 +252,12 @@ export default function InvoicesPage() {
           loading={isLoading}
           rowKey="invoiceId"
           pagination={{
-            defaultPageSize: 10,
+            current: page,
+            pageSize,
+            total: pagination?.total || 0,
             showSizeChanger: true,
             showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} invoices`,
+            onChange: (p, ps) => { setPage(p); setPageSize(ps); },
           }}
         />
       </Card>

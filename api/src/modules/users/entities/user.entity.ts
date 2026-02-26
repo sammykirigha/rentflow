@@ -1,8 +1,9 @@
 import { UserStatus } from '@/common/enums/user-status.enum';
 import { AbstractEntity } from '@/database/abstract.entity';
 import { Role } from '@/modules/permissions/entities/role.entity';
+import { Tenant } from '@/modules/tenants/entities/tenant.entity';
 import { Exclude } from 'class-transformer';
-import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('users')
 @Index(['email'], { unique: true })
@@ -61,10 +62,13 @@ export class User extends AbstractEntity<User> {
 	@Exclude()
 	refreshToken?: string;
 
-	// Relation
+	// Relations
 	@ManyToOne(() => Role, (role) => role.users, { eager: true, nullable: true })
 	@JoinColumn({ name: 'role_id' })
 	userRole: Role;
+
+	@OneToOne(() => Tenant, (tenant) => tenant.user)
+	tenant?: Tenant;
 
 	get fullName(): string {
 		return `${this.firstName || ''} ${this.lastName || ''}`.trim();
