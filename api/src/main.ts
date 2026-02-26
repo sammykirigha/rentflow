@@ -47,6 +47,11 @@ async function bootstrap() {
 	app.useGlobalFilters(new HttpExceptionFilter());
 	app.useGlobalInterceptors(new LoggingInterceptor());
 
+	// Health check at root (outside global prefix, for Render/load balancer health checks)
+	const expressApp = app.getHttpAdapter().getInstance();
+	expressApp.get('/', (_req, res) => res.json({ status: 'ok' }));
+	expressApp.head('/', (_req, res) => res.sendStatus(200));
+
 	// Set global prefix
 	const PREFIX = configService.get<string>('API_PREFIX', 'api/v1');
 	app.setGlobalPrefix(PREFIX);

@@ -68,8 +68,10 @@ export class MpesaService implements OnModuleInit {
 	}
 
 	async onModuleInit(): Promise<void> {
-		if (!this.consumerKey || !this.consumerSecret) {
-			this.logger.warn('M-Pesa credentials not configured, skipping C2B URL registration');
+		if (!this.consumerKey || !this.consumerSecret || !this.callbackBaseUrl || !this.shortcode) {
+			this.logger.warn(
+				'M-Pesa credentials or callback URL not fully configured, skipping C2B URL registration',
+			);
 			return;
 		}
 
@@ -77,7 +79,12 @@ export class MpesaService implements OnModuleInit {
 			await this.registerC2bUrls();
 			this.logger.log('M-Pesa C2B URLs registered successfully');
 		} catch (error) {
-			this.logger.error(`Failed to register C2B URLs: ${error.message}`, error.stack);
+			// Non-fatal: C2B registration failure should not prevent app startup.
+			// Common in development with sandbox/placeholder credentials.
+			const detail = error.response?.data
+				? JSON.stringify(error.response.data)
+				: error.message;
+			this.logger.warn(`C2B URL registration failed (non-fatal): ${detail}`);
 		}
 	}
 
