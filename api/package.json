@@ -21,6 +21,7 @@
     "typeorm": "typeorm-ts-node-commonjs",
     "seed": "ts-node -r tsconfig-paths/register scripts/run-seeds.ts",
     "seed:clear": "ts-node -r tsconfig-paths/register scripts/clear-database.ts",
+    "seed:production": "ts-node -r tsconfig-paths/register scripts/run-seeds-production.ts",
     "seed:fresh": "npm run seed:clear && npm run seed",
     "migration:generate": "node scripts/migration-generate.js",
     "migration:create": "npx ts-node -P ./tsconfig.json -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:create -d ./src/config/database.config.ts ./src/database/migrations",
