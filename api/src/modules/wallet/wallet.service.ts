@@ -305,6 +305,9 @@ export class WalletService {
 			}
 		}
 
+		// Reverse so most recent transactions appear first in the PDF
+		transactions.reverse();
+
 		return {
 			tenant,
 			transactions,

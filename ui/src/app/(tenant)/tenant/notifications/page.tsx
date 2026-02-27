@@ -7,7 +7,7 @@ import {
   MessageOutlined,
   ExportOutlined,
 } from "@ant-design/icons";
-import { Card, Table, Tag, Typography, Select, Space, Button } from "antd";
+import { Card, Table, Tag, Tooltip, Typography, Select, Space, Button } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import { downloadCsv, type CsvColumn } from "@/lib/csv-export";
 
@@ -127,8 +127,15 @@ export default function TenantNotificationsPage() {
       title: "Message",
       dataIndex: "message",
       key: "message",
-      ellipsis: true,
-      render: (msg: string) => msg || "—",
+      ellipsis: { showTitle: false },
+      render: (msg: string) =>
+        msg ? (
+          <Tooltip title={msg} placement="topLeft">
+            <span>{msg}</span>
+          </Tooltip>
+        ) : (
+          "—"
+        ),
     },
     {
       title: "Status",

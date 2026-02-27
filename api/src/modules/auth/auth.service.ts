@@ -120,7 +120,24 @@ export class AuthService {
 	}
 
 	async getCurrentUser(id: string) {
-		return this.usersService.findOneWithTenant(id);
+		const user = await this.usersService.findOneWithTenant(id);
+
+		// Manually structure the tenant data to avoid circular reference
+		// (Tenant eagerly loads User, causing User→Tenant→User loop that
+		// breaks ClassSerializerInterceptor's deep serialization)
+		const { tenant, password, refreshToken, ...userData } = user as any;
+		const result: any = { ...userData };
+
+		if (tenant) {
+			const { user: _tenantUser, unit, ...tenantData } = tenant;
+			result.tenant = { ...tenantData };
+			if (unit) {
+				const { tenant: _unitTenant, ...unitData } = unit;
+				result.tenant.unit = unitData;
+			}
+		}
+
+		return result;
 	}
 
 	async forgotPassword(forgotPasswordDto: ForgotPasswordDto): Promise<{ message: string; }> {

@@ -98,7 +98,7 @@ export class UsersService {
 	async findOneWithTenant(id: string): Promise<User> {
 		const user = await this.usersRepository.findOne({
 			where: { userId: id },
-			relations: { userRole: true, tenant: true },
+			relations: { userRole: true, tenant: { unit: { property: true } } },
 		});
 		if (!user) {
 			throw new NotFoundException('User not found');

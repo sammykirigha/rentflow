@@ -24,5 +24,20 @@ export interface User {
 		unitId?: string;
 		walletBalance: number;
 		status: string;
+		leaseStart?: string;
+		leaseEnd?: string | null;
+		depositAmount?: number;
+		depositStatus?: string;
+		unit?: {
+			unitId: string;
+			unitNumber: string;
+			rentAmount: number;
+			unitType?: string;
+			property?: {
+				propertyId: string;
+				name: string;
+				location?: string;
+			};
+		};
 	};
 }
