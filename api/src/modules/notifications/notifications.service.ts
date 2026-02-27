@@ -1,5 +1,6 @@
 import { AuditAction } from '@/common/enums/audit-action.enum';
 import { AuditTargetType } from '@/common/enums/audit-target-type.enum';
+import { Tenant } from '@/modules/tenants/entities/tenant.entity';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
@@ -77,6 +78,60 @@ export class NotificationsService {
 
 		if (status) {
 			queryBuilder.andWhere('notification.status = :status', { status });
+		}
+
+		const [notifications, total] = await queryBuilder.getManyAndCount();
+
+		return {
+			data: notifications,
+			pagination: {
+				page,
+				limit,
+				total,
+				totalPages: Math.ceil(total / limit),
+			},
+		};
+	}
+
+	async findTenantByUserId(userId: string): Promise<Tenant> {
+		const tenant = await this.tenantsRepository.findOne({ where: { userId } });
+		if (!tenant) {
+			throw new NotFoundException('No tenant account found for this user');
+		}
+		return tenant;
+	}
+
+	async findByTenant({
+		tenantId,
+		page = 1,
+		limit = 10,
+		type,
+	}: {
+		tenantId: string;
+		page: number;
+		limit: number;
+		type?: NotificationType;
+	}): Promise<{
+		data: Notification[];
+		pagination: {
+			page: number;
+			limit: number;
+			total: number;
+			totalPages: number;
+		};
+	}> {
+		const skip = (page - 1) * limit;
+
+		const queryBuilder = this.notificationsRepository
+			.createQueryBuilder('notification')
+			.leftJoinAndSelect('notification.invoice', 'invoice')
+			.where('notification.tenantId = :tenantId', { tenantId })
+			.orderBy('notification.createdAt', 'DESC')
+			.skip(skip)
+			.take(limit);
+
+		if (type) {
+			queryBuilder.andWhere('notification.type = :type', { type });
 		}
 
 		const [notifications, total] = await queryBuilder.getManyAndCount();

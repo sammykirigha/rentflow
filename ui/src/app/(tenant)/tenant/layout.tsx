@@ -10,6 +10,7 @@ import {
   WalletOutlined,
   LogoutOutlined,
   UserOutlined,
+  BellOutlined,
 } from "@ant-design/icons";
 import { Layout, Menu, Avatar, Button, Typography } from "antd";
 import Link from "next/link";
@@ -44,6 +45,16 @@ const menuItems = [
     key: "/tenant/receipts",
     icon: <FileProtectOutlined />,
     label: <Link href="/tenant/receipts">My Receipts</Link>,
+  },
+  {
+    key: "/tenant/notifications",
+    icon: <BellOutlined />,
+    label: <Link href="/tenant/notifications">Notifications</Link>,
+  },
+  {
+    key: "/tenant/profile",
+    icon: <UserOutlined />,
+    label: <Link href="/tenant/profile">My Profile</Link>,
   },
 ];
 

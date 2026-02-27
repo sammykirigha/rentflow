@@ -13,6 +13,7 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   LoadingOutlined,
+  DownloadOutlined,
 } from "@ant-design/icons";
 import {
   Card,
@@ -29,6 +30,8 @@ import {
   message,
   Result,
   Spin,
+  DatePicker,
+  Popover,
 } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -50,6 +53,8 @@ const txnTypeColors: Record<WalletTxnType, string> = {
   [WalletTxnType.REFUND]: "blue",
 };
 
+const { RangePicker } = DatePicker;
+
 type StkModalState = "idle" | "initiating" | "waiting" | "success" | "failed" | "timeout";
 
 const MAX_POLLS = 10;
@@ -63,6 +68,9 @@ export default function TenantWalletPage() {
   const [stkState, setStkState] = useState<StkModalState>("idle");
   const [stkError, setStkError] = useState<string>("");
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0 });
+  const [statementDates, setStatementDates] = useState<[string?, string?]>([]);
+  const [downloadingStatement, setDownloadingStatement] = useState(false);
+  const [statementPopoverOpen, setStatementPopoverOpen] = useState(false);
   const [form] = Form.useForm();
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -175,6 +183,52 @@ export default function TenantWalletPage() {
     setStkError("");
     form.resetFields();
   };
+
+  const handleDownloadStatement = async () => {
+    try {
+      setDownloadingStatement(true);
+      await walletApi.downloadMyStatement({
+        startDate: statementDates[0] || undefined,
+        endDate: statementDates[1] || undefined,
+      });
+      setStatementPopoverOpen(false);
+      message.success("Statement downloaded");
+    } catch {
+      message.error("Failed to download statement");
+    } finally {
+      setDownloadingStatement(false);
+    }
+  };
+
+  const statementPopoverContent = (
+    <div style={{ width: 280 }}>
+      <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
+        Select a date range (optional):
+      </Typography.Text>
+      <RangePicker
+        style={{ width: "100%", marginBottom: 12 }}
+        onChange={(dates) => {
+          if (dates && dates[0] && dates[1]) {
+            setStatementDates([
+              dates[0].format("YYYY-MM-DD"),
+              dates[1].format("YYYY-MM-DD"),
+            ]);
+          } else {
+            setStatementDates([]);
+          }
+        }}
+      />
+      <Button
+        type="primary"
+        icon={<DownloadOutlined />}
+        block
+        loading={downloadingStatement}
+        onClick={handleDownloadStatement}
+      >
+        Download PDF
+      </Button>
+    </div>
+  );
 
   const renderModalContent = () => {
     switch (stkState) {
@@ -376,6 +430,17 @@ export default function TenantWalletPage() {
           >
             Top Up via M-Pesa
           </Button>
+          <Popover
+            content={statementPopoverContent}
+            title="Download Wallet Statement"
+            trigger="click"
+            open={statementPopoverOpen}
+            onOpenChange={setStatementPopoverOpen}
+          >
+            <Button icon={<DownloadOutlined />} size="large">
+              Download Statement
+            </Button>
+          </Popover>
         </Space>
       </Card>
 

@@ -49,6 +49,25 @@ export const walletApi = {
     const response = await api.post('/wallet/topup', data);
     return response.data;
   },
+  downloadMyStatement: async (params?: { startDate?: string; endDate?: string }): Promise<void> => {
+    const response = await api.get('/wallet/my-statement', {
+      params,
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const disposition = response.headers['content-disposition'];
+    const filename = disposition
+      ? disposition.split('filename=')[1]?.replace(/"/g, '')
+      : 'wallet-statement.pdf';
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
   getLedger: async (params?: {
     page?: number;
     limit?: number;

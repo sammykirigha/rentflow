@@ -33,6 +33,23 @@ import { NotificationsService } from './notifications.service';
 export class NotificationsController {
 	constructor(private readonly notificationsService: NotificationsService) {}
 
+	@Get('my')
+	@ApiOperation({ summary: 'Get my notifications (tenant self-service)' })
+	@ApiResponse({ status: 200, description: 'Notifications retrieved successfully' })
+	@ApiQuery({ name: 'page', required: false, type: Number })
+	@ApiQuery({ name: 'limit', required: false, type: Number })
+	@ApiQuery({ name: 'type', required: false, enum: NotificationType })
+	async findMy(
+		@CurrentUser() user: JwtPayload,
+		@Query('page', new ParseIntPipe({ optional: true })) page: number = 1,
+		@Query('limit', new ParseIntPipe({ optional: true })) limit: number = 10,
+		@Query('type') type?: NotificationType,
+	) {
+		// Resolve tenant from JWT user
+		const tenant = await this.notificationsService.findTenantByUserId(user.sub);
+		return this.notificationsService.findByTenant({ tenantId: tenant.tenantId, page, limit, type });
+	}
+
 	@Get()
 	@RequirePermissions(Permission(PermissionResource.COMMUNICATIONS, PermissionAction.READ))
 	@ApiOperation({ summary: 'List notifications with pagination and filters' })

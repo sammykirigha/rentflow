@@ -65,6 +65,84 @@ export class WalletController {
 		return this.walletService.getTransactions(tenant.tenantId, { page, limit });
 	}
 
+	@Get('my-statement')
+	@ApiOperation({ summary: 'Download wallet statement PDF (using JWT user)' })
+	@ApiQuery({ name: 'startDate', required: false, type: String })
+	@ApiQuery({ name: 'endDate', required: false, type: String })
+	async getMyStatement(
+		@CurrentUser() user: JwtPayload,
+		@Query('startDate') startDate?: string,
+		@Query('endDate') endDate?: string,
+		@Res() res?: Response,
+	) {
+		const tenant = await this.walletService.findTenantByUserId(user.sub);
+
+		const { tenant: tenantData, transactions, openingBalance, closingBalance, totalCredits, totalDebits } =
+			await this.walletService.getStatementData(tenant.tenantId, { startDate, endDate });
+
+		const settings = await this.settingsService.getSettings();
+
+		const tenantUser = tenantData.user;
+		const unit = tenantData.unit;
+		const property = unit?.property;
+		const tenantName = tenantUser
+			? `${tenantUser.firstName || ''} ${tenantUser.lastName || ''}`.trim()
+			: 'Tenant';
+
+		const displayStartDate = startDate
+			? new Date(startDate).toLocaleDateString('en-KE')
+			: 'All time';
+		const displayEndDate = endDate
+			? new Date(endDate).toLocaleDateString('en-KE')
+			: new Date().toLocaleDateString('en-KE');
+
+		const buffer = await this.pdfService.generateStatementPdf({
+			companyName: settings.platformName || 'RentFlow',
+			companyEmail: settings.supportEmail || 'support@rentflow.co.ke',
+			companyPhone: settings.contactPhone || undefined,
+			companyAddress: settings.contactAddress || undefined,
+			companyLogoUrl: settings.appLogo || undefined,
+
+			tenantName,
+			tenantPhone: tenantUser?.phone || '',
+			tenantEmail: tenantUser?.email || '',
+			unitNumber: unit?.unitNumber || '',
+			propertyName: property?.name || '',
+
+			startDate: displayStartDate,
+			endDate: displayEndDate,
+
+			openingBalance,
+			closingBalance,
+			totalCredits,
+			totalDebits,
+
+			transactions: transactions.map((txn) => ({
+				date: new Date(txn.createdAt).toLocaleDateString('en-KE'),
+				type: WALLET_TXN_TYPE_LABEL[txn.type] || txn.type,
+				description: txn.description || '',
+				reference: txn.reference || '',
+				debit:
+					txn.type === WalletTxnType.DEBIT_INVOICE || txn.type === WalletTxnType.DEBIT_PENALTY
+						? Number(txn.amount)
+						: 0,
+				credit:
+					txn.type === WalletTxnType.CREDIT || txn.type === WalletTxnType.CREDIT_RECONCILIATION || txn.type === WalletTxnType.REFUND
+						? Number(txn.amount)
+						: 0,
+				balance: Number(txn.balanceAfter),
+			})),
+		});
+
+		const filename = `statement-${unit?.unitNumber || tenant.tenantId}.pdf`;
+		res.set({
+			'Content-Type': 'application/pdf',
+			'Content-Disposition': `attachment; filename="${filename}"`,
+			'Content-Length': buffer.length,
+		});
+		res.end(buffer);
+	}
+
 	@Post('topup')
 	@ApiOperation({ summary: 'Top up wallet balance (tenant self-service)' })
 	async topup(

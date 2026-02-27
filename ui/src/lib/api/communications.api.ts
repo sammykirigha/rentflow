@@ -83,4 +83,13 @@ export const communicationsApi = {
   delete: async (notificationId: string): Promise<void> => {
     await api.delete(`/communications/${notificationId}`);
   },
+
+  getMy: async (params?: {
+    page?: number;
+    limit?: number;
+    type?: string;
+  }) => {
+    const response = await api.get('/communications/my', { params });
+    return response.data;
+  },
 };
