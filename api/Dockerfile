@@ -25,4 +25,5 @@ COPY --from=builder  /api/node_modules/ ./node_modules/
 COPY --from=builder  /api/dist/ ./dist/
 
 EXPOSE 9090
-CMD ["node", "dist/main"]
+
+CMD sh -c "pnpm run seed || echo 'Seeding skipped or failed, continuing...' && exec node dist/main.js"
