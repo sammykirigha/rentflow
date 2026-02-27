@@ -21,6 +21,35 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={inter.variable} suppressContentEditableWarning suppressHydrationWarning>
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'SoftwareApplication',
+              name: 'RentFlow',
+              applicationCategory: 'BusinessApplication',
+              operatingSystem: 'Web',
+              description:
+                'Automated rent collection and property management system for Kenyan landlords. Integrates with M-Pesa for seamless payment tracking.',
+              offers: {
+                '@type': 'Offer',
+                price: '0',
+                priceCurrency: 'KES',
+              },
+              featureList: [
+                'M-Pesa Paybill integration',
+                'Automated monthly invoicing',
+                'Tenant wallet system',
+                'SMS and email notifications',
+                'Expense and maintenance tracking',
+                'Multi-property dashboard',
+              ],
+            }),
+          }}
+        />
+      </head>
       <body suppressContentEditableWarning suppressHydrationWarning>
         <Providers>
           {children}
