@@ -10,11 +10,14 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { Permission, RequirePermissions } from '@/common/decorators/permissions.decorator';
 import { Public } from '@/common/decorators/public.decorator';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '@/common/guards/permissions.guard';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
+import { PermissionAction, PermissionResource } from '@/modules/permissions/entities/permission.entity';
 import { WalletService } from '@/modules/wallet/wallet.service';
+import { AdminInitiateStkPushDto } from './dto/admin-initiate-stk-push.dto';
 import { InitiateStkPushDto } from './dto/initiate-stk-push.dto';
 import { MpesaIpGuard } from './guards/mpesa-ip.guard';
 import { MpesaService } from './mpesa.service';
@@ -65,6 +68,36 @@ export class MpesaController {
 	) {
 		const tenant = await this.walletService.findTenantByUserId(user.sub);
 		return this.mpesaService.getStkStatus(paymentId, tenant.tenantId);
+	}
+
+	// ── Admin Endpoints (Landlord/Manager) ──────────────────
+
+	@Post('admin/stk-push')
+	@UseGuards(JwtAuthGuard, PermissionsGuard)
+	@RequirePermissions(Permission(PermissionResource.PAYMENTS, PermissionAction.CREATE))
+	@Throttle(10, 3600000)
+	@ApiBearerAuth('JWT')
+	@ApiOperation({ summary: 'Initiate M-Pesa STK Push on behalf of a tenant (admin)' })
+	async adminInitiateStkPush(
+		@Body() dto: AdminInitiateStkPushDto,
+		@CurrentUser() user: JwtPayload,
+	) {
+		return this.mpesaService.initiateStkPush(
+			dto.tenantId,
+			dto.amount,
+			dto.phoneNumber,
+		);
+	}
+
+	@Get('admin/stk-status/:paymentId')
+	@UseGuards(JwtAuthGuard, PermissionsGuard)
+	@RequirePermissions(Permission(PermissionResource.PAYMENTS, PermissionAction.READ))
+	@ApiBearerAuth('JWT')
+	@ApiOperation({ summary: 'Check STK Push payment status (admin)' })
+	async adminGetStkStatus(
+		@Param('paymentId', ParseUUIDPipe) paymentId: string,
+	) {
+		return this.mpesaService.getStkStatusAdmin(paymentId);
 	}
 
 	// ── Daraja Callback Endpoints (Public + IP Guarded) ─────

@@ -6,8 +6,13 @@ import { Request } from 'express';
 export class MpesaIpGuard implements CanActivate {
 	private readonly logger = new Logger(MpesaIpGuard.name);
 
-	// Safaricom known IP ranges
-	private readonly productionCidrs = ['196.201.214.0/24', '196.201.215.0/24'];
+	// Safaricom known IP ranges (from Daraja documentation)
+	private readonly productionCidrs = [
+		'196.201.212.0/24',
+		'196.201.213.0/24',
+		'196.201.214.0/24',
+		'196.201.215.0/24',
+	];
 	private readonly sandboxCidrs = ['196.201.214.0/24'];
 	private readonly localIps = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
 

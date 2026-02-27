@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import {
   Typography,
   Table,
@@ -16,15 +16,22 @@ import {
   Tabs,
   Badge,
   Space,
+  Result,
+  Spin,
 } from 'antd';
 import {
   PlusOutlined,
   DollarOutlined,
   WarningOutlined,
   ExportOutlined,
+  MobileOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  LoadingOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
+import { mpesaApi } from '@/lib/api/mpesa.api';
 import { paymentsApi } from '@/lib/api/payments.api';
 import { tenantsApi } from '@/lib/api/tenants.api';
 import { propertiesApi } from '@/lib/api/properties.api';
@@ -44,7 +51,12 @@ import type { ColumnsType } from 'antd/es/table';
 import { downloadCsv, type CsvColumn } from '@/lib/csv-export';
 import dayjs from 'dayjs';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
+
+type StkModalState = 'idle' | 'initiating' | 'waiting' | 'success' | 'failed' | 'timeout';
+
+const MAX_POLLS = 10;
+const POLL_INTERVAL_MS = 3000;
 
 
 export default function PaymentsPage() {
@@ -60,6 +72,9 @@ export default function PaymentsPage() {
   const [reconPage, setReconPage] = useState(1);
   const [reconPageSize, setReconPageSize] = useState(10);
   const [exporting, setExporting] = useState(false);
+  const [stkState, setStkState] = useState<StkModalState>('idle');
+  const [stkError, setStkError] = useState('');
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [form] = Form.useForm();
   const [reconcileForm] = Form.useForm();
   const reconSelectedTenantId = Form.useWatch('targetTenantId', reconcileForm);
@@ -127,7 +142,17 @@ export default function PaymentsPage() {
     }) || null;
   }, [selectedPaymentForReconcile, tenantsList]);
 
-  const isMpesaMethod = selectedMethod === 'mpesa_paybill' || selectedMethod === 'mpesa_stk_push';
+  const isMpesaPaybill = selectedMethod === 'mpesa_paybill';
+  const isStkPush = selectedMethod === 'mpesa_stk_push';
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) {
+        clearTimeout(pollTimerRef.current);
+      }
+    };
+  }, []);
 
   const recordMutation = useMutation({
     mutationFn: (values: RecordPaymentInput) => paymentsApi.record(values),
@@ -165,6 +190,9 @@ export default function PaymentsPage() {
   });
 
   const handleRecord = async () => {
+    if (isStkPush) {
+      return handleStkPush();
+    }
     try {
       const values = await form.validateFields();
       const payload: RecordPaymentInput = {
@@ -192,6 +220,82 @@ export default function PaymentsPage() {
     } catch {
       // validation errors are shown inline by Ant Design
     }
+  };
+
+  const pollStkStatus = useCallback(
+    (paymentId: string, attempt: number) => {
+      if (attempt >= MAX_POLLS) {
+        setStkState('timeout');
+        return;
+      }
+
+      pollTimerRef.current = setTimeout(async () => {
+        try {
+          const result = await mpesaApi.adminCheckStkStatus(paymentId);
+
+          if (result.status === 'completed') {
+            setStkState('success');
+            queryClient.invalidateQueries({ queryKey: ['payments'] });
+            queryClient.invalidateQueries({ queryKey: ['invoices'] });
+            queryClient.invalidateQueries({ queryKey: ['wallet'] });
+            return;
+          }
+
+          if (result.status === 'failed') {
+            setStkState('failed');
+            setStkError(result.resultDesc || 'Payment was not completed. Please try again.');
+            return;
+          }
+
+          // Still pending — continue polling
+          pollStkStatus(paymentId, attempt + 1);
+        } catch {
+          // Network error — continue polling
+          pollStkStatus(paymentId, attempt + 1);
+        }
+      }, POLL_INTERVAL_MS);
+    },
+    [queryClient],
+  );
+
+  const handleStkPush = async () => {
+    try {
+      const values = await form.validateFields();
+      setStkState('initiating');
+      setStkError('');
+
+      const result = await mpesaApi.adminInitiateStkPush({
+        tenantId: values.tenantId,
+        amount: values.amount,
+        phoneNumber: values.mpesaPhoneNumber || undefined,
+      });
+
+      setStkState('waiting');
+      pollStkStatus(result.paymentId, 0);
+    } catch (err: any) {
+      if (err?.errorFields) {
+        // Form validation error — stay idle
+        return;
+      }
+      setStkState('failed');
+      const errorMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error?.message ||
+        'Failed to initiate M-Pesa payment. Please try again.';
+      setStkError(errorMsg);
+    }
+  };
+
+  const handleCloseRecordModal = () => {
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    setIsModalOpen(false);
+    setStkState('idle');
+    setStkError('');
+    form.resetFields();
+    setSelectedMethod(undefined);
   };
 
   const columns: ColumnsType<Payment> = [
@@ -455,99 +559,190 @@ export default function PaymentsPage() {
 
       {/* Record Payment Modal */}
       <Modal
-        title="Record Payment"
+        title={stkState === 'idle' ? 'Record Payment' : 'M-Pesa STK Push'}
         open={isModalOpen}
-        onOk={handleRecord}
-        onCancel={() => {
-          setIsModalOpen(false);
-          form.resetFields();
-          setSelectedMethod(undefined);
-        }}
-        confirmLoading={recordMutation.isPending}
-        okText="Record Payment"
+        onOk={stkState === 'idle' ? handleRecord : undefined}
+        onCancel={handleCloseRecordModal}
+        confirmLoading={recordMutation.isPending || stkState === 'initiating'}
+        okText={isStkPush ? 'Send STK Push' : 'Record Payment'}
+        okButtonProps={{ style: stkState !== 'idle' ? { display: 'none' } : undefined }}
+        cancelButtonProps={{ style: stkState !== 'idle' && stkState !== 'failed' ? { display: 'none' } : undefined }}
         width={520}
+        closable={stkState === 'idle' || stkState === 'success' || stkState === 'failed' || stkState === 'timeout'}
+        maskClosable={stkState === 'idle'}
       >
-        <Form
-          form={form}
-          layout="vertical"
-          style={{ marginTop: 16 }}
-        >
-          <Form.Item
-            name="tenantId"
-            label="Tenant"
-            rules={[{ required: true, message: 'Please select a tenant' }]}
+        {stkState === 'idle' && (
+          <Form
+            form={form}
+            layout="vertical"
+            style={{ marginTop: 16 }}
           >
-            <Select
-              placeholder="Select a tenant"
-              showSearch
-              optionFilterProp="label"
-              options={tenantsList.map((t) => ({
-                label: `${t.user?.firstName || ''} ${t.user?.lastName || ''}`.trim() +
-                  (t.unit?.unitNumber ? ` (${t.unit.unitNumber})` : ''),
-                value: t.tenantId,
-              }))}
-            />
-          </Form.Item>
+            <Form.Item
+              name="tenantId"
+              label="Tenant"
+              rules={[{ required: true, message: 'Please select a tenant' }]}
+            >
+              <Select
+                placeholder="Select a tenant"
+                showSearch
+                optionFilterProp="label"
+                options={tenantsList.map((t) => ({
+                  label: `${t.user?.firstName || ''} ${t.user?.lastName || ''}`.trim() +
+                    (t.unit?.unitNumber ? ` (${t.unit.unitNumber})` : ''),
+                  value: t.tenantId,
+                }))}
+              />
+            </Form.Item>
 
-          <div style={{ marginBottom: 16, padding: 8, background: '#f5f5f5', borderRadius: 4, fontSize: 13, color: '#595959' }}>
-            The payment amount will be credited to the tenant&apos;s wallet and automatically applied to their oldest unpaid invoices.
-          </div>
+            <div style={{ marginBottom: 16, padding: 8, background: '#f5f5f5', borderRadius: 4, fontSize: 13, color: '#595959' }}>
+              The payment amount will be credited to the tenant&apos;s wallet and automatically applied to their oldest unpaid invoices.
+            </div>
 
-          <Form.Item
-            name="amount"
-            label="Amount (KES)"
-            rules={[{ required: true, message: 'Please enter the payment amount' }]}
-          >
-            <InputNumber<number>
-              min={1}
-              style={{ width: '100%' }}
-              placeholder="e.g. 35000"
-              formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-              parser={(value) => Number(value!.replace(/,/g, ''))}
-            />
-          </Form.Item>
+            <Form.Item
+              name="amount"
+              label="Amount (KES)"
+              rules={[{ required: true, message: 'Please enter the payment amount' }]}
+            >
+              <InputNumber<number>
+                min={1}
+                style={{ width: '100%' }}
+                placeholder="e.g. 35000"
+                formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                parser={(value) => Number(value!.replace(/,/g, ''))}
+              />
+            </Form.Item>
 
-          <Form.Item
-            name="method"
-            label="Payment Method"
-            rules={[{ required: true, message: 'Please select a payment method' }]}
-          >
-            <Select
-              placeholder="Select payment method"
-              onChange={(value) => setSelectedMethod(value)}
-              options={[
-                { label: 'Manual', value: 'manual' },
-                { label: 'M-Pesa Paybill', value: 'mpesa_paybill' },
-              ]}
-            />
-          </Form.Item>
+            <Form.Item
+              name="method"
+              label="Payment Method"
+              rules={[{ required: true, message: 'Please select a payment method' }]}
+            >
+              <Select
+                placeholder="Select payment method"
+                onChange={(value) => setSelectedMethod(value)}
+                options={[
+                  { label: 'Manual', value: 'manual' },
+                  { label: 'M-Pesa Paybill', value: 'mpesa_paybill' },
+                  { label: 'M-Pesa STK Push', value: 'mpesa_stk_push' },
+                ]}
+              />
+            </Form.Item>
 
-          {isMpesaMethod && (
-            <>
-              <Form.Item
-                name="mpesaReceiptNumber"
-                label="M-Pesa Receipt Number"
-                rules={[{ required: true, message: 'Please enter the M-Pesa receipt number' }]}
-              >
-                <Input placeholder="e.g. SHK7Y8Z9X0" />
-              </Form.Item>
+            {isMpesaPaybill && (
+              <>
+                <Form.Item
+                  name="mpesaReceiptNumber"
+                  label="M-Pesa Receipt Number"
+                  rules={[{ required: true, message: 'Please enter the M-Pesa receipt number' }]}
+                >
+                  <Input placeholder="e.g. SHK7Y8Z9X0" />
+                </Form.Item>
 
+                <Form.Item
+                  name="mpesaPhoneNumber"
+                  label="M-Pesa Phone Number"
+                  rules={[
+                    { required: true, message: 'Please enter the phone number' },
+                    {
+                      pattern: /^(?:\+254|0)\d{9}$/,
+                      message: 'Please enter a valid Kenyan phone number (e.g. 0712345678 or +254712345678)',
+                    },
+                  ]}
+                >
+                  <Input placeholder="e.g. 0712345678" />
+                </Form.Item>
+              </>
+            )}
+
+            {isStkPush && (
               <Form.Item
                 name="mpesaPhoneNumber"
-                label="M-Pesa Phone Number"
-                rules={[
-                  { required: true, message: 'Please enter the phone number' },
-                  {
-                    pattern: /^(?:\+254|0)\d{9}$/,
-                    message: 'Please enter a valid Kenyan phone number (e.g. 0712345678 or +254712345678)',
-                  },
-                ]}
+                label="M-Pesa Phone Number (Optional)"
+                help="Leave blank to use the tenant's registered phone number"
               >
                 <Input placeholder="e.g. 0712345678" />
               </Form.Item>
-            </>
-          )}
-        </Form>
+            )}
+          </Form>
+        )}
+
+        {stkState === 'initiating' && (
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <Spin indicator={<LoadingOutlined style={{ fontSize: 48 }} />} />
+            <Title level={4} style={{ marginTop: 24 }}>
+              Sending M-Pesa prompt...
+            </Title>
+            <Text type="secondary">Please wait while we send the payment request to the tenant&apos;s phone.</Text>
+          </div>
+        )}
+
+        {stkState === 'waiting' && (
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <MobileOutlined style={{ fontSize: 64, color: '#52c41a' }} />
+            <Title level={4} style={{ marginTop: 24 }}>
+              Waiting for tenant to pay
+            </Title>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+              An M-Pesa payment prompt has been sent to the tenant&apos;s phone. They need to enter their M-Pesa PIN to complete the payment.
+            </Text>
+            <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} />} />
+            <br />
+            <Text type="secondary" style={{ fontSize: 12, marginTop: 8, display: 'block' }}>
+              Waiting for confirmation...
+            </Text>
+          </div>
+        )}
+
+        {stkState === 'success' && (
+          <Result
+            status="success"
+            icon={<CheckCircleOutlined />}
+            title="Payment Successful"
+            subTitle="The tenant's wallet has been credited and invoices settled automatically."
+            extra={[
+              <Button key="close" type="primary" onClick={handleCloseRecordModal}>
+                Done
+              </Button>,
+            ]}
+          />
+        )}
+
+        {stkState === 'failed' && (
+          <Result
+            status="error"
+            icon={<CloseCircleOutlined />}
+            title="Payment Failed"
+            subTitle={stkError || 'The M-Pesa payment was not completed.'}
+            extra={[
+              <Button
+                key="retry"
+                type="primary"
+                onClick={() => {
+                  setStkState('idle');
+                  setStkError('');
+                }}
+              >
+                Try Again
+              </Button>,
+              <Button key="close" onClick={handleCloseRecordModal}>
+                Close
+              </Button>,
+            ]}
+          />
+        )}
+
+        {stkState === 'timeout' && (
+          <Result
+            status="warning"
+            title="Payment may still be processing"
+            subTitle="If money was deducted from the tenant's M-Pesa, their wallet will be updated shortly."
+            extra={[
+              <Button key="close" type="primary" onClick={handleCloseRecordModal}>
+                Close
+              </Button>,
+            ]}
+          />
+        )}
       </Modal>
 
       {/* Reconcile Payment Modal */}

@@ -35,6 +35,7 @@ export enum AuditAction {
 	PAYMENT_FAILED = 'payment_failed',
 	PAYMENT_REVERSED = 'payment_reversed',
 	STK_PUSH_INITIATED = 'stk_push_initiated',
+	ADMIN_STK_PUSH_INITIATED = 'admin_stk_push_initiated',
 	STK_PUSH_CALLBACK_SUCCESS = 'stk_push_callback_success',
 	STK_PUSH_CALLBACK_FAILED = 'stk_push_callback_failed',
 	C2B_PAYMENT_RECEIVED = 'c2b_payment_received',

@@ -578,6 +578,24 @@ export class MpesaService implements OnModuleInit {
 		};
 	}
 
+	// ── Admin STK Status Check (no tenant ownership check) ──
+
+	async getStkStatusAdmin(
+		paymentId: string,
+	): Promise<{ status: PaymentStatus; resultDesc?: string }> {
+		const payment = await this.paymentsRepository.findOne({
+			where: { paymentId },
+		});
+
+		if (!payment) {
+			throw new NotFoundException('Payment not found');
+		}
+
+		return {
+			status: payment.status,
+		};
+	}
+
 	// ── Helpers ─────────────────────────────────────────────
 
 	formatPhoneNumber(phone: string): string {
