@@ -103,62 +103,74 @@ export default function UserSidebar() {
       onCollapse={setCollapsed}
       breakpoint="lg"
       style={{
-        overflow: 'auto',
         height: '100vh',
         position: 'sticky',
         top: 0,
         left: 0,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
       <div style={{
-        height: 64,
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderBottom: '1px solid rgba(255,255,255,0.1)',
+        flexDirection: 'column',
+        height: '100%',
       }}>
-        <Text strong style={{ color: '#fff', fontSize: collapsed ? 14 : 20 }}>
-          {collapsed ? 'RF' : 'RentFlow'}
-        </Text>
-      </div>
-
-      <Menu
-        theme="dark"
-        mode="inline"
-        selectedKeys={[selectedKey]}
-        items={menuItems}
-        style={{ borderRight: 0 }}
-      />
-
-      <div style={{
-        position: 'absolute',
-        bottom: 48,
-        width: '100%',
-        padding: '12px 16px',
-        borderTop: '1px solid rgba(255,255,255,0.1)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <Avatar size="small" icon={<UserOutlined />} />
-          {!collapsed && (
-            <div style={{ overflow: 'hidden' }}>
-              <Text ellipsis style={{ color: '#fff', fontSize: 13, display: 'block' }}>
-                {user?.firstName} {user?.lastName}
-              </Text>
-              <Text ellipsis style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, display: 'block' }}>
-                {user?.email}
-              </Text>
-            </div>
-          )}
+        {/* Logo */}
+        <div style={{
+          height: 64,
+          minHeight: 64,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderBottom: '1px solid rgba(255,255,255,0.1)',
+        }}>
+          <Text strong style={{ color: '#fff', fontSize: collapsed ? 14 : 20 }}>
+            {collapsed ? 'RF' : 'RentFlow'}
+          </Text>
         </div>
-        <Button
-          type="text"
-          icon={<LogoutOutlined />}
-          onClick={handleLogout}
-          block
-          style={{ color: 'rgba(255,255,255,0.65)', textAlign: 'left' }}
-        >
-          {!collapsed && 'Logout'}
-        </Button>
+
+        {/* Scrollable menu */}
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+          <Menu
+            theme="dark"
+            mode="inline"
+            selectedKeys={[selectedKey]}
+            items={menuItems}
+            style={{ borderRight: 0 }}
+          />
+        </div>
+
+        {/* User info + logout — pinned to bottom */}
+        <div style={{
+          padding: '12px 16px',
+          borderTop: '1px solid rgba(255,255,255,0.1)',
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <Avatar size="small" icon={<UserOutlined />} />
+            {!collapsed && (
+              <div style={{ overflow: 'hidden' }}>
+                <Text ellipsis style={{ color: '#fff', fontSize: 13, display: 'block' }}>
+                  {user?.firstName} {user?.lastName}
+                </Text>
+                <Text ellipsis style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, display: 'block' }}>
+                  {user?.email}
+                </Text>
+              </div>
+            )}
+          </div>
+          <Button
+            type="text"
+            icon={<LogoutOutlined />}
+            onClick={handleLogout}
+            block
+            style={{ color: 'rgba(255,255,255,0.65)', textAlign: 'left' }}
+          >
+            {!collapsed && 'Logout'}
+          </Button>
+        </div>
       </div>
     </Sider>
   );

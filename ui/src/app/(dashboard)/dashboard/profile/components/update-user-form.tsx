@@ -4,15 +4,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { userApi } from '@/lib/api/user.api';
 import { useUserStore } from '@/stores/user.store';
 import { User } from '@/types/users';
-import { UserOutlined, MailOutlined, PhoneOutlined } from '@ant-design/icons';
-import { Avatar, Button, Form, Input, App, Upload } from 'antd';
+import { MailOutlined, PhoneOutlined, UserOutlined } from '@ant-design/icons';
+import { Button, Form, Input, App } from 'antd';
 import { useEffect, useState } from 'react';
-
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 export default function UpdateUserProfileForm() {
   const [isLoading, setIsLoading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState("");
   const user = useUserStore((state) => state.user);
   const setUser = useUserStore(state => state.setUser);
   const { fetchUserData } = useAuth();
@@ -52,18 +49,6 @@ export default function UpdateUserProfileForm() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-        <Avatar
-          size={80}
-          icon={<UserOutlined />}
-          src={previewUrl || user?.avatarUrl}
-        />
-        <div>
-          <div style={{ fontWeight: 500 }}>{user?.firstName} {user?.lastName}</div>
-          <div style={{ color: '#999', fontSize: 13 }}>{user?.email}</div>
-        </div>
-      </div>
-
       <Form form={form} layout="vertical" onFinish={onFinish}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <Form.Item
