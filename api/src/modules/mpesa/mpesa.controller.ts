@@ -19,7 +19,7 @@ import { InitiateStkPushDto } from './dto/initiate-stk-push.dto';
 import { MpesaIpGuard } from './guards/mpesa-ip.guard';
 import { MpesaService } from './mpesa.service';
 
-@Controller('mpesa')
+@Controller('payments/mobile')
 @ApiTags('M-Pesa')
 export class MpesaController {
 	constructor(

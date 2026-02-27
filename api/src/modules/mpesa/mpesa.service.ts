@@ -122,8 +122,8 @@ export class MpesaService implements OnModuleInit {
 			{
 				ShortCode: this.shortcode,
 				ResponseType: 'Completed',
-				ConfirmationURL: `${this.callbackBaseUrl}/mpesa/callback/confirmation`,
-				ValidationURL: `${this.callbackBaseUrl}/mpesa/callback/validation`,
+				ConfirmationURL: `${this.callbackBaseUrl}/payments/mobile/callback/confirmation`,
+				ValidationURL: `${this.callbackBaseUrl}/payments/mobile/callback/validation`,
 			},
 			{
 				headers: { Authorization: `Bearer ${token}` },
@@ -139,8 +139,8 @@ export class MpesaService implements OnModuleInit {
 			details: `C2B URLs registered for shortcode ${this.shortcode}`,
 			metadata: {
 				shortcode: this.shortcode,
-				confirmationUrl: `${this.callbackBaseUrl}/mpesa/callback/confirmation`,
-				validationUrl: `${this.callbackBaseUrl}/mpesa/callback/validation`,
+				confirmationUrl: `${this.callbackBaseUrl}/payments/mobile/callback/confirmation`,
+				validationUrl: `${this.callbackBaseUrl}/payments/mobile/callback/validation`,
 			},
 		});
 	}
@@ -192,7 +192,7 @@ export class MpesaService implements OnModuleInit {
 					PartyA: phoneNumber,
 					PartyB: this.shortcode,
 					PhoneNumber: phoneNumber,
-					CallBackURL: `${this.callbackBaseUrl}/mpesa/callback/stk`,
+					CallBackURL: `${this.callbackBaseUrl}/payments/mobile/callback/stk`,
 					AccountReference: accountRef,
 					TransactionDesc: `Rent payment for ${accountRef}`,
 				},
