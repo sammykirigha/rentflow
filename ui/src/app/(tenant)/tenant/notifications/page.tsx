@@ -5,9 +5,11 @@ import {
   BellOutlined,
   MailOutlined,
   MessageOutlined,
+  ExportOutlined,
 } from "@ant-design/icons";
-import { Card, Table, Tag, Typography, Select, Space } from "antd";
+import { Card, Table, Tag, Typography, Select, Space, Button } from "antd";
 import { useCallback, useEffect, useState } from "react";
+import { downloadCsv, type CsvColumn } from "@/lib/csv-export";
 
 const { Title } = Typography;
 
@@ -147,7 +149,26 @@ export default function TenantNotificationsPage() {
 
   return (
     <div>
-      <Title level={3}>My Notifications</Title>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <Title level={3} style={{ margin: 0 }}>My Notifications</Title>
+        <Button
+          icon={<ExportOutlined />}
+          onClick={() => {
+            const csvColumns: CsvColumn<Notification>[] = [
+              { header: 'Date', accessor: (r) => new Date(r.createdAt).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) },
+              { header: 'Type', accessor: (r) => notificationTypeLabels[r.type] || r.type },
+              { header: 'Channel', accessor: (r) => r.channel?.toUpperCase() || '' },
+              { header: 'Subject', accessor: (r) => r.subject || '' },
+              { header: 'Message', accessor: (r) => r.message || '' },
+              { header: 'Status', accessor: (r) => r.status?.charAt(0).toUpperCase() + r.status?.slice(1) },
+            ];
+            downloadCsv(notifications, csvColumns, 'my-notifications.csv');
+          }}
+          disabled={loading || notifications.length === 0}
+        >
+          Export CSV
+        </Button>
+      </div>
 
       <Card>
         <div style={{ marginBottom: 16 }}>

@@ -14,12 +14,14 @@ import {
   DatePicker,
   Card,
   App,
+  Space,
 } from 'antd';
 import {
   PlusOutlined,
   EyeOutlined,
   DownloadOutlined,
   FileTextOutlined,
+  ExportOutlined,
 } from '@ant-design/icons';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -31,6 +33,7 @@ import { formatKES } from '@/lib/format-kes';
 import type { Invoice, CreateInvoiceInput, InvoiceStatus } from '@/types/invoices';
 import type { Tenant } from '@/types/tenants';
 import type { ColumnsType } from 'antd/es/table';
+import { downloadCsv, type CsvColumn } from '@/lib/csv-export';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
@@ -219,13 +222,34 @@ export default function InvoicesPage() {
           <FileTextOutlined style={{ marginRight: 8 }} />
           Invoices
         </Title>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => setIsModalOpen(true)}
-        >
-          Create Invoice
-        </Button>
+        <Space>
+          <Button
+            icon={<ExportOutlined />}
+            onClick={() => {
+              const csvColumns: CsvColumn<Invoice>[] = [
+                { header: 'Invoice #', accessor: (r) => r.invoiceNumber },
+                { header: 'Tenant', accessor: (r) => `${r.tenant?.user?.firstName || ''} ${r.tenant?.user?.lastName || ''}`.trim() },
+                { header: 'Billing Month', accessor: (r) => r.billingMonth ? dayjs(r.billingMonth).format('MMM YYYY') : '' },
+                { header: 'Total Amount', accessor: (r) => Number(r.totalAmount) },
+                { header: 'Paid', accessor: (r) => Number(r.amountPaid) },
+                { header: 'Balance', accessor: (r) => Number(r.balanceDue) },
+                { header: 'Status', accessor: (r) => STATUS_LABEL_MAP[r.status] || r.status },
+                { header: 'Due Date', accessor: (r) => r.dueDate ? dayjs(r.dueDate).format('DD MMM YYYY') : '' },
+              ];
+              downloadCsv(invoices, csvColumns, 'invoices.csv');
+            }}
+            disabled={isLoading || invoices.length === 0}
+          >
+            Export CSV
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setIsModalOpen(true)}
+          >
+            Create Invoice
+          </Button>
+        </Space>
       </div>
 
       <Card>

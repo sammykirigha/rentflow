@@ -14,6 +14,7 @@ import {
   CloseCircleOutlined,
   LoadingOutlined,
   DownloadOutlined,
+  ExportOutlined,
 } from "@ant-design/icons";
 import {
   Card,
@@ -34,6 +35,7 @@ import {
   Popover,
 } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { downloadCsv, type CsvColumn } from "@/lib/csv-export";
 
 const { Title, Text } = Typography;
 
@@ -429,6 +431,24 @@ export default function TenantWalletPage() {
             onClick={() => setTopupModalOpen(true)}
           >
             Top Up via M-Pesa
+          </Button>
+          <Button
+            icon={<ExportOutlined />}
+            size="large"
+            onClick={() => {
+              const csvColumns: CsvColumn<WalletTransaction>[] = [
+                { header: 'Date', accessor: (r) => new Date(r.createdAt).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) },
+                { header: 'Type', accessor: (r) => txnTypeLabels[r.type] || r.type },
+                { header: 'Amount', accessor: (r) => Number(r.amount) },
+                { header: 'Balance After', accessor: (r) => Number(r.balanceAfter) },
+                { header: 'Reference', accessor: (r) => r.reference || '' },
+                { header: 'Description', accessor: (r) => r.description || '' },
+              ];
+              downloadCsv(transactions, csvColumns, 'my-wallet.csv');
+            }}
+            disabled={loading || transactions.length === 0}
+          >
+            Export CSV
           </Button>
           <Popover
             content={statementPopoverContent}

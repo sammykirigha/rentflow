@@ -13,11 +13,13 @@ import {
   Card,
   App,
   Empty,
+  Space,
 } from 'antd';
 import {
   PlusOutlined,
   ToolOutlined,
   CloseCircleOutlined,
+  ExportOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,6 +33,7 @@ import type {
   ExpensePriority,
 } from '@/types/expenses';
 import type { ColumnsType } from 'antd/es/table';
+import { downloadCsv, type CsvColumn } from '@/lib/csv-export';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
@@ -213,13 +216,32 @@ export default function TenantMaintenancePage() {
           <ToolOutlined style={{ marginRight: 8 }} />
           Maintenance Requests
         </Title>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => setIsModalOpen(true)}
-        >
-          New Request
-        </Button>
+        <Space>
+          <Button
+            icon={<ExportOutlined />}
+            onClick={() => {
+              const csvColumns: CsvColumn<MaintenanceRequest>[] = [
+                { header: 'Description', accessor: (r) => r.description },
+                { header: 'Category', accessor: (r) => CATEGORY_LABEL_MAP[r.category] || r.category },
+                { header: 'Priority', accessor: (r) => r.priority?.toUpperCase() || '' },
+                { header: 'Status', accessor: (r) => STATUS_LABEL_MAP[r.status] || r.status },
+                { header: 'Submitted', accessor: (r) => r.createdAt ? dayjs(r.createdAt).format('DD MMM YYYY') : '' },
+                { header: 'Resolved', accessor: (r) => r.resolvedAt ? dayjs(r.resolvedAt).format('DD MMM YYYY') : '' },
+              ];
+              downloadCsv(requests, csvColumns, 'my-maintenance.csv');
+            }}
+            disabled={isLoading || requests.length === 0}
+          >
+            Export CSV
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setIsModalOpen(true)}
+          >
+            New Request
+          </Button>
+        </Space>
       </div>
 
       <Card>

@@ -16,7 +16,7 @@ import {
   Input,
   Form,
 } from 'antd';
-import { AlertOutlined, PlusOutlined } from '@ant-design/icons';
+import { AlertOutlined, PlusOutlined, ExportOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { maintenanceApi } from '@/lib/api/expenses.api';
@@ -33,6 +33,7 @@ import type {
 import type { Property } from '@/types/properties';
 import type { Tenant } from '@/types/tenants';
 import type { ColumnsType } from 'antd/es/table';
+import { downloadCsv, type CsvColumn } from '@/lib/csv-export';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
@@ -274,13 +275,34 @@ export default function MaintenancePage() {
           <AlertOutlined style={{ marginRight: 8 }} />
           Maintenance Requests
         </Title>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => setCreateModalOpen(true)}
-        >
-          Create Request
-        </Button>
+        <Space>
+          <Button
+            icon={<ExportOutlined />}
+            onClick={() => {
+              const csvColumns: CsvColumn<MaintenanceRequest>[] = [
+                { header: 'Property', accessor: (r) => getPropertyName(r) },
+                { header: 'Unit', accessor: (r) => r.tenant?.unit?.unitNumber || '' },
+                { header: 'Tenant', accessor: (r) => getTenantName(r) },
+                { header: 'Description', accessor: (r) => r.description },
+                { header: 'Category', accessor: (r) => CATEGORY_LABEL_MAP[r.category] || r.category },
+                { header: 'Priority', accessor: (r) => r.priority?.toUpperCase() || '' },
+                { header: 'Status', accessor: (r) => STATUS_LABEL_MAP[r.status] || r.status },
+                { header: 'Date', accessor: (r) => r.createdAt ? dayjs(r.createdAt).format('DD MMM YYYY') : '' },
+              ];
+              downloadCsv(requests, csvColumns, 'maintenance.csv');
+            }}
+            disabled={isLoading || requests.length === 0}
+          >
+            Export CSV
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setCreateModalOpen(true)}
+          >
+            Create Request
+          </Button>
+        </Space>
       </div>
 
       <Card>

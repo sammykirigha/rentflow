@@ -12,8 +12,9 @@ import {
   InputNumber,
   Card,
   App,
+  Space,
 } from 'antd';
-import { PlusOutlined, EyeOutlined, HomeOutlined } from '@ant-design/icons';
+import { PlusOutlined, EyeOutlined, HomeOutlined, ExportOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { propertiesApi } from '@/lib/api/properties.api';
@@ -21,6 +22,7 @@ import Link from 'next/link';
 import { parseError } from '@/lib/api/parseError';
 import type { Property, CreatePropertyInput } from '@/types/properties';
 import type { ColumnsType } from 'antd/es/table';
+import { downloadCsv, type CsvColumn } from '@/lib/csv-export';
 
 const { Title } = Typography;
 
@@ -126,13 +128,31 @@ export default function PropertiesPage() {
           <HomeOutlined style={{ marginRight: 8 }} />
           Properties
         </Title>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => setIsModalOpen(true)}
-        >
-          Add Property
-        </Button>
+        <Space>
+          <Button
+            icon={<ExportOutlined />}
+            onClick={() => {
+              const csvColumns: CsvColumn<Property>[] = [
+                { header: 'Name', accessor: (r) => r.name },
+                { header: 'Location', accessor: (r) => r.location },
+                { header: 'Total Units', accessor: (r) => r.totalUnits },
+                { header: 'Paybill', accessor: (r) => r.paybillNumber || '' },
+                { header: 'Status', accessor: (r) => r.isActive ? 'Active' : 'Inactive' },
+              ];
+              downloadCsv(properties, csvColumns, 'properties.csv');
+            }}
+            disabled={isLoading || properties.length === 0}
+          >
+            Export CSV
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setIsModalOpen(true)}
+          >
+            Add Property
+          </Button>
+        </Space>
       </div>
 
       <Card>

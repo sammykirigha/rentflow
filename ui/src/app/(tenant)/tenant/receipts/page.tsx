@@ -11,12 +11,14 @@ import {
 import {
   DownloadOutlined,
   FileProtectOutlined,
+  ExportOutlined,
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { receiptsApi } from '@/lib/api/receipts.api';
 import { formatKES } from '@/lib/format-kes';
 import type { ColumnsType } from 'antd/es/table';
+import { downloadCsv, type CsvColumn } from '@/lib/csv-export';
 import dayjs from 'dayjs';
 
 interface Receipt {
@@ -100,10 +102,28 @@ export default function TenantReceiptsPage() {
 
   return (
     <div>
-      <Title level={4} style={{ marginBottom: 24 }}>
-        <FileProtectOutlined style={{ marginRight: 8 }} />
-        My Receipts
-      </Title>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <Title level={4} style={{ margin: 0 }}>
+          <FileProtectOutlined style={{ marginRight: 8 }} />
+          My Receipts
+        </Title>
+        <Button
+          icon={<ExportOutlined />}
+          onClick={() => {
+            const csvColumns: CsvColumn<Receipt>[] = [
+              { header: 'Receipt #', accessor: (r) => r.receiptNumber },
+              { header: 'Invoice #', accessor: (r) => r.invoice?.invoiceNumber || '' },
+              { header: 'Billing Month', accessor: (r) => r.invoice?.billingMonth ? dayjs(r.invoice.billingMonth).format('MMM YYYY') : '' },
+              { header: 'Total Paid', accessor: (r) => Number(r.totalPaid) },
+              { header: 'Date', accessor: (r) => r.createdAt ? dayjs(r.createdAt).format('DD MMM YYYY') : '' },
+            ];
+            downloadCsv(receipts, csvColumns, 'my-receipts.csv');
+          }}
+          disabled={isLoading || receipts.length === 0}
+        >
+          Export CSV
+        </Button>
+      </div>
 
       <Card>
         <Table<Receipt>

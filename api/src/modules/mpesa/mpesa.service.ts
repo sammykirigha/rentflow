@@ -75,16 +75,36 @@ export class MpesaService implements OnModuleInit {
 			return;
 		}
 
-		try {
-			await this.registerC2bUrls();
-			this.logger.log('M-Pesa C2B URLs registered successfully');
-		} catch (error) {
-			// Non-fatal: C2B registration failure should not prevent app startup.
-			// Common in development with sandbox/placeholder credentials.
-			const detail = error.response?.data
-				? JSON.stringify(error.response.data)
-				: error.message;
-			this.logger.warn(`C2B URL registration failed (non-fatal): ${detail}`);
+		// Retry C2B registration with exponential backoff (Safaricom sandbox can be flaky)
+		this.registerC2bUrlsWithRetry(3, 5000).catch(() => {
+			// Already logged inside the method — nothing more to do
+		});
+	}
+
+	private async registerC2bUrlsWithRetry(maxAttempts: number, initialDelay: number): Promise<void> {
+		for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+			try {
+				await this.registerC2bUrls();
+				this.logger.log(`M-Pesa C2B URLs registered successfully (attempt ${attempt}/${maxAttempts})`);
+				return;
+			} catch (error) {
+				const detail = error.response?.data
+					? JSON.stringify(error.response.data)
+					: error.message;
+
+				if (attempt < maxAttempts) {
+					const delay = initialDelay * Math.pow(2, attempt - 1);
+					this.logger.warn(
+						`C2B URL registration failed (attempt ${attempt}/${maxAttempts}), retrying in ${delay / 1000}s: ${detail}`,
+					);
+					await new Promise((resolve) => setTimeout(resolve, delay));
+				} else {
+					this.logger.error(
+						`C2B URL registration failed after ${maxAttempts} attempts: ${detail}. ` +
+						`Use POST /api/v1/payments/mobile/register-c2b to retry manually.`,
+					);
+				}
+			}
 		}
 	}
 

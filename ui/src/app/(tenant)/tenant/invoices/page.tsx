@@ -12,6 +12,7 @@ import {
 import {
   DownloadOutlined,
   FileTextOutlined,
+  ExportOutlined,
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -19,6 +20,7 @@ import { invoicesApi } from '@/lib/api/invoices.api';
 import { formatKES } from '@/lib/format-kes';
 import type { Invoice, InvoiceStatus } from '@/types/invoices';
 import type { ColumnsType } from 'antd/es/table';
+import { downloadCsv, type CsvColumn } from '@/lib/csv-export';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
@@ -122,10 +124,30 @@ export default function TenantInvoicesPage() {
 
   return (
     <div>
-      <Title level={4} style={{ marginBottom: 24 }}>
-        <FileTextOutlined style={{ marginRight: 8 }} />
-        My Invoices
-      </Title>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <Title level={4} style={{ margin: 0 }}>
+          <FileTextOutlined style={{ marginRight: 8 }} />
+          My Invoices
+        </Title>
+        <Button
+          icon={<ExportOutlined />}
+          onClick={() => {
+            const csvColumns: CsvColumn<Invoice>[] = [
+              { header: 'Invoice #', accessor: (r) => r.invoiceNumber },
+              { header: 'Billing Month', accessor: (r) => r.billingMonth ? dayjs(r.billingMonth).format('MMM YYYY') : '' },
+              { header: 'Total Amount', accessor: (r) => Number(r.totalAmount) },
+              { header: 'Paid', accessor: (r) => Number(r.amountPaid) },
+              { header: 'Balance', accessor: (r) => Number(r.balanceDue) },
+              { header: 'Status', accessor: (r) => STATUS_LABEL_MAP[r.status] || r.status },
+              { header: 'Due Date', accessor: (r) => r.dueDate ? dayjs(r.dueDate).format('DD MMM YYYY') : '' },
+            ];
+            downloadCsv(invoices, csvColumns, 'my-invoices.csv');
+          }}
+          disabled={isLoading || invoices.length === 0}
+        >
+          Export CSV
+        </Button>
+      </div>
 
       <Card>
         <Table<Invoice>

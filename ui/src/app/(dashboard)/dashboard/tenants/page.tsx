@@ -17,7 +17,7 @@ import {
   App,
   Alert,
 } from 'antd';
-import { PlusOutlined, EyeOutlined, TeamOutlined, SearchOutlined } from '@ant-design/icons';
+import { PlusOutlined, EyeOutlined, TeamOutlined, SearchOutlined, ExportOutlined } from '@ant-design/icons';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -28,6 +28,7 @@ import { formatKES } from '@/lib/format-kes';
 import type { Tenant, CreateTenantInput, TenantStatus } from '@/types/tenants';
 import type { Property, Unit } from '@/types/properties';
 import type { ColumnsType } from 'antd/es/table';
+import { downloadCsv, type CsvColumn } from '@/lib/csv-export';
 
 const { Title } = Typography;
 
@@ -200,13 +201,33 @@ export default function TenantsPage() {
           <TeamOutlined style={{ marginRight: 8 }} />
           Tenants
         </Title>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => setIsModalOpen(true)}
-        >
-          Add Tenant
-        </Button>
+        <Space>
+          <Button
+            icon={<ExportOutlined />}
+            onClick={() => {
+              const csvColumns: CsvColumn<Tenant>[] = [
+                { header: 'Name', accessor: (r) => `${r.user?.firstName || ''} ${r.user?.lastName || ''}`.trim() },
+                { header: 'Email', accessor: (r) => r.user?.email || '' },
+                { header: 'Phone', accessor: (r) => r.user?.phone || '' },
+                { header: 'Property', accessor: (r) => r.unit?.property?.name || '' },
+                { header: 'Unit', accessor: (r) => r.unit?.unitNumber || '' },
+                { header: 'Wallet Balance', accessor: (r) => Number(r.walletBalance ?? 0) },
+                { header: 'Status', accessor: (r) => STATUS_LABEL_MAP[r.status] || r.status },
+              ];
+              downloadCsv(tenants, csvColumns, 'tenants.csv');
+            }}
+            disabled={isLoading || tenants.length === 0}
+          >
+            Export CSV
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setIsModalOpen(true)}
+          >
+            Add Tenant
+          </Button>
+        </Space>
       </div>
 
       <Card>

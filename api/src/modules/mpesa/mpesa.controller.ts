@@ -29,6 +29,15 @@ export class MpesaController {
 
 	// ── Authenticated Endpoints ─────────────────────────────
 
+	@Post('register-c2b')
+	@UseGuards(JwtAuthGuard, PermissionsGuard)
+	@ApiBearerAuth('JWT')
+	@ApiOperation({ summary: 'Manually register C2B callback URLs with Safaricom' })
+	async registerC2bUrls() {
+		await this.mpesaService.registerC2bUrls();
+		return { success: true, message: 'C2B URLs registered successfully' };
+	}
+
 	@Post('stk-push')
 	@UseGuards(JwtAuthGuard, PermissionsGuard)
 	@Throttle(3, 3600000)

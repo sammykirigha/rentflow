@@ -20,6 +20,7 @@ import {
 import {
   PlusOutlined,
   ToolOutlined,
+  ExportOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -38,6 +39,7 @@ import type {
 } from '@/types/expenses';
 import type { Property } from '@/types/properties';
 import type { ColumnsType } from 'antd/es/table';
+import { downloadCsv, type CsvColumn } from '@/lib/csv-export';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
@@ -288,13 +290,34 @@ export default function ExpensesPage() {
           <ToolOutlined style={{ marginRight: 8 }} />
           Expenses
         </Title>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => setIsModalOpen(true)}
-        >
-          Log Expense
-        </Button>
+        <Space>
+          <Button
+            icon={<ExportOutlined />}
+            onClick={() => {
+              const csvColumns: CsvColumn<Expense>[] = [
+                { header: 'Description', accessor: (r) => r.description },
+                { header: 'Property', accessor: (r) => r.property?.name || '' },
+                { header: 'Category', accessor: (r) => CATEGORY_LABEL_MAP[r.category] || r.category },
+                { header: 'Amount', accessor: (r) => Number(r.amount) },
+                { header: 'Priority', accessor: (r) => r.priority?.toUpperCase() || '' },
+                { header: 'Status', accessor: (r) => STATUS_LABEL_MAP[r.status] || r.status },
+                { header: 'Vendor', accessor: (r) => r.vendor?.name || '' },
+                { header: 'Date', accessor: (r) => r.createdAt ? dayjs(r.createdAt).format('DD MMM YYYY') : '' },
+              ];
+              downloadCsv(expenses, csvColumns, 'expenses.csv');
+            }}
+            disabled={isLoading || expenses.length === 0}
+          >
+            Export CSV
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setIsModalOpen(true)}
+          >
+            Log Expense
+          </Button>
+        </Space>
       </div>
 
       <Card>

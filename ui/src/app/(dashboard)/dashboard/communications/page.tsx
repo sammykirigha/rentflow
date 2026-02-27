@@ -24,6 +24,7 @@ import {
   EyeOutlined,
   DeleteOutlined,
   MoreOutlined,
+  ExportOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -38,6 +39,7 @@ import { tenantsApi } from '@/lib/api/tenants.api';
 import { parseError } from '@/lib/api/parseError';
 import type { Tenant } from '@/types/tenants';
 import type { ColumnsType } from 'antd/es/table';
+import { downloadCsv, type CsvColumn } from '@/lib/csv-export';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
@@ -302,6 +304,24 @@ export default function CommunicationsPage() {
           Communications
         </Title>
         <Space>
+          <Button
+            icon={<ExportOutlined />}
+            onClick={() => {
+              const csvColumns: CsvColumn<Notification>[] = [
+                { header: 'Tenant', accessor: (r) => `${r.tenant?.user?.firstName || ''} ${r.tenant?.user?.lastName || ''}`.trim() },
+                { header: 'Type', accessor: (r) => TYPE_LABEL_MAP[r.type] || r.type },
+                { header: 'Channel', accessor: (r) => r.channel?.toUpperCase() || '' },
+                { header: 'Subject', accessor: (r) => r.subject || '' },
+                { header: 'Message', accessor: (r) => r.message || '' },
+                { header: 'Sent At', accessor: (r) => r.sentAt ? dayjs(r.sentAt).format('DD MMM YYYY, HH:mm') : 'Pending' },
+                { header: 'Status', accessor: (r) => r.status?.charAt(0).toUpperCase() + r.status?.slice(1) },
+              ];
+              downloadCsv(notifications, csvColumns, 'communications.csv');
+            }}
+            disabled={isLoading || notifications.length === 0}
+          >
+            Export CSV
+          </Button>
           <Button
             icon={<SendOutlined />}
             onClick={() => setIsSendModalOpen(true)}

@@ -6,10 +6,12 @@ import {
   Table,
   Tag,
   Card,
+  Button,
   Empty,
 } from 'antd';
 import {
   DollarOutlined,
+  ExportOutlined,
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -17,6 +19,7 @@ import { paymentsApi } from '@/lib/api/payments.api';
 import { formatKES } from '@/lib/format-kes';
 import type { Payment, PaymentMethod, PaymentStatus } from '@/types/payments';
 import type { ColumnsType } from 'antd/es/table';
+import { downloadCsv, type CsvColumn } from '@/lib/csv-export';
 import dayjs from 'dayjs';
 
 const { Title } = Typography;
@@ -103,10 +106,29 @@ export default function TenantPaymentsPage() {
 
   return (
     <div>
-      <Title level={4} style={{ marginBottom: 24 }}>
-        <DollarOutlined style={{ marginRight: 8 }} />
-        My Payments
-      </Title>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <Title level={4} style={{ margin: 0 }}>
+          <DollarOutlined style={{ marginRight: 8 }} />
+          My Payments
+        </Title>
+        <Button
+          icon={<ExportOutlined />}
+          onClick={() => {
+            const csvColumns: CsvColumn<Payment>[] = [
+              { header: 'Date', accessor: (r) => r.transactionDate ? dayjs(r.transactionDate).format('DD MMM YYYY, HH:mm') : '' },
+              { header: 'Amount', accessor: (r) => Number(r.amount) },
+              { header: 'Method', accessor: (r) => PAYMENT_METHOD_LABEL_MAP[r.method] || r.method },
+              { header: 'Status', accessor: (r) => PAYMENT_STATUS_LABEL_MAP[r.status] || r.status },
+              { header: 'M-Pesa Receipt', accessor: (r) => r.mpesaReceiptNumber || '' },
+              { header: 'Invoice #', accessor: (r) => r.invoice?.invoiceNumber || '' },
+            ];
+            downloadCsv(payments, csvColumns, 'my-payments.csv');
+          }}
+          disabled={isLoading || payments.length === 0}
+        >
+          Export CSV
+        </Button>
+      </div>
 
       <Card>
         <Table<Payment>

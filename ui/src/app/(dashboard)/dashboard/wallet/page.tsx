@@ -16,6 +16,7 @@ import {
 import {
   WalletOutlined,
   DownloadOutlined,
+  ExportOutlined,
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -26,6 +27,7 @@ import { WALLET_TXN_TYPE_LABEL, WALLET_TXN_TYPE_COLOR } from '@/lib/constants/st
 import type { LedgerTransaction, WalletTxnType } from '@/types/payments';
 import type { Tenant } from '@/types/tenants';
 import type { ColumnsType } from 'antd/es/table';
+import { downloadCsv, type CsvColumn } from '@/lib/csv-export';
 import dayjs, { Dayjs } from 'dayjs';
 
 const { Title, Text } = Typography;
@@ -212,6 +214,26 @@ export default function WalletLedgerPage() {
           <WalletOutlined style={{ marginRight: 8 }} />
           Wallet Ledger
         </Title>
+        <Button
+          icon={<ExportOutlined />}
+          onClick={() => {
+            const csvColumns: CsvColumn<LedgerTransaction>[] = [
+              { header: 'Date', accessor: (r) => r.createdAt ? dayjs(r.createdAt).format('DD MMM YYYY, HH:mm') : '' },
+              { header: 'Tenant', accessor: (r) => `${r.tenant?.user?.firstName || ''} ${r.tenant?.user?.lastName || ''}`.trim() },
+              { header: 'Unit', accessor: (r) => r.tenant?.unit?.unitNumber || '' },
+              { header: 'Property', accessor: (r) => r.tenant?.unit?.property?.name || '' },
+              { header: 'Type', accessor: (r) => WALLET_TXN_TYPE_LABEL[r.type] || r.type },
+              { header: 'Amount', accessor: (r) => Number(r.amount) },
+              { header: 'Balance After', accessor: (r) => Number(r.balanceAfter) },
+              { header: 'Reference', accessor: (r) => r.reference || '' },
+              { header: 'Description', accessor: (r) => r.description || '' },
+            ];
+            downloadCsv(transactions, csvColumns, 'wallet-ledger.csv');
+          }}
+          disabled={isLoading || transactions.length === 0}
+        >
+          Export CSV
+        </Button>
       </div>
 
       <Card style={{ marginBottom: 16 }}>
