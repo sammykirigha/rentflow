@@ -120,7 +120,6 @@ export class InvoicesController {
 	}
 
 	@Get(':invoiceId')
-	@RequirePermissions(Permission(PermissionResource.INVOICES, PermissionAction.READ))
 	@ApiOperation({ summary: 'Get a single invoice by ID' })
 	async findOne(@Param('invoiceId') invoiceId: string) {
 		return this.invoicesService.findOne(invoiceId);

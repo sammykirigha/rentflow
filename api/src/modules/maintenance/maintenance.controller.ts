@@ -85,7 +85,6 @@ export class MaintenanceController {
 	}
 
 	@Patch(':maintenanceRequestId')
-	@RequirePermissions(Permission(PermissionResource.MAINTENANCE, PermissionAction.UPDATE))
 	@ApiOperation({ summary: 'Update a maintenance request' })
 	async update(
 		@Param('maintenanceRequestId') maintenanceRequestId: string,

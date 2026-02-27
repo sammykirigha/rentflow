@@ -73,7 +73,6 @@ export class ReceiptsController {
 	}
 
 	@Get(':receiptId')
-	@RequirePermissions(Permission(PermissionResource.INVOICES, PermissionAction.READ))
 	@ApiOperation({ summary: 'Get a single receipt by ID' })
 	async findOne(@Param('receiptId') receiptId: string) {
 		return this.receiptsService.findOne(receiptId);
