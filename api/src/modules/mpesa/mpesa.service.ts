@@ -152,8 +152,14 @@ export class MpesaService implements OnModuleInit {
 				},
 			);
 		} catch (error) {
-			this.invalidateTokenOnAuthError(error);
-			throw error;
+			const errorMessage = error?.response?.data?.errorMessage || '';
+			if (errorMessage.includes('already registered')) {
+				this.logger.log('C2B URLs already registered with Safaricom');
+				// Fall through to audit log below
+			} else {
+				this.invalidateTokenOnAuthError(error);
+				throw error;
+			}
 		}
 
 		await this.auditService.createLog({
