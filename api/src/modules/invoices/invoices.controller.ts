@@ -104,7 +104,6 @@ export class InvoicesController {
 	}
 
 	@Get(':invoiceId/pdf')
-	@RequirePermissions(Permission(PermissionResource.INVOICES, PermissionAction.EXPORT))
 	@ApiOperation({ summary: 'Download invoice as PDF' })
 	async downloadPdf(
 		@Param('invoiceId') invoiceId: string,

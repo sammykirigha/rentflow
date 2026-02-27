@@ -22,6 +22,7 @@ import {
 	Logger,
 	NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcryptjs';
 import { DataSource, Repository } from 'typeorm';
@@ -59,6 +60,7 @@ export class TenantsService {
 		private readonly roleRepository: Repository<Role>,
 		@InjectRepository(Notification)
 		private readonly notificationRepository: Repository<Notification>,
+		private readonly configService: ConfigService,
 	) {}
 
 	async create(dto: CreateTenantDto, adminUserId: string): Promise<Tenant> {
@@ -225,12 +227,14 @@ export class TenantsService {
 		unitNumber: string;
 	}): Promise<void> {
 		const { tenantId, name, email, phone, password, unitNumber } = params;
+		const loginUrl = `${this.configService.get('FRONTEND_URL', 'http://localhost:3001')}/login`;
 
 		// SMS
 		const smsMessage =
 			`Welcome to RentFlow, ${name}! ` +
 			`Your unit: ${unitNumber}. ` +
 			`Login: ${email} | Password: ${password}. ` +
+			`Login here: ${loginUrl} ` +
 			`Please change your password after first login.`;
 
 		const smsResult = await this.smsService.sendSms(phone, smsMessage);
@@ -257,6 +261,9 @@ export class TenantsService {
 					<p style="margin: 4px 0;"><strong>Unit:</strong> ${unitNumber}</p>
 					<p style="margin: 4px 0;"><strong>Email:</strong> ${email}</p>
 					<p style="margin: 4px 0;"><strong>Password:</strong> ${password}</p>
+				</div>
+				<div style="text-align: center; margin: 24px 0;">
+					<a href="${loginUrl}" style="background: #1890ff; color: #ffffff; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Login to RentFlow</a>
 				</div>
 				<p style="color: #ff4d4f;"><strong>Please change your password after your first login.</strong></p>
 				<hr style="border: none; border-top: 1px solid #e8e8e8; margin: 24px 0;" />

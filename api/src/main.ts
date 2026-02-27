@@ -21,12 +21,16 @@ async function bootstrap() {
 	app.use(urlencoded({ extended: true }));
 
 	// Enable CORS
+	const allowedOrigins = [
+		'http://localhost:3001',
+		'http://localhost:3000',
+	];
+	const frontendUrl = configService.get<string>('FRONTEND_URL');
+	if (frontendUrl) {
+		allowedOrigins.unshift(frontendUrl);
+	}
 	app.enableCors({
-		origin: [
-			configService.get<string>('FRONTEND_URL', 'http://localhost:3001'),
-			'http://localhost:3001',
-			'http://localhost:3000',
-		],
+		origin: allowedOrigins,
 		credentials: true,
 		methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 		allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
