@@ -9,10 +9,10 @@ export class CreateAuditLogDto {
 	@IsNotEmpty()
 	action: AuditAction;
 
-	@ApiProperty()
+	@ApiProperty({ required: false })
 	@IsString()
-	@IsNotEmpty()
-	performedBy: string;
+	@IsOptional()
+	performedBy?: string;
 
 	@ApiProperty({ required: false })
 	@IsString()

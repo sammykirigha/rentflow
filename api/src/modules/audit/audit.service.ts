@@ -48,7 +48,9 @@ export class AuditService {
 				auditId: log.auditId,
 				action: log.action,
 				performedBy: log.performedBy,
-				performerName: log.performer?.firstName + ' ' + log.performer?.lastName,
+				performerName: log.performer
+				? `${log.performer.firstName} ${log.performer.lastName}`.trim()
+				: 'System',
 				targetType: log.targetType,
 				targetId: log.targetId,
 				details: log.details,

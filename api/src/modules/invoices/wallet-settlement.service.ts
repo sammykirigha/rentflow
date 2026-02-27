@@ -110,7 +110,7 @@ export class WalletSettlementService {
 			);
 
 			// Audit the settlement run
-			if (systemUserId && (summary.invoicesSettled > 0 || summary.invoicesPartial > 0)) {
+			if (summary.invoicesSettled > 0 || summary.invoicesPartial > 0) {
 				await this.auditService.createLog({
 					action: AuditAction.WALLET_AUTO_SETTLEMENT_COMPLETED,
 					performedBy: systemUserId,

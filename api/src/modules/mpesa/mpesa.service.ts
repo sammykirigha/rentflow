@@ -137,19 +137,24 @@ export class MpesaService implements OnModuleInit {
 	async registerC2bUrls(): Promise<void> {
 		const token = await this.getAccessToken();
 
-		await axios.post(
-			`${this.baseUrl}/mpesa/c2b/v1/registerurl`,
-			{
-				ShortCode: this.shortcode,
-				ResponseType: 'Completed',
-				ConfirmationURL: `${this.callbackBaseUrl}/payments/mobile/callback/confirmation`,
-				ValidationURL: `${this.callbackBaseUrl}/payments/mobile/callback/validation`,
-			},
-			{
-				headers: { Authorization: `Bearer ${token}` },
-				timeout: 15_000,
-			},
-		);
+		try {
+			await axios.post(
+				`${this.baseUrl}/mpesa/c2b/v1/registerurl`,
+				{
+					ShortCode: this.shortcode,
+					ResponseType: 'Completed',
+					ConfirmationURL: `${this.callbackBaseUrl}/payments/mobile/callback/confirmation`,
+					ValidationURL: `${this.callbackBaseUrl}/payments/mobile/callback/validation`,
+				},
+				{
+					headers: { Authorization: `Bearer ${token}` },
+					timeout: 15_000,
+				},
+			);
+		} catch (error) {
+			this.invalidateTokenOnAuthError(error);
+			throw error;
+		}
 
 		await this.auditService.createLog({
 			action: AuditAction.C2B_URLS_REGISTERED,
@@ -201,26 +206,33 @@ export class MpesaService implements OnModuleInit {
 				'base64',
 			);
 
-			const { data } = await axios.post<StkPushResponse>(
-				`${this.baseUrl}/mpesa/stkpush/v1/processrequest`,
-				{
-					BusinessShortCode: this.shortcode,
-					Password: password,
-					Timestamp: timestamp,
-					TransactionType: 'CustomerPayBillOnline',
-					Amount: Math.round(amount),
-					PartyA: phoneNumber,
-					PartyB: this.shortcode,
-					PhoneNumber: phoneNumber,
-					CallBackURL: `${this.callbackBaseUrl}/payments/mobile/callback/stk`,
-					AccountReference: accountRef,
-					TransactionDesc: `Rent payment for ${accountRef}`,
-				},
-				{
-					headers: { Authorization: `Bearer ${token}` },
-					timeout: 30_000,
-				},
-			);
+			let data: StkPushResponse;
+			try {
+				const response = await axios.post<StkPushResponse>(
+					`${this.baseUrl}/mpesa/stkpush/v1/processrequest`,
+					{
+						BusinessShortCode: this.shortcode,
+						Password: password,
+						Timestamp: timestamp,
+						TransactionType: 'CustomerPayBillOnline',
+						Amount: Math.round(amount),
+						PartyA: phoneNumber,
+						PartyB: this.shortcode,
+						PhoneNumber: phoneNumber,
+						CallBackURL: `${this.callbackBaseUrl}/payments/mobile/callback/stk`,
+						AccountReference: accountRef,
+						TransactionDesc: `Rent payment for ${accountRef}`,
+					},
+					{
+						headers: { Authorization: `Bearer ${token}` },
+						timeout: 30_000,
+					},
+				);
+				data = response.data;
+			} catch (stkError) {
+				this.invalidateTokenOnAuthError(stkError);
+				throw stkError;
+			}
 
 			// Store CheckoutRequestID on the payment
 			await this.paymentsRepository.update(
@@ -324,17 +336,23 @@ export class MpesaService implements OnModuleInit {
 
 				// Post-commit: credit wallet and trigger settlement
 				try {
+					// Resolve tenant userId for audit logging
+					const tenant = await this.tenantRepository.findOne({
+						where: { tenantId: payment.tenantId },
+					});
+					const tenantUserId = tenant?.userId;
+
 					await this.walletService.credit(
 						payment.tenantId,
 						amount,
 						mpesaReceiptNumber || `stk-${payment.paymentId}`,
 						`M-Pesa STK Push payment`,
-						undefined,
+						tenantUserId,
 					);
 
 					await this.auditService.createLog({
 						action: AuditAction.STK_PUSH_CALLBACK_SUCCESS,
-						performedBy: undefined,
+						performedBy: tenantUserId,
 						targetType: AuditTargetType.PAYMENT,
 						targetId: payment.paymentId,
 						details: `STK Push successful: KES ${amount} (Ref: ${mpesaReceiptNumber})`,
@@ -363,9 +381,14 @@ export class MpesaService implements OnModuleInit {
 
 				await queryRunner.commitTransaction();
 
+				// Resolve tenant userId for audit logging
+				const failedTenant = await this.tenantRepository.findOne({
+					where: { tenantId: payment.tenantId },
+				});
+
 				await this.auditService.createLog({
 					action: AuditAction.STK_PUSH_CALLBACK_FAILED,
-					performedBy: undefined,
+					performedBy: failedTenant?.userId,
 					targetType: AuditTargetType.PAYMENT,
 					targetId: payment.paymentId,
 					details: `STK Push failed: ${ResultDesc}`,
@@ -610,6 +633,14 @@ export class MpesaService implements OnModuleInit {
 		}
 
 		return cleaned;
+	}
+
+	private invalidateTokenOnAuthError(error: any): void {
+		if (error?.response?.status === 401 || error?.response?.data?.errorCode?.startsWith('401')) {
+			this.logger.warn('Daraja returned 401, invalidating cached access token');
+			this.accessToken = null;
+			this.tokenExpiry = 0;
+		}
 	}
 
 	private generateTimestamp(): string {

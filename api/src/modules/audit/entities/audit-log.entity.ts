@@ -15,7 +15,7 @@ export class AuditLog extends AbstractEntity<AuditLog> {
 	})
 	action: AuditAction;
 
-	@Column({ name: 'performed_by' })
+	@Column({ name: 'performed_by', nullable: true })
 	performedBy: string;
 
 	@Column({
@@ -37,7 +37,7 @@ export class AuditLog extends AbstractEntity<AuditLog> {
 	metadata: Record<string, any>;
 
 	// Relations
-	@ManyToOne(() => User, { eager: false })
+	@ManyToOne(() => User, { eager: false, nullable: true })
 	@JoinColumn({ name: 'performed_by', referencedColumnName: 'userId' })
 	performer: User;
 }
