@@ -52,6 +52,7 @@ export default function TenantNotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0 });
   const [typeFilter, setTypeFilter] = useState<string | undefined>(undefined);
+  const [exporting, setExporting] = useState(false);
 
   const fetchNotifications = useCallback(
     async (page = 1, limit = 10, type?: string) => {
@@ -153,17 +154,25 @@ export default function TenantNotificationsPage() {
         <Title level={3} style={{ margin: 0 }}>My Notifications</Title>
         <Button
           icon={<ExportOutlined />}
-          onClick={() => {
-            const csvColumns: CsvColumn<Notification>[] = [
-              { header: 'Date', accessor: (r) => new Date(r.createdAt).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) },
-              { header: 'Type', accessor: (r) => notificationTypeLabels[r.type] || r.type },
-              { header: 'Channel', accessor: (r) => r.channel?.toUpperCase() || '' },
-              { header: 'Subject', accessor: (r) => r.subject || '' },
-              { header: 'Message', accessor: (r) => r.message || '' },
-              { header: 'Status', accessor: (r) => r.status?.charAt(0).toUpperCase() + r.status?.slice(1) },
-            ];
-            downloadCsv(notifications, csvColumns, 'my-notifications.csv');
+          onClick={async () => {
+            setExporting(true);
+            try {
+              const all = await communicationsApi.getMy({ limit: 10000, type: typeFilter });
+              const allData: Notification[] = Array.isArray(all?.data) ? all.data : [];
+              const csvColumns: CsvColumn<Notification>[] = [
+                { header: 'Date', accessor: (r) => new Date(r.createdAt).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) },
+                { header: 'Type', accessor: (r) => notificationTypeLabels[r.type] || r.type },
+                { header: 'Channel', accessor: (r) => r.channel?.toUpperCase() || '' },
+                { header: 'Subject', accessor: (r) => r.subject || '' },
+                { header: 'Message', accessor: (r) => r.message || '' },
+                { header: 'Status', accessor: (r) => r.status?.charAt(0).toUpperCase() + r.status?.slice(1) },
+              ];
+              downloadCsv(allData, csvColumns, 'my-notifications.csv');
+            } finally {
+              setExporting(false);
+            }
           }}
+          loading={exporting}
           disabled={loading || notifications.length === 0}
         >
           Export CSV

@@ -32,6 +32,7 @@ export default function PropertiesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [exporting, setExporting] = useState(false);
   const [form] = Form.useForm<CreatePropertyInput>();
 
   const { isAuthenticated } = useAuth();
@@ -131,16 +132,24 @@ export default function PropertiesPage() {
         <Space>
           <Button
             icon={<ExportOutlined />}
-            onClick={() => {
-              const csvColumns: CsvColumn<Property>[] = [
-                { header: 'Name', accessor: (r) => r.name },
-                { header: 'Location', accessor: (r) => r.location },
-                { header: 'Total Units', accessor: (r) => r.totalUnits },
-                { header: 'Paybill', accessor: (r) => r.paybillNumber || '' },
-                { header: 'Status', accessor: (r) => r.isActive ? 'Active' : 'Inactive' },
-              ];
-              downloadCsv(properties, csvColumns, 'properties.csv');
+            onClick={async () => {
+              setExporting(true);
+              try {
+                const all = await propertiesApi.getAll({ limit: 10000 });
+                const allData: Property[] = Array.isArray(all?.data) ? all.data : [];
+                const csvColumns: CsvColumn<Property>[] = [
+                  { header: 'Name', accessor: (r) => r.name },
+                  { header: 'Location', accessor: (r) => r.location },
+                  { header: 'Total Units', accessor: (r) => r.totalUnits },
+                  { header: 'Paybill', accessor: (r) => r.paybillNumber || '' },
+                  { header: 'Status', accessor: (r) => r.isActive ? 'Active' : 'Inactive' },
+                ];
+                downloadCsv(allData, csvColumns, 'properties.csv');
+              } finally {
+                setExporting(false);
+              }
             }}
+            loading={exporting}
             disabled={isLoading || properties.length === 0}
           >
             Export CSV

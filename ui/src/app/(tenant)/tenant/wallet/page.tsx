@@ -73,6 +73,7 @@ export default function TenantWalletPage() {
   const [statementDates, setStatementDates] = useState<[string?, string?]>([]);
   const [downloadingStatement, setDownloadingStatement] = useState(false);
   const [statementPopoverOpen, setStatementPopoverOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [form] = Form.useForm();
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -435,17 +436,25 @@ export default function TenantWalletPage() {
           <Button
             icon={<ExportOutlined />}
             size="large"
-            onClick={() => {
-              const csvColumns: CsvColumn<WalletTransaction>[] = [
-                { header: 'Date', accessor: (r) => new Date(r.createdAt).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) },
-                { header: 'Type', accessor: (r) => txnTypeLabels[r.type] || r.type },
-                { header: 'Amount', accessor: (r) => Number(r.amount) },
-                { header: 'Balance After', accessor: (r) => Number(r.balanceAfter) },
-                { header: 'Reference', accessor: (r) => r.reference || '' },
-                { header: 'Description', accessor: (r) => r.description || '' },
-              ];
-              downloadCsv(transactions, csvColumns, 'my-wallet.csv');
+            onClick={async () => {
+              setExporting(true);
+              try {
+                const all = await walletApi.getMyTransactions({ limit: 10000 });
+                const allData: WalletTransaction[] = Array.isArray(all?.data) ? all.data : [];
+                const csvColumns: CsvColumn<WalletTransaction>[] = [
+                  { header: 'Date', accessor: (r) => new Date(r.createdAt).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) },
+                  { header: 'Type', accessor: (r) => txnTypeLabels[r.type] || r.type },
+                  { header: 'Amount', accessor: (r) => Number(r.amount) },
+                  { header: 'Balance After', accessor: (r) => Number(r.balanceAfter) },
+                  { header: 'Reference', accessor: (r) => r.reference || '' },
+                  { header: 'Description', accessor: (r) => r.description || '' },
+                ];
+                downloadCsv(allData, csvColumns, 'my-wallet.csv');
+              } finally {
+                setExporting(false);
+              }
             }}
+            loading={exporting}
             disabled={loading || transactions.length === 0}
           >
             Export CSV

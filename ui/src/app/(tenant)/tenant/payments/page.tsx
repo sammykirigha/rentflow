@@ -49,6 +49,7 @@ export default function TenantPaymentsPage() {
   const { isAuthenticated } = useAuth();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [exporting, setExporting] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['my-payments', page, pageSize],
@@ -113,17 +114,25 @@ export default function TenantPaymentsPage() {
         </Title>
         <Button
           icon={<ExportOutlined />}
-          onClick={() => {
-            const csvColumns: CsvColumn<Payment>[] = [
-              { header: 'Date', accessor: (r) => r.transactionDate ? dayjs(r.transactionDate).format('DD MMM YYYY, HH:mm') : '' },
-              { header: 'Amount', accessor: (r) => Number(r.amount) },
-              { header: 'Method', accessor: (r) => PAYMENT_METHOD_LABEL_MAP[r.method] || r.method },
-              { header: 'Status', accessor: (r) => PAYMENT_STATUS_LABEL_MAP[r.status] || r.status },
-              { header: 'M-Pesa Receipt', accessor: (r) => r.mpesaReceiptNumber || '' },
-              { header: 'Invoice #', accessor: (r) => r.invoice?.invoiceNumber || '' },
-            ];
-            downloadCsv(payments, csvColumns, 'my-payments.csv');
+          onClick={async () => {
+            setExporting(true);
+            try {
+              const all = await paymentsApi.getMy({ limit: 10000 });
+              const allData: Payment[] = Array.isArray(all?.data) ? all.data : [];
+              const csvColumns: CsvColumn<Payment>[] = [
+                { header: 'Date', accessor: (r) => r.transactionDate ? dayjs(r.transactionDate).format('DD MMM YYYY, HH:mm') : '' },
+                { header: 'Amount', accessor: (r) => Number(r.amount) },
+                { header: 'Method', accessor: (r) => PAYMENT_METHOD_LABEL_MAP[r.method] || r.method },
+                { header: 'Status', accessor: (r) => PAYMENT_STATUS_LABEL_MAP[r.status] || r.status },
+                { header: 'M-Pesa Receipt', accessor: (r) => r.mpesaReceiptNumber || '' },
+                { header: 'Invoice #', accessor: (r) => r.invoice?.invoiceNumber || '' },
+              ];
+              downloadCsv(allData, csvColumns, 'my-payments.csv');
+            } finally {
+              setExporting(false);
+            }
           }}
+          loading={exporting}
           disabled={isLoading || payments.length === 0}
         >
           Export CSV

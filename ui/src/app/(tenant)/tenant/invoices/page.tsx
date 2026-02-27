@@ -45,6 +45,7 @@ export default function TenantInvoicesPage() {
   const { isAuthenticated } = useAuth();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [exporting, setExporting] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['my-invoices', page, pageSize],
@@ -131,18 +132,26 @@ export default function TenantInvoicesPage() {
         </Title>
         <Button
           icon={<ExportOutlined />}
-          onClick={() => {
-            const csvColumns: CsvColumn<Invoice>[] = [
-              { header: 'Invoice #', accessor: (r) => r.invoiceNumber },
-              { header: 'Billing Month', accessor: (r) => r.billingMonth ? dayjs(r.billingMonth).format('MMM YYYY') : '' },
-              { header: 'Total Amount', accessor: (r) => Number(r.totalAmount) },
-              { header: 'Paid', accessor: (r) => Number(r.amountPaid) },
-              { header: 'Balance', accessor: (r) => Number(r.balanceDue) },
-              { header: 'Status', accessor: (r) => STATUS_LABEL_MAP[r.status] || r.status },
-              { header: 'Due Date', accessor: (r) => r.dueDate ? dayjs(r.dueDate).format('DD MMM YYYY') : '' },
-            ];
-            downloadCsv(invoices, csvColumns, 'my-invoices.csv');
+          onClick={async () => {
+            setExporting(true);
+            try {
+              const all = await invoicesApi.getMy({ limit: 10000 });
+              const allData: Invoice[] = Array.isArray(all?.data) ? all.data : [];
+              const csvColumns: CsvColumn<Invoice>[] = [
+                { header: 'Invoice #', accessor: (r) => r.invoiceNumber },
+                { header: 'Billing Month', accessor: (r) => r.billingMonth ? dayjs(r.billingMonth).format('MMM YYYY') : '' },
+                { header: 'Total Amount', accessor: (r) => Number(r.totalAmount) },
+                { header: 'Paid', accessor: (r) => Number(r.amountPaid) },
+                { header: 'Balance', accessor: (r) => Number(r.balanceDue) },
+                { header: 'Status', accessor: (r) => STATUS_LABEL_MAP[r.status] || r.status },
+                { header: 'Due Date', accessor: (r) => r.dueDate ? dayjs(r.dueDate).format('DD MMM YYYY') : '' },
+              ];
+              downloadCsv(allData, csvColumns, 'my-invoices.csv');
+            } finally {
+              setExporting(false);
+            }
           }}
+          loading={exporting}
           disabled={isLoading || invoices.length === 0}
         >
           Export CSV

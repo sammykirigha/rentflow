@@ -40,6 +40,7 @@ export default function TenantReceiptsPage() {
   const { isAuthenticated } = useAuth();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [exporting, setExporting] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['my-receipts', page, pageSize],
@@ -109,16 +110,24 @@ export default function TenantReceiptsPage() {
         </Title>
         <Button
           icon={<ExportOutlined />}
-          onClick={() => {
-            const csvColumns: CsvColumn<Receipt>[] = [
-              { header: 'Receipt #', accessor: (r) => r.receiptNumber },
-              { header: 'Invoice #', accessor: (r) => r.invoice?.invoiceNumber || '' },
-              { header: 'Billing Month', accessor: (r) => r.invoice?.billingMonth ? dayjs(r.invoice.billingMonth).format('MMM YYYY') : '' },
-              { header: 'Total Paid', accessor: (r) => Number(r.totalPaid) },
-              { header: 'Date', accessor: (r) => r.createdAt ? dayjs(r.createdAt).format('DD MMM YYYY') : '' },
-            ];
-            downloadCsv(receipts, csvColumns, 'my-receipts.csv');
+          onClick={async () => {
+            setExporting(true);
+            try {
+              const all = await receiptsApi.getMy({ limit: 10000 });
+              const allData: Receipt[] = Array.isArray(all?.data) ? all.data : [];
+              const csvColumns: CsvColumn<Receipt>[] = [
+                { header: 'Receipt #', accessor: (r) => r.receiptNumber },
+                { header: 'Invoice #', accessor: (r) => r.invoice?.invoiceNumber || '' },
+                { header: 'Billing Month', accessor: (r) => r.invoice?.billingMonth ? dayjs(r.invoice.billingMonth).format('MMM YYYY') : '' },
+                { header: 'Total Paid', accessor: (r) => Number(r.totalPaid) },
+                { header: 'Date', accessor: (r) => r.createdAt ? dayjs(r.createdAt).format('DD MMM YYYY') : '' },
+              ];
+              downloadCsv(allData, csvColumns, 'my-receipts.csv');
+            } finally {
+              setExporting(false);
+            }
           }}
+          loading={exporting}
           disabled={isLoading || receipts.length === 0}
         >
           Export CSV

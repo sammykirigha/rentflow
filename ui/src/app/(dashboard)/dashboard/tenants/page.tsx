@@ -52,6 +52,7 @@ export default function TenantsPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | undefined>(undefined);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [exporting, setExporting] = useState(false);
   const [form] = Form.useForm();
 
   const { isAuthenticated } = useAuth();
@@ -204,18 +205,26 @@ export default function TenantsPage() {
         <Space>
           <Button
             icon={<ExportOutlined />}
-            onClick={() => {
-              const csvColumns: CsvColumn<Tenant>[] = [
-                { header: 'Name', accessor: (r) => `${r.user?.firstName || ''} ${r.user?.lastName || ''}`.trim() },
-                { header: 'Email', accessor: (r) => r.user?.email || '' },
-                { header: 'Phone', accessor: (r) => r.user?.phone || '' },
-                { header: 'Property', accessor: (r) => r.unit?.property?.name || '' },
-                { header: 'Unit', accessor: (r) => r.unit?.unitNumber || '' },
-                { header: 'Wallet Balance', accessor: (r) => Number(r.walletBalance ?? 0) },
-                { header: 'Status', accessor: (r) => STATUS_LABEL_MAP[r.status] || r.status },
-              ];
-              downloadCsv(tenants, csvColumns, 'tenants.csv');
+            onClick={async () => {
+              setExporting(true);
+              try {
+                const all = await tenantsApi.getAll({ limit: 10000, search: searchText || undefined });
+                const allData: Tenant[] = Array.isArray(all?.data) ? all.data : [];
+                const csvColumns: CsvColumn<Tenant>[] = [
+                  { header: 'Name', accessor: (r) => `${r.user?.firstName || ''} ${r.user?.lastName || ''}`.trim() },
+                  { header: 'Email', accessor: (r) => r.user?.email || '' },
+                  { header: 'Phone', accessor: (r) => r.user?.phone || '' },
+                  { header: 'Property', accessor: (r) => r.unit?.property?.name || '' },
+                  { header: 'Unit', accessor: (r) => r.unit?.unitNumber || '' },
+                  { header: 'Wallet Balance', accessor: (r) => Number(r.walletBalance ?? 0) },
+                  { header: 'Status', accessor: (r) => STATUS_LABEL_MAP[r.status] || r.status },
+                ];
+                downloadCsv(allData, csvColumns, 'tenants.csv');
+              } finally {
+                setExporting(false);
+              }
             }}
+            loading={exporting}
             disabled={isLoading || tenants.length === 0}
           >
             Export CSV

@@ -59,6 +59,7 @@ export default function PaymentsPage() {
   const [pageSize, setPageSize] = useState(10);
   const [reconPage, setReconPage] = useState(1);
   const [reconPageSize, setReconPageSize] = useState(10);
+  const [exporting, setExporting] = useState(false);
   const [form] = Form.useForm();
   const [reconcileForm] = Form.useForm();
   const reconSelectedTenantId = Form.useWatch('targetTenantId', reconcileForm);
@@ -350,30 +351,40 @@ export default function PaymentsPage() {
         <Space>
           <Button
             icon={<ExportOutlined />}
-            onClick={() => {
-              if (activeTab === 'reconciliation') {
-                const csvCols: CsvColumn<Payment>[] = [
-                  { header: 'Date', accessor: (r) => r.transactionDate ? dayjs(r.transactionDate).format('DD MMM YYYY, HH:mm') : '' },
-                  { header: 'M-Pesa Receipt #', accessor: (r) => r.mpesaReceiptNumber || '' },
-                  { header: 'Phone Number', accessor: (r) => r.mpesaPhoneNumber || '' },
-                  { header: 'Paybill', accessor: (r) => r.mpesaPaybillNumber || '' },
-                  { header: 'Account Ref', accessor: (r) => r.mpesaAccountReference || '' },
-                  { header: 'Amount', accessor: (r) => Number(r.amount) },
-                ];
-                downloadCsv(reconPayments, csvCols, 'reconciliation-queue.csv');
-              } else {
-                const csvCols: CsvColumn<Payment>[] = [
-                  { header: 'Date', accessor: (r) => r.transactionDate ? dayjs(r.transactionDate).format('DD MMM YYYY, HH:mm') : '' },
-                  { header: 'Tenant', accessor: (r) => `${r.tenant?.user?.firstName || ''} ${r.tenant?.user?.lastName || ''}`.trim() },
-                  { header: 'Amount', accessor: (r) => Number(r.amount) },
-                  { header: 'Method', accessor: (r) => PAYMENT_METHOD_LABEL[r.method] || r.method },
-                  { header: 'Status', accessor: (r) => PAYMENT_STATUS_LABEL[r.status] || r.status },
-                  { header: 'M-Pesa Receipt #', accessor: (r) => r.mpesaReceiptNumber || '' },
-                  { header: 'Invoice #', accessor: (r) => r.invoice?.invoiceNumber || '' },
-                ];
-                downloadCsv(payments, csvCols, 'payments.csv');
+            onClick={async () => {
+              setExporting(true);
+              try {
+                if (activeTab === 'reconciliation') {
+                  const all = await paymentsApi.getReconciliationQueue({ limit: 10000 });
+                  const allData: Payment[] = Array.isArray(all?.data) ? all.data : [];
+                  const csvCols: CsvColumn<Payment>[] = [
+                    { header: 'Date', accessor: (r) => r.transactionDate ? dayjs(r.transactionDate).format('DD MMM YYYY, HH:mm') : '' },
+                    { header: 'M-Pesa Receipt #', accessor: (r) => r.mpesaReceiptNumber || '' },
+                    { header: 'Phone Number', accessor: (r) => r.mpesaPhoneNumber || '' },
+                    { header: 'Paybill', accessor: (r) => r.mpesaPaybillNumber || '' },
+                    { header: 'Account Ref', accessor: (r) => r.mpesaAccountReference || '' },
+                    { header: 'Amount', accessor: (r) => Number(r.amount) },
+                  ];
+                  downloadCsv(allData, csvCols, 'reconciliation-queue.csv');
+                } else {
+                  const all = await paymentsApi.getAll({ limit: 10000 });
+                  const allData: Payment[] = Array.isArray(all?.data) ? all.data : [];
+                  const csvCols: CsvColumn<Payment>[] = [
+                    { header: 'Date', accessor: (r) => r.transactionDate ? dayjs(r.transactionDate).format('DD MMM YYYY, HH:mm') : '' },
+                    { header: 'Tenant', accessor: (r) => `${r.tenant?.user?.firstName || ''} ${r.tenant?.user?.lastName || ''}`.trim() },
+                    { header: 'Amount', accessor: (r) => Number(r.amount) },
+                    { header: 'Method', accessor: (r) => PAYMENT_METHOD_LABEL[r.method] || r.method },
+                    { header: 'Status', accessor: (r) => PAYMENT_STATUS_LABEL[r.status] || r.status },
+                    { header: 'M-Pesa Receipt #', accessor: (r) => r.mpesaReceiptNumber || '' },
+                    { header: 'Invoice #', accessor: (r) => r.invoice?.invoiceNumber || '' },
+                  ];
+                  downloadCsv(allData, csvCols, 'payments.csv');
+                }
+              } finally {
+                setExporting(false);
               }
             }}
+            loading={exporting}
             disabled={activeTab === 'reconciliation' ? (reconLoading || reconPayments.length === 0) : (isLoading || payments.length === 0)}
           >
             Export CSV

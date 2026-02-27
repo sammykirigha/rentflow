@@ -105,6 +105,7 @@ export default function ExpensesPage() {
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const [categoryFilter, setCategoryFilter] = useState<string | undefined>(undefined);
   const [propertyFilter, setPropertyFilter] = useState<string | undefined>(undefined);
+  const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [form] = Form.useForm();
@@ -293,19 +294,27 @@ export default function ExpensesPage() {
         <Space>
           <Button
             icon={<ExportOutlined />}
-            onClick={() => {
-              const csvColumns: CsvColumn<Expense>[] = [
-                { header: 'Description', accessor: (r) => r.description },
-                { header: 'Property', accessor: (r) => r.property?.name || '' },
-                { header: 'Category', accessor: (r) => CATEGORY_LABEL_MAP[r.category] || r.category },
-                { header: 'Amount', accessor: (r) => Number(r.amount) },
-                { header: 'Priority', accessor: (r) => r.priority?.toUpperCase() || '' },
-                { header: 'Status', accessor: (r) => STATUS_LABEL_MAP[r.status] || r.status },
-                { header: 'Vendor', accessor: (r) => r.vendor?.name || '' },
-                { header: 'Date', accessor: (r) => r.createdAt ? dayjs(r.createdAt).format('DD MMM YYYY') : '' },
-              ];
-              downloadCsv(expenses, csvColumns, 'expenses.csv');
+            onClick={async () => {
+              setExporting(true);
+              try {
+                const all = await expensesApi.getAll({ limit: 10000, status: statusFilter, category: categoryFilter, propertyId: propertyFilter });
+                const allData: Expense[] = Array.isArray(all?.data) ? all.data : [];
+                const csvColumns: CsvColumn<Expense>[] = [
+                  { header: 'Description', accessor: (r) => r.description },
+                  { header: 'Property', accessor: (r) => r.property?.name || '' },
+                  { header: 'Category', accessor: (r) => CATEGORY_LABEL_MAP[r.category] || r.category },
+                  { header: 'Amount', accessor: (r) => Number(r.amount) },
+                  { header: 'Priority', accessor: (r) => r.priority?.toUpperCase() || '' },
+                  { header: 'Status', accessor: (r) => STATUS_LABEL_MAP[r.status] || r.status },
+                  { header: 'Vendor', accessor: (r) => r.vendor?.name || '' },
+                  { header: 'Date', accessor: (r) => r.createdAt ? dayjs(r.createdAt).format('DD MMM YYYY') : '' },
+                ];
+                downloadCsv(allData, csvColumns, 'expenses.csv');
+              } finally {
+                setExporting(false);
+              }
             }}
+            loading={exporting}
             disabled={isLoading || expenses.length === 0}
           >
             Export CSV

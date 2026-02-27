@@ -69,6 +69,7 @@ export default function CommunicationsPage() {
   const [viewNotification, setViewNotification] = useState<Notification | null>(null);
   const [typeFilter, setTypeFilter] = useState<string | undefined>(undefined);
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
+  const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [sendForm] = Form.useForm();
@@ -306,18 +307,26 @@ export default function CommunicationsPage() {
         <Space>
           <Button
             icon={<ExportOutlined />}
-            onClick={() => {
-              const csvColumns: CsvColumn<Notification>[] = [
-                { header: 'Tenant', accessor: (r) => `${r.tenant?.user?.firstName || ''} ${r.tenant?.user?.lastName || ''}`.trim() },
-                { header: 'Type', accessor: (r) => TYPE_LABEL_MAP[r.type] || r.type },
-                { header: 'Channel', accessor: (r) => r.channel?.toUpperCase() || '' },
-                { header: 'Subject', accessor: (r) => r.subject || '' },
-                { header: 'Message', accessor: (r) => r.message || '' },
-                { header: 'Sent At', accessor: (r) => r.sentAt ? dayjs(r.sentAt).format('DD MMM YYYY, HH:mm') : 'Pending' },
-                { header: 'Status', accessor: (r) => r.status?.charAt(0).toUpperCase() + r.status?.slice(1) },
-              ];
-              downloadCsv(notifications, csvColumns, 'communications.csv');
+            onClick={async () => {
+              setExporting(true);
+              try {
+                const all = await communicationsApi.getAll({ limit: 10000, type: typeFilter, status: statusFilter });
+                const allData: Notification[] = Array.isArray(all?.data) ? all.data : [];
+                const csvColumns: CsvColumn<Notification>[] = [
+                  { header: 'Tenant', accessor: (r) => `${r.tenant?.user?.firstName || ''} ${r.tenant?.user?.lastName || ''}`.trim() },
+                  { header: 'Type', accessor: (r) => TYPE_LABEL_MAP[r.type] || r.type },
+                  { header: 'Channel', accessor: (r) => r.channel?.toUpperCase() || '' },
+                  { header: 'Subject', accessor: (r) => r.subject || '' },
+                  { header: 'Message', accessor: (r) => r.message || '' },
+                  { header: 'Sent At', accessor: (r) => r.sentAt ? dayjs(r.sentAt).format('DD MMM YYYY, HH:mm') : 'Pending' },
+                  { header: 'Status', accessor: (r) => r.status?.charAt(0).toUpperCase() + r.status?.slice(1) },
+                ];
+                downloadCsv(allData, csvColumns, 'communications.csv');
+              } finally {
+                setExporting(false);
+              }
             }}
+            loading={exporting}
             disabled={isLoading || notifications.length === 0}
           >
             Export CSV

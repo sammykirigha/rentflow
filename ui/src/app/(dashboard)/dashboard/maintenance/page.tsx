@@ -89,6 +89,7 @@ export default function MaintenancePage() {
 
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const [categoryFilter, setCategoryFilter] = useState<string | undefined>(undefined);
+  const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(1);
   const [selectedRequest, setSelectedRequest] = useState<MaintenanceRequest | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -278,19 +279,27 @@ export default function MaintenancePage() {
         <Space>
           <Button
             icon={<ExportOutlined />}
-            onClick={() => {
-              const csvColumns: CsvColumn<MaintenanceRequest>[] = [
-                { header: 'Property', accessor: (r) => getPropertyName(r) },
-                { header: 'Unit', accessor: (r) => r.tenant?.unit?.unitNumber || '' },
-                { header: 'Tenant', accessor: (r) => getTenantName(r) },
-                { header: 'Description', accessor: (r) => r.description },
-                { header: 'Category', accessor: (r) => CATEGORY_LABEL_MAP[r.category] || r.category },
-                { header: 'Priority', accessor: (r) => r.priority?.toUpperCase() || '' },
-                { header: 'Status', accessor: (r) => STATUS_LABEL_MAP[r.status] || r.status },
-                { header: 'Date', accessor: (r) => r.createdAt ? dayjs(r.createdAt).format('DD MMM YYYY') : '' },
-              ];
-              downloadCsv(requests, csvColumns, 'maintenance.csv');
+            onClick={async () => {
+              setExporting(true);
+              try {
+                const all = await maintenanceApi.getAll({ limit: 10000, status: statusFilter, category: categoryFilter });
+                const allData: MaintenanceRequest[] = Array.isArray(all?.data) ? all.data : [];
+                const csvColumns: CsvColumn<MaintenanceRequest>[] = [
+                  { header: 'Property', accessor: (r) => getPropertyName(r) },
+                  { header: 'Unit', accessor: (r) => r.tenant?.unit?.unitNumber || '' },
+                  { header: 'Tenant', accessor: (r) => getTenantName(r) },
+                  { header: 'Description', accessor: (r) => r.description },
+                  { header: 'Category', accessor: (r) => CATEGORY_LABEL_MAP[r.category] || r.category },
+                  { header: 'Priority', accessor: (r) => r.priority?.toUpperCase() || '' },
+                  { header: 'Status', accessor: (r) => STATUS_LABEL_MAP[r.status] || r.status },
+                  { header: 'Date', accessor: (r) => r.createdAt ? dayjs(r.createdAt).format('DD MMM YYYY') : '' },
+                ];
+                downloadCsv(allData, csvColumns, 'maintenance.csv');
+              } finally {
+                setExporting(false);
+              }
             }}
+            loading={exporting}
             disabled={isLoading || requests.length === 0}
           >
             Export CSV

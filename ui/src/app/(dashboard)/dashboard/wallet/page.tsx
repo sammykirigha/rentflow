@@ -43,6 +43,7 @@ export default function WalletLedgerPage() {
   const [filterTenantId, setFilterTenantId] = useState<string | undefined>(undefined);
   const [filterType, setFilterType] = useState<string | undefined>(undefined);
   const [filterDateRange, setFilterDateRange] = useState<[Dayjs, Dayjs] | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const [statementModalOpen, setStatementModalOpen] = useState(false);
   const [statementTenantId, setStatementTenantId] = useState<string | null>(null);
@@ -216,20 +217,28 @@ export default function WalletLedgerPage() {
         </Title>
         <Button
           icon={<ExportOutlined />}
-          onClick={() => {
-            const csvColumns: CsvColumn<LedgerTransaction>[] = [
-              { header: 'Date', accessor: (r) => r.createdAt ? dayjs(r.createdAt).format('DD MMM YYYY, HH:mm') : '' },
-              { header: 'Tenant', accessor: (r) => `${r.tenant?.user?.firstName || ''} ${r.tenant?.user?.lastName || ''}`.trim() },
-              { header: 'Unit', accessor: (r) => r.tenant?.unit?.unitNumber || '' },
-              { header: 'Property', accessor: (r) => r.tenant?.unit?.property?.name || '' },
-              { header: 'Type', accessor: (r) => WALLET_TXN_TYPE_LABEL[r.type] || r.type },
-              { header: 'Amount', accessor: (r) => Number(r.amount) },
-              { header: 'Balance After', accessor: (r) => Number(r.balanceAfter) },
-              { header: 'Reference', accessor: (r) => r.reference || '' },
-              { header: 'Description', accessor: (r) => r.description || '' },
-            ];
-            downloadCsv(transactions, csvColumns, 'wallet-ledger.csv');
+          onClick={async () => {
+            setExporting(true);
+            try {
+              const all = await walletApi.getLedger({ limit: 10000, tenantId: filterTenantId, type: filterType, startDate, endDate });
+              const allData: LedgerTransaction[] = Array.isArray(all?.data) ? all.data : [];
+              const csvColumns: CsvColumn<LedgerTransaction>[] = [
+                { header: 'Date', accessor: (r) => r.createdAt ? dayjs(r.createdAt).format('DD MMM YYYY, HH:mm') : '' },
+                { header: 'Tenant', accessor: (r) => `${r.tenant?.user?.firstName || ''} ${r.tenant?.user?.lastName || ''}`.trim() },
+                { header: 'Unit', accessor: (r) => r.tenant?.unit?.unitNumber || '' },
+                { header: 'Property', accessor: (r) => r.tenant?.unit?.property?.name || '' },
+                { header: 'Type', accessor: (r) => WALLET_TXN_TYPE_LABEL[r.type] || r.type },
+                { header: 'Amount', accessor: (r) => Number(r.amount) },
+                { header: 'Balance After', accessor: (r) => Number(r.balanceAfter) },
+                { header: 'Reference', accessor: (r) => r.reference || '' },
+                { header: 'Description', accessor: (r) => r.description || '' },
+              ];
+              downloadCsv(allData, csvColumns, 'wallet-ledger.csv');
+            } finally {
+              setExporting(false);
+            }
           }}
+          loading={exporting}
           disabled={isLoading || transactions.length === 0}
         >
           Export CSV

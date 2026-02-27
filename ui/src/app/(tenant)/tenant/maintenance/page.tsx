@@ -78,6 +78,7 @@ export default function TenantMaintenancePage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [exporting, setExporting] = useState(false);
   const [form] = Form.useForm();
 
   const { isAuthenticated, user } = useAuth();
@@ -219,17 +220,25 @@ export default function TenantMaintenancePage() {
         <Space>
           <Button
             icon={<ExportOutlined />}
-            onClick={() => {
-              const csvColumns: CsvColumn<MaintenanceRequest>[] = [
-                { header: 'Description', accessor: (r) => r.description },
-                { header: 'Category', accessor: (r) => CATEGORY_LABEL_MAP[r.category] || r.category },
-                { header: 'Priority', accessor: (r) => r.priority?.toUpperCase() || '' },
-                { header: 'Status', accessor: (r) => STATUS_LABEL_MAP[r.status] || r.status },
-                { header: 'Submitted', accessor: (r) => r.createdAt ? dayjs(r.createdAt).format('DD MMM YYYY') : '' },
-                { header: 'Resolved', accessor: (r) => r.resolvedAt ? dayjs(r.resolvedAt).format('DD MMM YYYY') : '' },
-              ];
-              downloadCsv(requests, csvColumns, 'my-maintenance.csv');
+            onClick={async () => {
+              setExporting(true);
+              try {
+                const all = await maintenanceApi.getMy({ limit: 10000 });
+                const allData: MaintenanceRequest[] = Array.isArray(all?.data) ? all.data : [];
+                const csvColumns: CsvColumn<MaintenanceRequest>[] = [
+                  { header: 'Description', accessor: (r) => r.description },
+                  { header: 'Category', accessor: (r) => CATEGORY_LABEL_MAP[r.category] || r.category },
+                  { header: 'Priority', accessor: (r) => r.priority?.toUpperCase() || '' },
+                  { header: 'Status', accessor: (r) => STATUS_LABEL_MAP[r.status] || r.status },
+                  { header: 'Submitted', accessor: (r) => r.createdAt ? dayjs(r.createdAt).format('DD MMM YYYY') : '' },
+                  { header: 'Resolved', accessor: (r) => r.resolvedAt ? dayjs(r.resolvedAt).format('DD MMM YYYY') : '' },
+                ];
+                downloadCsv(allData, csvColumns, 'my-maintenance.csv');
+              } finally {
+                setExporting(false);
+              }
             }}
+            loading={exporting}
             disabled={isLoading || requests.length === 0}
           >
             Export CSV
