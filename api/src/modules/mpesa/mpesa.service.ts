@@ -1,12 +1,12 @@
 import { AuditAction } from '@/common/enums/audit-action.enum';
 import { AuditTargetType } from '@/common/enums/audit-target-type.enum';
+import { AuditService } from '@/modules/audit/audit.service';
+import { WalletSettlementService } from '@/modules/invoices/wallet-settlement.service';
+import { Payment, PaymentMethod, PaymentStatus } from '@/modules/payments/entities/payment.entity';
+import { PaymentsRepository } from '@/modules/payments/payments.repository';
 import { Tenant, TenantStatus } from '@/modules/tenants/entities/tenant.entity';
 import { Unit } from '@/modules/units/entities/unit.entity';
-import { Payment, PaymentMethod, PaymentStatus } from '@/modules/payments/entities/payment.entity';
-import { WalletSettlementService } from '@/modules/invoices/wallet-settlement.service';
 import { WalletService } from '@/modules/wallet/wallet.service';
-import { AuditService } from '@/modules/audit/audit.service';
-import { PaymentsRepository } from '@/modules/payments/payments.repository';
 import {
 	forwardRef,
 	Inject,
@@ -101,7 +101,7 @@ export class MpesaService implements OnModuleInit {
 				} else {
 					this.logger.error(
 						`C2B URL registration failed after ${maxAttempts} attempts: ${detail}. ` +
-						`Use POST /api/v1/payments/mobile/register-c2b to retry manually.`,
+						`Use POST /api/v2/payments/mobile/register-c2b to retry manually.`,
 					);
 				}
 			}
@@ -118,7 +118,7 @@ export class MpesaService implements OnModuleInit {
 		const auth = Buffer.from(`${this.consumerKey}:${this.consumerSecret}`).toString('base64');
 
 		const { data } = await axios.get<DarajaOAuthResponse>(
-			`${this.baseUrl}/oauth/v1/generate?grant_type=client_credentials`,
+			`${this.baseUrl}/oauth/v2/generate?grant_type=client_credentials`,
 			{
 				headers: { Authorization: `Basic ${auth}` },
 				timeout: 15_000,
@@ -139,7 +139,7 @@ export class MpesaService implements OnModuleInit {
 
 		try {
 			await axios.post(
-				`${this.baseUrl}/mpesa/c2b/v1/registerurl`,
+				`${this.baseUrl}/mpesa/c2b/v2/registerurl`,
 				{
 					ShortCode: this.shortcode,
 					ResponseType: 'Completed',
@@ -209,7 +209,7 @@ export class MpesaService implements OnModuleInit {
 			let data: StkPushResponse;
 			try {
 				const response = await axios.post<StkPushResponse>(
-					`${this.baseUrl}/mpesa/stkpush/v1/processrequest`,
+					`${this.baseUrl}/mpesa/stkpush/v2/processrequest`,
 					{
 						BusinessShortCode: this.shortcode,
 						Password: password,

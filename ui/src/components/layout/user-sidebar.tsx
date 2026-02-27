@@ -15,6 +15,8 @@ import {
   SettingOutlined,
   UserOutlined,
   LogoutOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
 } from "@ant-design/icons";
 import { Layout, Menu, Avatar, Button, Typography } from "antd";
 import Link from "next/link";
@@ -101,6 +103,7 @@ export default function UserSidebar() {
       collapsible
       collapsed={collapsed}
       onCollapse={setCollapsed}
+      trigger={null}
       breakpoint="lg"
       style={{
         height: '100vh',
@@ -117,18 +120,36 @@ export default function UserSidebar() {
         flexDirection: 'column',
         height: '100%',
       }}>
-        {/* Logo */}
+        {/* Logo + collapse toggle */}
         <div style={{
           height: 64,
           minHeight: 64,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          padding: collapsed ? '0 8px' : '0 16px',
+          gap: collapsed ? 0 : 8,
           borderBottom: '1px solid rgba(255,255,255,0.1)',
         }}>
-          <Text strong style={{ color: '#fff', fontSize: collapsed ? 14 : 20 }}>
-            {collapsed ? 'RF' : 'RentFlow'}
-          </Text>
+          {!collapsed && (
+            <Text strong style={{ color: '#fff', fontSize: 20, flex: 1 }}>
+              RentFlow
+            </Text>
+          )}
+          <Button
+            type="text"
+            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            onClick={() => setCollapsed(!collapsed)}
+            style={{
+              color: 'rgba(255,255,255,0.65)',
+              fontSize: 16,
+              width: 32,
+              height: 32,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          />
         </div>
 
         {/* Scrollable menu */}
@@ -142,34 +163,40 @@ export default function UserSidebar() {
           />
         </div>
 
-        {/* User info + logout — pinned to bottom */}
+        {/* User info + logout — compact bottom bar */}
         <div style={{
-          padding: '12px 16px',
+          padding: collapsed ? '8px 4px' : '8px 12px',
           borderTop: '1px solid rgba(255,255,255,0.1)',
           flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <Avatar size="small" icon={<UserOutlined />} />
-            {!collapsed && (
-              <div style={{ overflow: 'hidden' }}>
-                <Text ellipsis style={{ color: '#fff', fontSize: 13, display: 'block' }}>
+          <Avatar
+            size="small"
+            icon={<UserOutlined />}
+            style={{ flexShrink: 0, cursor: 'pointer' }}
+            onClick={() => collapsed && setCollapsed(false)}
+          />
+          {!collapsed && (
+            <>
+              <div style={{ overflow: 'hidden', flex: 1, minWidth: 0 }}>
+                <Text ellipsis style={{ color: '#fff', fontSize: 12, display: 'block', lineHeight: '18px' }}>
                   {user?.firstName} {user?.lastName}
                 </Text>
-                <Text ellipsis style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, display: 'block' }}>
+                <Text ellipsis style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11, display: 'block', lineHeight: '14px' }}>
                   {user?.email}
                 </Text>
               </div>
-            )}
-          </div>
-          <Button
-            type="text"
-            icon={<LogoutOutlined />}
-            onClick={handleLogout}
-            block
-            style={{ color: 'rgba(255,255,255,0.65)', textAlign: 'left' }}
-          >
-            {!collapsed && 'Logout'}
-          </Button>
+              <Button
+                type="text"
+                icon={<LogoutOutlined />}
+                onClick={handleLogout}
+                size="small"
+                style={{ color: 'rgba(255,255,255,0.65)', flexShrink: 0 }}
+              />
+            </>
+          )}
         </div>
       </div>
     </Sider>
