@@ -48,8 +48,12 @@ function AuthContextProvider({ children }: { children: React.ReactNode; }) {
 				const userData = await userApi.getCurrentUser();
 				if (userData.userId) setUser(userData);
 				else logout(false);
-			} catch {
-				logout(false);
+			} catch (error: unknown) {
+				// Only logout on 401 (invalid/expired token), not on transient errors
+				const status = (error as { response?: { status?: number } })?.response?.status;
+				if (status === 401 || status === 403) {
+					logout(false);
+				}
 			} finally {
 				setUserLoading(false);
 			}

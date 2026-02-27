@@ -10,6 +10,22 @@ const api = axios.create({
   },
 });
 
+// Add request interceptor to include auth token
+api.interceptors.request.use(
+  (config) => {
+    if (typeof window === 'undefined') return config;
+
+    const token = sessionStorage.getItem('access_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 // Add response interceptor to unwrap the API's TransformInterceptor wrapper
 // API responses come as { success, data, statusCode, timestamp }
 // This extracts the inner `data` so callers get the actual payload directly
@@ -21,21 +37,19 @@ api.interceptors.response.use(
     }
     return response;
   },
-);
-
-// Add request interceptor to include auth token
-api.interceptors.request.use(
-  (config) => {
-    if (typeof window === 'undefined') return config;
-    
-    // Get token from session storage or wherever you store it
-    const token = sessionStorage.getItem('access_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
   (error) => {
+    if (typeof window === 'undefined') return Promise.reject(error);
+
+    if (error.response?.status === 401) {
+      const token = sessionStorage.getItem('access_token');
+      if (token) {
+        // Token exists but server rejected it (expired or invalid) — clear it
+        sessionStorage.removeItem('access_token');
+        window.location.href = '/login';
+      }
+      // If no token, the request was made during logout — suppress the error
+    }
+
     return Promise.reject(error);
   }
 );
