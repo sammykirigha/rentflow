@@ -215,7 +215,7 @@ export class MpesaService implements OnModuleInit {
 			let data: StkPushResponse;
 			try {
 				const response = await axios.post<StkPushResponse>(
-					`${this.baseUrl}/mpesa/stkpush/v2/processrequest`,
+					`${this.baseUrl}/mpesa/stkpush/v1/processrequest`,
 					{
 						BusinessShortCode: this.shortcode,
 						Password: password,
