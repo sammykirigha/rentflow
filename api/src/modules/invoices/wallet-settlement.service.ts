@@ -122,11 +122,13 @@ export class WalletSettlementService implements OnModuleInit {
 				)
 				.where('tenant.wallet_balance > 0')
 				.andWhere('tenant.status = :activeStatus', { activeStatus: TenantStatus.ACTIVE })
-				.select(['tenant.tenant_id'])
+				.select('tenant.tenant_id', 'tenantId')
 				.distinct(true)
 				.getRawMany();
 
-			const tenantIds: string[] = eligibleTenants.map((t) => t.tenant_tenant_id);
+			const tenantIds: string[] = eligibleTenants.map((t) => t.tenantId);
+
+			this.logger.log(`Eligible tenants query result: ${JSON.stringify(eligibleTenants)}`);
 
 			if (tenantIds.length === 0) {
 				this.logger.log('No eligible tenants found for wallet settlement');
