@@ -10,7 +10,7 @@ import { DataSource, In } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
 import { SettingsService } from '../settings/settings.service';
 import { InvoicesService } from './invoices.service';
-import { Invoice, InvoiceStatus, InvoiceType } from './entities/invoice.entity';
+import { Invoice, InvoiceStatus } from './entities/invoice.entity';
 import { SettlementCoreService } from './settlement-core.service';
 
 export interface SettlementSummary {
@@ -199,11 +199,11 @@ export class WalletSettlementService implements OnModuleInit {
 				return { settled: 0, partial: 0 };
 			}
 
-			// Get unsettled rent invoices ordered by billing month ASC (oldest first)
+			// Get ALL unsettled invoices ordered by billing month ASC (oldest first)
+			// Wallet balance should settle any invoice type (rent, security deposit, service fee, etc.)
 			const unsettledInvoices = await queryRunner.manager.find(Invoice, {
 				where: {
 					tenantId,
-					invoiceType: InvoiceType.RENT,
 					status: In([InvoiceStatus.UNPAID, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.OVERDUE]),
 				},
 				order: { billingMonth: 'ASC' },
