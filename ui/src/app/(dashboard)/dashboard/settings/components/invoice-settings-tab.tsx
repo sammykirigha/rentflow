@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useSettings, useUpdateSettings } from '@/hooks/useSettings';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
-import { App, Button, Card, Input, InputNumber, Space, Spin, Switch, Table } from 'antd';
+import { App, Button, Card, Input, InputNumber, Select, Space, Spin, Switch, Table } from 'antd';
 import type { RecurringCharge } from '@/types/settings';
 import { formatKES } from '@/lib/format-kes';
 
@@ -13,11 +13,13 @@ export default function InvoiceSettingsTab() {
   const { message: messageApi } = App.useApp();
 
   const [charges, setCharges] = useState<RecurringCharge[]>([]);
+  const [settlementInterval, setSettlementInterval] = useState<number>(120);
   const [initialized, setInitialized] = useState(false);
 
-  // Initialize charges from settings on first load
+  // Initialize from settings on first load
   if (settings && !initialized) {
     setCharges(settings.recurringCharges || []);
+    setSettlementInterval(settings.walletSettlementIntervalMinutes ?? 120);
     setInitialized(true);
   }
 
@@ -126,8 +128,54 @@ export default function InvoiceSettingsTab() {
     },
   ];
 
+  const settlementIntervalOptions = [
+    { value: 5, label: 'Every 5 minutes' },
+    { value: 10, label: 'Every 10 minutes' },
+    { value: 15, label: 'Every 15 minutes' },
+    { value: 30, label: 'Every 30 minutes' },
+    { value: 60, label: 'Every 1 hour' },
+    { value: 120, label: 'Every 2 hours' },
+    { value: 180, label: 'Every 3 hours' },
+    { value: 240, label: 'Every 4 hours' },
+    { value: 360, label: 'Every 6 hours' },
+    { value: 480, label: 'Every 8 hours' },
+    { value: 720, label: 'Every 12 hours' },
+    { value: 1440, label: 'Every 24 hours' },
+  ];
+
+  const handleSaveSettlementInterval = async (value: number) => {
+    setSettlementInterval(value);
+    try {
+      await updateSettings.mutateAsync({ walletSettlementIntervalMinutes: value });
+      messageApi.success('Auto-settlement schedule updated');
+    } catch {
+      messageApi.error('Failed to update auto-settlement schedule');
+      setSettlementInterval(settings?.walletSettlementIntervalMinutes ?? 120);
+    }
+  };
+
   return (
     <div style={{ maxWidth: 700 }}>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontWeight: 600, fontSize: 16 }}>Auto-Settlement Schedule</div>
+        <div style={{ color: '#666', fontSize: 13 }}>
+          How often the system checks for tenants with wallet balances and unsettled invoices, then automatically applies payments.
+        </div>
+      </div>
+
+      <Card style={{ marginBottom: 32 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <span style={{ fontWeight: 500 }}>Run auto-settlement:</span>
+          <Select
+            value={settlementInterval}
+            onChange={handleSaveSettlementInterval}
+            options={settlementIntervalOptions}
+            style={{ width: 200 }}
+            loading={updateSettings.isPending}
+          />
+        </div>
+      </Card>
+
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontWeight: 600, fontSize: 16 }}>Recurring Charges</div>
         <div style={{ color: '#666', fontSize: 13 }}>

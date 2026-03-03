@@ -180,6 +180,11 @@ export class ReminderService {
 		isOverdue: boolean,
 		systemUserId?: string,
 	): Promise<void> {
+		if (!invoice.tenantId) {
+			this.logger.log(`Skipping reminder for non-tenant invoice ${invoice.invoiceNumber}`);
+			return;
+		}
+
 		// Load tenant with user if not already loaded
 		let tenant = invoice.tenant;
 		if (!tenant?.user) {

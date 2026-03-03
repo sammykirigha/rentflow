@@ -68,6 +68,9 @@ importers:
       class-validator:
         specifier: ^0.14.0
         version: 0.14.2
+      cron:
+        specifier: ^4.3.3
+        version: 4.3.3
       dotenv:
         specifier: ^16.3.1
         version: 16.6.1

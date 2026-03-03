@@ -17,11 +17,20 @@ export enum InvoiceStatus {
 	CANCELLED = 'cancelled',
 }
 
+export enum InvoiceType {
+	RENT = 'rent',
+	SECURITY_DEPOSIT = 'security_deposit',
+	SERVICE_FEE = 'service_fee',
+	MAINTENANCE = 'maintenance',
+	OTHER = 'other',
+}
+
 @Entity('invoices')
 @Index(['tenantId'])
 @Index(['billingMonth'])
 @Index(['status'])
 @Index(['dueDate'])
+@Index(['invoiceType'])
 export class Invoice extends AbstractEntity<Invoice> {
 	@PrimaryGeneratedColumn('uuid', { name: 'invoice_id' })
 	invoiceId: string;
@@ -29,8 +38,14 @@ export class Invoice extends AbstractEntity<Invoice> {
 	@Column({ name: 'invoice_number', unique: true })
 	invoiceNumber: string;
 
-	@Column({ name: 'tenant_id', type: 'uuid' })
-	tenantId: string;
+	@Column({ name: 'invoice_type', type: 'enum', enum: InvoiceType, default: InvoiceType.RENT })
+	invoiceType: InvoiceType;
+
+	@Column({ name: 'tenant_id', type: 'uuid', nullable: true })
+	tenantId: string | null;
+
+	@Column({ name: 'recipient_name', nullable: true })
+	recipientName?: string;
 
 	@Column({ name: 'billing_month', type: 'timestamp' })
 	billingMonth: Date;
@@ -81,7 +96,7 @@ export class Invoice extends AbstractEntity<Invoice> {
 	notes?: string;
 
 	// Relations
-	@ManyToOne(() => Tenant, { eager: false })
+	@ManyToOne(() => Tenant, { eager: false, nullable: true })
 	@JoinColumn({ name: 'tenant_id' })
-	tenant: Tenant;
+	tenant: Tenant | null;
 }

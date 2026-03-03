@@ -1,12 +1,11 @@
 import { AuditAction } from '@/common/enums/audit-action.enum';
 import { AuditTargetType } from '@/common/enums/audit-target-type.enum';
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
 import { SmsService } from '../sms/sms.service';
 import { MailService } from '../mail/mail.service';
-import { WalletService } from '../wallet/wallet.service';
 import { PdfService } from '../pdf/pdf.service';
 import { SettingsService } from '../settings/settings.service';
 import { Tenant, DepositStatus } from '@/modules/tenants/entities/tenant.entity';
@@ -15,8 +14,9 @@ import { Notification, NotificationChannel, NotificationStatus, NotificationType
 import { InvoicePdfData } from '../pdf/interfaces/pdf-data.interface';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
-import { Invoice, InvoiceStatus } from './entities/invoice.entity';
+import { Invoice, InvoiceStatus, InvoiceType } from './entities/invoice.entity';
 import { InvoicesRepository } from './invoices.repository';
+import { SettlementCoreService } from './settlement-core.service';
 
 @Injectable()
 export class InvoicesService {
@@ -27,10 +27,10 @@ export class InvoicesService {
 		private readonly auditService: AuditService,
 		private readonly smsService: SmsService,
 		private readonly mailService: MailService,
-		private readonly walletService: WalletService,
 		private readonly pdfService: PdfService,
-		private readonly settingsService: SettingsService,
+		@Inject(forwardRef(() => SettingsService)) private readonly settingsService: SettingsService,
 		private readonly dataSource: DataSource,
+		private readonly settlementCoreService: SettlementCoreService,
 		@InjectRepository(Tenant)
 		private readonly tenantRepository: Repository<Tenant>,
 		@InjectRepository(Receipt)
@@ -40,10 +40,11 @@ export class InvoicesService {
 	) {}
 
 	async create(dto: CreateInvoiceDto, userId: string): Promise<Invoice> {
+		const isRent = dto.invoiceType === InvoiceType.RENT;
 		const rentAmount = dto.rentAmount;
-		const waterCharge = dto.waterCharge ?? 0;
-		const electricityCharge = dto.electricityCharge ?? 0;
-		const otherCharges = dto.otherCharges ?? 0;
+		const waterCharge = isRent ? (dto.waterCharge ?? 0) : 0;
+		const electricityCharge = isRent ? (dto.electricityCharge ?? 0) : 0;
+		const otherCharges = isRent ? (dto.otherCharges ?? 0) : 0;
 
 		const subtotal = rentAmount + waterCharge + electricityCharge + otherCharges;
 		const penaltyAmount = 0;
@@ -73,7 +74,9 @@ export class InvoicesService {
 			invoice = await queryRunner.manager.save(
 				queryRunner.manager.create(Invoice, {
 					invoiceNumber,
-					tenantId: dto.tenantId,
+					invoiceType: dto.invoiceType,
+					tenantId: dto.tenantId || null,
+					recipientName: dto.recipientName || undefined,
 					billingMonth: billingDate,
 					rentAmount,
 					waterCharge,
@@ -100,61 +103,68 @@ export class InvoicesService {
 			await queryRunner.release();
 		}
 
+		const recipientLabel = dto.tenantId ? `tenant ${dto.tenantId}` : (dto.recipientName || 'unknown');
 		await this.auditService.createLog({
 			action: AuditAction.INVOICE_GENERATED,
 			performedBy: userId,
 			targetType: AuditTargetType.INVOICE,
 			targetId: invoice.invoiceId,
-			details: `Generated invoice ${invoiceNumber} for tenant ${dto.tenantId}, total: ${totalAmount}`,
+			details: `Generated ${dto.invoiceType} invoice ${invoiceNumber} for ${recipientLabel}, total: ${totalAmount}`,
 			metadata: {
 				invoiceId: invoice.invoiceId,
 				invoiceNumber,
-				tenantId: dto.tenantId,
+				invoiceType: dto.invoiceType,
+				tenantId: dto.tenantId || null,
+				recipientName: dto.recipientName || null,
 				totalAmount,
 			},
 		});
 
-		// Attempt wallet auto-settlement
-		await this.attemptWalletSettlement(invoice, invoiceNumber, dto.tenantId, totalAmount, userId);
+		// Only attempt wallet settlement and send notifications for tenant-linked invoices
+		if (dto.tenantId) {
+			await this.attemptWalletSettlement(invoice, invoiceNumber, dto.tenantId, totalAmount, userId);
 
-		// Re-fetch with tenant relation to get updated state
-		const updatedInvoice = await this.invoicesRepository.findOne({
-			where: { invoiceId: invoice.invoiceId },
-			relations: { tenant: true },
-		});
-
-		// Send notifications based on settlement result (fire-and-forget)
-		if (updatedInvoice.status === InvoiceStatus.PAID) {
-			// Fully auto-settled: send receipt only (no invoice)
-			const receipt = await this.receiptRepository.findOne({
-				where: { invoiceId: updatedInvoice.invoiceId },
+			// Re-fetch with tenant relation to get updated state
+			const updatedInvoice = await this.invoicesRepository.findOne({
+				where: { invoiceId: invoice.invoiceId },
+				relations: { tenant: true },
 			});
-			if (receipt) {
-				this.sendReceiptNotification(receipt.receiptId).catch((err) =>
-					this.logger.error(`Failed to send receipt notification: ${err.message}`),
+
+			// Send notifications based on settlement result (fire-and-forget)
+			if (updatedInvoice.status === InvoiceStatus.PAID) {
+				const receipt = await this.receiptRepository.findOne({
+					where: { invoiceId: updatedInvoice.invoiceId },
+				});
+				if (receipt) {
+					this.sendReceiptNotification(receipt.receiptId).catch((err) =>
+						this.logger.error(`Failed to send receipt notification: ${err.message}`),
+					);
+				}
+			} else if (updatedInvoice.status === InvoiceStatus.PARTIALLY_PAID) {
+				this.sendInvoiceNotification(updatedInvoice).catch((err) =>
+					this.logger.error(`Failed to send invoice notification: ${err.message}`),
+				);
+				const receipt = await this.receiptRepository.findOne({
+					where: { invoiceId: updatedInvoice.invoiceId },
+				});
+				if (receipt) {
+					this.sendReceiptNotification(receipt.receiptId).catch((err) =>
+						this.logger.error(`Failed to send receipt notification: ${err.message}`),
+					);
+				}
+			} else {
+				this.sendInvoiceNotification(updatedInvoice).catch((err) =>
+					this.logger.error(`Failed to send invoice notification: ${err.message}`),
 				);
 			}
-		} else if (updatedInvoice.status === InvoiceStatus.PARTIALLY_PAID) {
-			// Partial settlement: send invoice (remaining balance) + receipt (partial payment)
-			this.sendInvoiceNotification(updatedInvoice).catch((err) =>
-				this.logger.error(`Failed to send invoice notification: ${err.message}`),
-			);
-			const receipt = await this.receiptRepository.findOne({
-				where: { invoiceId: updatedInvoice.invoiceId },
-			});
-			if (receipt) {
-				this.sendReceiptNotification(receipt.receiptId).catch((err) =>
-					this.logger.error(`Failed to send receipt notification: ${err.message}`),
-				);
-			}
-		} else {
-			// Unpaid: send invoice only
-			this.sendInvoiceNotification(updatedInvoice).catch((err) =>
-				this.logger.error(`Failed to send invoice notification: ${err.message}`),
-			);
+
+			return updatedInvoice;
 		}
 
-		return updatedInvoice;
+		// Non-tenant invoice: just re-fetch and return
+		return this.invoicesRepository.findOne({
+			where: { invoiceId: invoice.invoiceId },
+		});
 	}
 
 	/**
@@ -176,6 +186,11 @@ export class InvoicesService {
 		const unit = tenant?.unit;
 		const property = unit?.property;
 
+		// For non-rent invoices without a tenant, use recipientName
+		const resolvedName = user
+			? `${user.firstName || ''} ${user.lastName || ''}`.trim()
+			: (invoice.recipientName || 'Recipient');
+
 		const pdfData: InvoicePdfData = {
 			companyName: settings.platformName || 'RentFlow',
 			companyEmail: settings.supportEmail || 'support@rentflow.co.ke',
@@ -188,7 +203,7 @@ export class InvoicesService {
 			dueDate: new Date(invoice.dueDate).toLocaleDateString('en-KE'),
 			status: invoice.status,
 
-			tenantName: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Tenant',
+			tenantName: resolvedName,
 			tenantPhone: user?.phone || '',
 			tenantEmail: user?.email || '',
 			unitNumber: unit?.unitNumber || '',
@@ -217,6 +232,7 @@ export class InvoicesService {
 
 	/**
 	 * Attempt to auto-settle an invoice from the tenant's wallet balance.
+	 * Uses pessimistic locking and a single atomic transaction for wallet debit + invoice update.
 	 */
 	private async attemptWalletSettlement(
 		invoice: Invoice,
@@ -225,147 +241,60 @@ export class InvoicesService {
 		totalAmount: number,
 		userId: string,
 	): Promise<void> {
-		const tenant = await this.tenantRepository.findOne({
-			where: { tenantId },
-			relations: { unit: true },
-		});
+		const queryRunner = this.dataSource.createQueryRunner();
+		await queryRunner.connect();
+		await queryRunner.startTransaction();
 
-		if (!tenant) return;
+		try {
+			// Lock tenant row with pessimistic_write to prevent race conditions
+			const tenant = await queryRunner.manager
+				.createQueryBuilder(Tenant, 'tenant')
+				.setLock('pessimistic_write')
+				.where('tenant.tenantId = :tenantId', { tenantId })
+				.getOne();
 
-		const walletBalance = Number(tenant.walletBalance);
-		if (walletBalance <= 0) return;
+			if (!tenant || Number(tenant.walletBalance) <= 0) {
+				await queryRunner.rollbackTransaction();
+				return;
+			}
 
-		if (walletBalance >= totalAmount) {
-			// Full settlement — wallet debit is its own transaction
-			await this.walletService.debitForInvoice(
-				tenantId,
-				totalAmount,
-				invoiceNumber,
-				`Auto-deduction for invoice ${invoiceNumber}`,
+			const result = await this.settlementCoreService.settleInvoicesFromWallet(
+				queryRunner,
+				tenant,
+				[invoice],
 				userId,
 			);
 
-			// Invoice update + receipt creation in a transaction
-			const queryRunner = this.dataSource.createQueryRunner();
-			await queryRunner.connect();
-			await queryRunner.startTransaction();
-
-			try {
-				await queryRunner.manager.update(Invoice, { invoiceId: invoice.invoiceId }, {
-					amountPaid: totalAmount,
-					balanceDue: 0,
-					status: InvoiceStatus.PAID,
-					paidAt: new Date(),
-				} as any);
-
-				const receiptNumber = invoiceNumber.replace(/^INV-/, 'RCP-');
-
-				await queryRunner.manager.save(
-					queryRunner.manager.create(Receipt, {
-						receiptNumber,
-						invoiceId: invoice.invoiceId,
-						totalPaid: totalAmount,
-					}),
-				);
-
-				// Update deposit status to COLLECTED if this invoice contains a security deposit
-				if (invoice.otherChargesDesc?.includes('Security Deposit')) {
-					const currentTenant = await queryRunner.manager.findOne(Tenant, { where: { tenantId } });
-					if (currentTenant && currentTenant.depositStatus === DepositStatus.PENDING) {
-						await queryRunner.manager.update(Tenant, tenantId, {
-							depositStatus: DepositStatus.COLLECTED,
-						});
-					}
-				}
-
-				await queryRunner.commitTransaction();
-			} catch (err) {
+			if (result.invoiceResults.length === 0 || result.invoiceResults[0].type === 'skipped') {
 				await queryRunner.rollbackTransaction();
-				this.logger.error(`Failed to settle invoice ${invoiceNumber}: ${err.message}`);
-				throw err;
-			} finally {
-				await queryRunner.release();
+				return;
 			}
 
-			this.logger.log(
-				`Auto-settled invoice ${invoiceNumber} for tenant ${tenantId}. ` +
-				`Deducted KES ${totalAmount} from wallet.`,
-			);
-
-			await this.auditService.createLog({
-				action: AuditAction.INVOICE_AUTO_SETTLED,
-				performedBy: userId,
-				targetType: AuditTargetType.INVOICE,
-				targetId: invoice.invoiceId,
-				details: `Auto-settled invoice ${invoiceNumber}. Full payment of KES ${totalAmount} from wallet`,
-				metadata: {
-					invoiceId: invoice.invoiceId,
-					invoiceNumber,
-					tenantId,
-					totalAmount,
-				},
+			// Update tenant wallet balance atomically
+			await queryRunner.manager.update(Tenant, tenantId, {
+				walletBalance: result.walletBalanceAfter,
 			});
-		} else {
-			// Partial settlement — wallet debit is its own transaction
-			const remaining = parseFloat((totalAmount - walletBalance).toFixed(2));
 
-			await this.walletService.debitForInvoice(
-				tenantId,
-				walletBalance,
-				invoiceNumber,
-				`Partial auto-deduction for invoice ${invoiceNumber}`,
-				userId,
-			);
+			await queryRunner.commitTransaction();
 
-			const queryRunner = this.dataSource.createQueryRunner();
-			await queryRunner.connect();
-			await queryRunner.startTransaction();
-
-			try {
-				await queryRunner.manager.update(Invoice, { invoiceId: invoice.invoiceId }, {
-					amountPaid: walletBalance,
-					balanceDue: remaining,
-					status: InvoiceStatus.PARTIALLY_PAID,
-				} as any);
-
-				// Generate receipt for partial payment
-				const receiptNumber = invoiceNumber.replace(/^INV-/, 'RCP-');
-				await queryRunner.manager.save(
-					queryRunner.manager.create(Receipt, {
-						receiptNumber,
-						invoiceId: invoice.invoiceId,
-						totalPaid: walletBalance,
-					}),
+			// Write audit logs after commit (fire-and-forget)
+			for (const log of result.pendingAuditLogs) {
+				this.auditService.createLog(log).catch((err) =>
+					this.logger.error(`Failed to write audit log: ${err.message}`),
 				);
-
-				await queryRunner.commitTransaction();
-			} catch (err) {
-				await queryRunner.rollbackTransaction();
-				this.logger.error(`Failed to partially settle invoice ${invoiceNumber}: ${err.message}`);
-				throw err;
-			} finally {
-				await queryRunner.release();
 			}
 
+			const invoiceResult = result.invoiceResults[0];
 			this.logger.log(
-				`Partial settlement for ${invoiceNumber}. ` +
-				`Deducted KES ${walletBalance} from wallet. Remaining: KES ${remaining}`,
+				`${invoiceResult.type === 'full' ? 'Auto-settled' : 'Partial settlement for'} invoice ${invoiceNumber} ` +
+				`for tenant ${tenantId}. Deducted KES ${invoiceResult.amountDeducted} from wallet.`,
 			);
-
-			await this.auditService.createLog({
-				action: AuditAction.INVOICE_PARTIALLY_SETTLED,
-				performedBy: userId,
-				targetType: AuditTargetType.INVOICE,
-				targetId: invoice.invoiceId,
-				details: `Partial settlement for invoice ${invoiceNumber}. Paid KES ${walletBalance} from wallet, remaining: KES ${remaining}`,
-				metadata: {
-					invoiceId: invoice.invoiceId,
-					invoiceNumber,
-					tenantId,
-					amountPaid: walletBalance,
-					balanceDue: remaining,
-				},
-			});
+		} catch (err) {
+			await queryRunner.rollbackTransaction();
+			this.logger.error(`Failed to settle invoice ${invoiceNumber}: ${err.message}`);
+			throw err;
+		} finally {
+			await queryRunner.release();
 		}
 	}
 
@@ -374,6 +303,12 @@ export class InvoicesService {
 	 * Creates Notification records in the database.
 	 */
 	async sendInvoiceNotification(invoice: Invoice): Promise<void> {
+		// Skip notifications for invoices without a tenant
+		if (!invoice.tenantId) {
+			this.logger.log(`Skipping notification for non-tenant invoice ${invoice.invoiceNumber}`);
+			return;
+		}
+
 		// Load tenant with user if not already loaded
 		let tenant = invoice.tenant;
 		if (!tenant?.user) {
@@ -776,7 +711,7 @@ export class InvoicesService {
 			} as any);
 
 			// Update deposit status to COLLECTED if this invoice contains a security deposit
-			if (newStatus === InvoiceStatus.PAID && invoice.otherChargesDesc?.includes('Security Deposit')) {
+			if (newStatus === InvoiceStatus.PAID && invoice.tenantId && invoice.otherChargesDesc?.includes('Security Deposit')) {
 				const tenant = await queryRunner.manager.findOne(Tenant, { where: { tenantId: invoice.tenantId } });
 				if (tenant && tenant.depositStatus === DepositStatus.PENDING) {
 					await queryRunner.manager.update(Tenant, invoice.tenantId, {
@@ -801,6 +736,8 @@ export class InvoicesService {
 
 		const updateData: Partial<Invoice> = {};
 
+		if (dto.invoiceType !== undefined) updateData.invoiceType = dto.invoiceType;
+		if (dto.recipientName !== undefined) updateData.recipientName = dto.recipientName;
 		if (dto.rentAmount !== undefined) updateData.rentAmount = dto.rentAmount;
 		if (dto.waterCharge !== undefined) updateData.waterCharge = dto.waterCharge;
 		if (dto.electricityCharge !== undefined) updateData.electricityCharge = dto.electricityCharge;

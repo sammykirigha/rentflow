@@ -93,4 +93,12 @@ export class UpdateSystemSettingsDto {
   @ValidateNested({ each: true })
   @Type(() => RecurringChargeDto)
   recurringCharges?: RecurringChargeDto[];
+
+  @ApiPropertyOptional({ description: 'Wallet auto-settlement interval in minutes', minimum: 1, maximum: 1440 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1440)
+  @Type(() => Number)
+  walletSettlementIntervalMinutes?: number;
 }

@@ -1,19 +1,17 @@
 import { AuditAction } from '@/common/enums/audit-action.enum';
 import { AuditTargetType } from '@/common/enums/audit-target-type.enum';
-import { UserRole } from '@/common/enums/user-role.enum';
-import { Payment, PaymentMethod, PaymentStatus } from '@/modules/payments/entities/payment.entity';
-import { Tenant, TenantStatus, DepositStatus } from '@/modules/tenants/entities/tenant.entity';
+import { Tenant, TenantStatus } from '@/modules/tenants/entities/tenant.entity';
 import { Receipt } from '@/modules/receipts/entities/receipt.entity';
-import { User } from '@/modules/users/entities/user.entity';
-import { Role } from '@/modules/permissions/entities/role.entity';
-import { WalletTransaction, WalletTxnType } from '@/modules/wallet/entities/wallet-transaction.entity';
-import { Notification, NotificationChannel, NotificationStatus, NotificationType } from '@/modules/notifications/entities/notification.entity';
-import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
+import { Notification, NotificationType } from '@/modules/notifications/entities/notification.entity';
+import { Inject, Injectable, Logger, OnModuleInit, forwardRef } from '@nestjs/common';
+import { SchedulerRegistry } from '@nestjs/schedule';
+import { CronJob } from 'cron';
 import { DataSource, In } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
+import { SettingsService } from '../settings/settings.service';
 import { InvoicesService } from './invoices.service';
-import { Invoice, InvoiceStatus } from './entities/invoice.entity';
+import { Invoice, InvoiceStatus, InvoiceType } from './entities/invoice.entity';
+import { SettlementCoreService } from './settlement-core.service';
 
 export interface SettlementSummary {
 	tenantsProcessed: number;
@@ -22,21 +20,72 @@ export interface SettlementSummary {
 }
 
 @Injectable()
-export class WalletSettlementService {
+export class WalletSettlementService implements OnModuleInit {
 	private readonly logger = new Logger(WalletSettlementService.name);
+	// Single-process guard. If scaling to multiple processes, replace with
+	// a Redis-based distributed lock or database advisory lock.
 	private isRunning = false;
+	private static readonly CRON_JOB_NAME = 'wallet-settlement';
 
 	constructor(
 		private readonly dataSource: DataSource,
 		private readonly auditService: AuditService,
 		private readonly invoicesService: InvoicesService,
+		private readonly schedulerRegistry: SchedulerRegistry,
+		private readonly settlementCoreService: SettlementCoreService,
+		@Inject(forwardRef(() => SettingsService))
+		private readonly settingsService: SettingsService,
 	) {}
 
+	async onModuleInit(): Promise<void> {
+		try {
+			const settings = await this.settingsService.getSettings();
+			const minutes = settings.walletSettlementIntervalMinutes ?? 120;
+			this.registerCronJob(minutes);
+		} catch (error) {
+			this.logger.error(`Failed to initialize wallet settlement cron, falling back to default (120 min): ${error.message}`);
+			this.registerCronJob(120);
+		}
+	}
+
 	/**
-	 * Cron job: runs at :30 past every 2nd hour to settle pending invoices from wallet balances.
-	 * Offset by 30 minutes to avoid overlap with the monthly invoice generation cron (0 0 1 * *).
+	 * Build a cron expression from an interval in minutes.
+	 * - < 60 min: run every N minutes
+	 * - >= 60 min: run every N hours at :30
 	 */
-	@Cron('30 */2 * * *')
+	private buildCronExpression(minutes: number): string {
+		if (minutes < 60) {
+			return `*/${minutes} * * * *`;
+		}
+		const hours = Math.floor(minutes / 60);
+		return `30 */${hours} * * *`;
+	}
+
+	private registerCronJob(minutes: number): void {
+		try {
+			this.schedulerRegistry.deleteCronJob(WalletSettlementService.CRON_JOB_NAME);
+		} catch {
+			// Job doesn't exist yet, that's fine
+		}
+
+		const cronExpression = this.buildCronExpression(minutes);
+		const job = new CronJob(cronExpression, () => {
+			this.handleScheduledSettlement();
+		});
+
+		this.schedulerRegistry.addCronJob(WalletSettlementService.CRON_JOB_NAME, job);
+		job.start();
+
+		this.logger.log(`Wallet settlement cron registered: "${cronExpression}" (every ${minutes} min)`);
+	}
+
+	/**
+	 * Update the cron interval dynamically. Called when settings are changed.
+	 */
+	updateCronInterval(minutes: number): void {
+		this.registerCronJob(minutes);
+	}
+
 	async handleScheduledSettlement(): Promise<void> {
 		this.logger.log('Cron triggered: wallet auto-settlement');
 		await this.settlePendingInvoices();
@@ -59,8 +108,7 @@ export class WalletSettlementService {
 		};
 
 		try {
-			// Find the system user for audit logging
-			const systemUserId = await this.getSystemUserId();
+			const systemUserId = await this.settlementCoreService.getSystemUserId();
 
 			// Single optimized query: find tenants with walletBalance > 0 AND at least one unsettled invoice
 			const eligibleTenants = await this.dataSource
@@ -87,7 +135,6 @@ export class WalletSettlementService {
 
 			this.logger.log(`Found ${tenantIds.length} eligible tenant(s) for wallet settlement`);
 
-			// Process each tenant in its own transaction
 			for (const tenantId of tenantIds) {
 				try {
 					const result = await this.settleTenantInvoices(tenantId, systemUserId);
@@ -99,7 +146,6 @@ export class WalletSettlementService {
 						`Failed to settle invoices for tenant ${tenantId}: ${error.message}`,
 						error.stack,
 					);
-					// Continue processing other tenants
 				}
 			}
 
@@ -109,7 +155,6 @@ export class WalletSettlementService {
 				`Partial: ${summary.invoicesPartial}`,
 			);
 
-			// Audit the settlement run
 			if (summary.invoicesSettled > 0 || summary.invoicesPartial > 0) {
 				await this.auditService.createLog({
 					action: AuditAction.WALLET_AUTO_SETTLEMENT_COMPLETED,
@@ -138,7 +183,8 @@ export class WalletSettlementService {
 		await queryRunner.connect();
 		await queryRunner.startTransaction();
 
-		const result = { settled: 0, partial: 0 };
+		// Track original statuses for notification decisions
+		const originalStatuses = new Map<string, InvoiceStatus>();
 
 		try {
 			// Lock tenant row with pessimistic_write
@@ -148,31 +194,16 @@ export class WalletSettlementService {
 				.where('tenant.tenantId = :tenantId', { tenantId })
 				.getOne();
 
-			if (!tenant) {
+			if (!tenant || parseFloat(String(tenant.walletBalance)) <= 0) {
 				await queryRunner.rollbackTransaction();
-				return result;
+				return { settled: 0, partial: 0 };
 			}
 
-			let walletBalance = parseFloat(String(tenant.walletBalance));
-			if (walletBalance <= 0) {
-				await queryRunner.rollbackTransaction();
-				return result;
-			}
-
-			// Load tenant relations for notification purposes
-			const tenantWithRelations = await queryRunner.manager.findOne(Tenant, {
-				where: { tenantId },
-				relations: { unit: true, user: true },
-			});
-
-			const tenantName = tenantWithRelations?.user
-				? `${tenantWithRelations.user.firstName || ''} ${tenantWithRelations.user.lastName || ''}`.trim()
-				: tenantId;
-
-			// Get unsettled invoices ordered by billing month ASC (oldest first)
+			// Get unsettled rent invoices ordered by billing month ASC (oldest first)
 			const unsettledInvoices = await queryRunner.manager.find(Invoice, {
 				where: {
 					tenantId,
+					invoiceType: InvoiceType.RENT,
 					status: In([InvoiceStatus.UNPAID, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.OVERDUE]),
 				},
 				order: { billingMonth: 'ASC' },
@@ -180,242 +211,114 @@ export class WalletSettlementService {
 
 			if (unsettledInvoices.length === 0) {
 				await queryRunner.rollbackTransaction();
-				return result;
+				return { settled: 0, partial: 0 };
 			}
 
-			for (const invoice of unsettledInvoices) {
-				if (walletBalance <= 0) break;
-
-				const balanceDue = parseFloat(String(invoice.balanceDue));
-				if (balanceDue <= 0) continue;
-
-				if (walletBalance >= balanceDue) {
-					// Full settlement
-					const newBalance = parseFloat((walletBalance - balanceDue).toFixed(2));
-
-					// Wallet transaction
-					await queryRunner.manager.save(
-						queryRunner.manager.create(WalletTransaction, {
-							tenantId,
-							type: WalletTxnType.DEBIT_INVOICE,
-							amount: balanceDue,
-							balanceBefore: walletBalance,
-							balanceAfter: newBalance,
-							reference: invoice.invoiceNumber,
-							description: `Auto-settlement for invoice ${invoice.invoiceNumber}`,
-						}),
-					);
-
-					// Payment record
-					await queryRunner.manager.save(
-						queryRunner.manager.create(Payment, {
-							tenantId,
-							invoiceId: invoice.invoiceId,
-							amount: balanceDue,
-							method: PaymentMethod.WALLET_DEDUCTION,
-							status: PaymentStatus.COMPLETED,
-							transactionDate: new Date(),
-						}),
-					);
-
-					// Update invoice
-					const newAmountPaid = parseFloat(String(invoice.amountPaid)) + balanceDue;
-					await queryRunner.manager.update(Invoice, invoice.invoiceId, {
-						amountPaid: newAmountPaid,
-						balanceDue: 0,
-						status: InvoiceStatus.PAID,
-						paidAt: new Date(),
-					});
-
-					// Receipt: check for existing one (idempotency)
-					const existingReceipt = await queryRunner.manager.findOne(Receipt, {
-						where: { invoiceId: invoice.invoiceId },
-					});
-
-					if (existingReceipt) {
-						await queryRunner.manager.update(Receipt, existingReceipt.receiptId, {
-							totalPaid: Number(invoice.totalAmount),
-						});
-					} else {
-						const receiptNumber = invoice.invoiceNumber.replace(/^INV-/, 'RCP-');
-						await queryRunner.manager.save(
-							queryRunner.manager.create(Receipt, {
-								receiptNumber,
-								invoiceId: invoice.invoiceId,
-								totalPaid: Number(invoice.totalAmount),
-							}),
-						);
-					}
-
-					// Update deposit status to COLLECTED if this invoice contains a security deposit
-					if (invoice.otherChargesDesc?.includes('Security Deposit')) {
-						const currentTenant = await queryRunner.manager.findOne(Tenant, { where: { tenantId } });
-						if (currentTenant && currentTenant.depositStatus === DepositStatus.PENDING) {
-							await queryRunner.manager.update(Tenant, tenantId, {
-								depositStatus: DepositStatus.COLLECTED,
-							});
-						}
-					}
-
-					walletBalance = newBalance;
-					result.settled++;
-
-					this.logger.log(
-						`Auto-settled invoice ${invoice.invoiceNumber} for ${tenantName}. ` +
-						`Deducted KES ${balanceDue}. New wallet balance: KES ${newBalance}`,
-					);
-
-					// Audit
-					await this.auditService.createLog({
-						action: AuditAction.INVOICE_AUTO_SETTLED,
-						performedBy: systemUserId,
-						targetType: AuditTargetType.INVOICE,
-						targetId: invoice.invoiceId,
-						details: `Wallet auto-settlement: invoice ${invoice.invoiceNumber} fully paid (KES ${balanceDue}) for ${tenantName}`,
-						metadata: {
-							invoiceId: invoice.invoiceId,
-							invoiceNumber: invoice.invoiceNumber,
-							tenantId,
-							amount: balanceDue,
-							walletBalanceBefore: walletBalance + balanceDue,
-							walletBalanceAfter: newBalance,
-						},
-					});
-				} else {
-					// Partial settlement
-					const newBalance = 0;
-					const amountToDeduct = walletBalance;
-					const newAmountPaid = parseFloat(String(invoice.amountPaid)) + amountToDeduct;
-					const newBalanceDue = parseFloat((balanceDue - amountToDeduct).toFixed(2));
-
-					// Wallet transaction
-					await queryRunner.manager.save(
-						queryRunner.manager.create(WalletTransaction, {
-							tenantId,
-							type: WalletTxnType.DEBIT_INVOICE,
-							amount: amountToDeduct,
-							balanceBefore: walletBalance,
-							balanceAfter: newBalance,
-							reference: invoice.invoiceNumber,
-							description: `Partial auto-settlement for invoice ${invoice.invoiceNumber}`,
-						}),
-					);
-
-					// Payment record
-					await queryRunner.manager.save(
-						queryRunner.manager.create(Payment, {
-							tenantId,
-							invoiceId: invoice.invoiceId,
-							amount: amountToDeduct,
-							method: PaymentMethod.WALLET_DEDUCTION,
-							status: PaymentStatus.COMPLETED,
-							transactionDate: new Date(),
-						}),
-					);
-
-					// Update invoice
-					await queryRunner.manager.update(Invoice, invoice.invoiceId, {
-						amountPaid: newAmountPaid,
-						balanceDue: newBalanceDue,
-						status: InvoiceStatus.PARTIALLY_PAID,
-					});
-
-					// Receipt: check for existing one (idempotency)
-					const existingReceipt = await queryRunner.manager.findOne(Receipt, {
-						where: { invoiceId: invoice.invoiceId },
-					});
-
-					if (existingReceipt) {
-						await queryRunner.manager.update(Receipt, existingReceipt.receiptId, {
-							totalPaid: newAmountPaid,
-						});
-					} else {
-						const receiptNumber = invoice.invoiceNumber.replace(/^INV-/, 'RCP-');
-						await queryRunner.manager.save(
-							queryRunner.manager.create(Receipt, {
-								receiptNumber,
-								invoiceId: invoice.invoiceId,
-								totalPaid: newAmountPaid,
-							}),
-						);
-					}
-
-					walletBalance = newBalance;
-					result.partial++;
-
-					this.logger.log(
-						`Partial settlement for invoice ${invoice.invoiceNumber} for ${tenantName}. ` +
-						`Deducted KES ${amountToDeduct}. Remaining: KES ${newBalanceDue}`,
-					);
-
-					// Audit
-					await this.auditService.createLog({
-						action: AuditAction.INVOICE_PARTIALLY_SETTLED,
-						performedBy: systemUserId,
-						targetType: AuditTargetType.INVOICE,
-						targetId: invoice.invoiceId,
-						details: `Wallet auto-settlement: partial payment of KES ${amountToDeduct} for invoice ${invoice.invoiceNumber}. Remaining: KES ${newBalanceDue}`,
-						metadata: {
-							invoiceId: invoice.invoiceId,
-							invoiceNumber: invoice.invoiceNumber,
-							tenantId,
-							amountPaid: amountToDeduct,
-							balanceDue: newBalanceDue,
-						},
-					});
-
-					break; // Wallet exhausted
-				}
+			// Record original statuses before settlement
+			for (const inv of unsettledInvoices) {
+				originalStatuses.set(inv.invoiceId, inv.status);
 			}
 
-			// Update tenant wallet balance
+			const result = await this.settlementCoreService.settleInvoicesFromWallet(
+				queryRunner,
+				tenant,
+				unsettledInvoices,
+				systemUserId,
+			);
+
+			// Update tenant wallet balance once
 			await queryRunner.manager.update(Tenant, tenantId, {
-				walletBalance,
+				walletBalance: result.walletBalanceAfter,
 			});
 
 			await queryRunner.commitTransaction();
 
-			// Send notifications after commit (fire-and-forget)
-			// Only notify for fully paid invoices, or partials if no notification in last 24 hours
-			for (const invoice of unsettledInvoices) {
-				try {
-					const updatedInvoice = await this.dataSource.getRepository(Invoice).findOne({
-						where: { invoiceId: invoice.invoiceId },
-						relations: { tenant: { user: true } },
-					});
-					if (!updatedInvoice) continue;
-
-					if (updatedInvoice.status === InvoiceStatus.PAID) {
-						// Always notify on full payment
-						const receipt = await this.dataSource.getRepository(Receipt).findOne({
-							where: { invoiceId: invoice.invoiceId },
-						});
-						if (receipt) {
-							this.invoicesService.sendReceiptNotification(receipt.receiptId).catch((err) =>
-								this.logger.error(`Failed to send receipt notification: ${err.message}`),
-							);
-						}
-					} else if (updatedInvoice.status === InvoiceStatus.PARTIALLY_PAID && updatedInvoice.status !== invoice.status) {
-						// Partial settlement changed status — check cooldown
-						const shouldNotify = await this.shouldSendSettlementNotification(invoice.invoiceId);
-						if (shouldNotify) {
-							this.invoicesService.sendInvoiceNotification(updatedInvoice).catch((err) =>
-								this.logger.error(`Failed to send settlement notification: ${err.message}`),
-							);
-						}
-					}
-				} catch (err) {
-					this.logger.error(`Failed to send notification for invoice ${invoice.invoiceId}: ${err.message}`);
-				}
+			// Write audit logs after commit (fire-and-forget)
+			for (const log of result.pendingAuditLogs) {
+				this.auditService.createLog(log).catch((err) =>
+					this.logger.error(`Failed to write audit log: ${err.message}`),
+				);
 			}
+
+			// Send notifications after commit — batch queries instead of N+1
+			this.sendPostSettlementNotifications(
+				result.invoiceResults,
+				originalStatuses,
+			).catch((err) =>
+				this.logger.error(`Failed to send settlement notifications: ${err.message}`),
+			);
+
+			return { settled: result.settled, partial: result.partial };
 		} catch (error) {
 			await queryRunner.rollbackTransaction();
 			throw error;
 		} finally {
 			await queryRunner.release();
 		}
+	}
 
-		return result;
+	/**
+	 * Send notifications for settled invoices. Uses batched queries (2 queries instead of N+1).
+	 */
+	private async sendPostSettlementNotifications(
+		invoiceResults: Array<{ invoiceId: string; invoiceNumber: string; type: 'full' | 'partial' | 'skipped' }>,
+		originalStatuses: Map<string, InvoiceStatus>,
+	): Promise<void> {
+		const settledIds = invoiceResults
+			.filter((r) => r.type !== 'skipped')
+			.map((r) => r.invoiceId);
+
+		if (settledIds.length === 0) return;
+
+		// Batch-load invoices with tenant relations
+		const invoices = await this.dataSource.getRepository(Invoice).find({
+			where: { invoiceId: In(settledIds) },
+			relations: { tenant: { user: true } },
+		});
+
+		// Batch-load receipts for fully paid invoices
+		const fullyPaidIds = invoiceResults
+			.filter((r) => r.type === 'full')
+			.map((r) => r.invoiceId);
+
+		const receipts = fullyPaidIds.length > 0
+			? await this.dataSource.getRepository(Receipt).find({
+					where: { invoiceId: In(fullyPaidIds) },
+				})
+			: [];
+
+		const receiptByInvoiceId = new Map(receipts.map((r) => [r.invoiceId, r]));
+		const invoiceById = new Map(invoices.map((i) => [i.invoiceId, i]));
+
+		for (const invResult of invoiceResults) {
+			if (invResult.type === 'skipped') continue;
+
+			const invoice = invoiceById.get(invResult.invoiceId);
+			if (!invoice) continue;
+
+			try {
+				if (invResult.type === 'full') {
+					const receipt = receiptByInvoiceId.get(invResult.invoiceId);
+					if (receipt) {
+						this.invoicesService.sendReceiptNotification(receipt.receiptId).catch((err) =>
+							this.logger.error(`Failed to send receipt notification: ${err.message}`),
+						);
+					}
+				} else if (invResult.type === 'partial') {
+					const originalStatus = originalStatuses.get(invResult.invoiceId);
+					if (originalStatus !== InvoiceStatus.PARTIALLY_PAID) {
+						const shouldNotify = await this.shouldSendSettlementNotification(invResult.invoiceId);
+						if (shouldNotify) {
+							this.invoicesService.sendInvoiceNotification(invoice).catch((err) =>
+								this.logger.error(`Failed to send settlement notification: ${err.message}`),
+							);
+						}
+					}
+				}
+			} catch (err) {
+				this.logger.error(`Failed to send notification for invoice ${invResult.invoiceId}: ${err.message}`);
+			}
+		}
 	}
 
 	/**
@@ -436,22 +339,5 @@ export class WalletSettlementService {
 			.getOne();
 
 		return !recentNotification;
-	}
-
-	/**
-	 * Find the landlord user ID for audit logging.
-	 */
-	private async getSystemUserId(): Promise<string | undefined> {
-		const landlordRole = await this.dataSource.getRepository(Role).findOne({
-			where: { name: UserRole.LANDLORD },
-		});
-
-		if (!landlordRole) return undefined;
-
-		const landlordUser = await this.dataSource.getRepository(User).findOne({
-			where: { roleId: landlordRole.roleId },
-		});
-
-		return landlordUser?.userId;
 	}
 }

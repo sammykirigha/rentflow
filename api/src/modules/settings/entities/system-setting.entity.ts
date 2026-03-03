@@ -61,6 +61,9 @@ export class SystemSetting extends AbstractEntity<SystemSetting> {
   @Column({ name: 'recurring_charges', type: 'jsonb', default: [] })
   recurringCharges: RecurringCharge[];
 
+  @Column({ name: 'wallet_settlement_interval_minutes', type: 'integer', default: 120 })
+  walletSettlementIntervalMinutes: number;
+
   // Helper methods
   getFileUploadSizeInMB(): string {
     return `${this.maxFileUploadSize} MB`;

@@ -31,6 +31,7 @@ import { invoicesApi } from '@/lib/api/invoices.api';
 import { paymentsApi } from '@/lib/api/payments.api';
 import { formatKES } from '@/lib/format-kes';
 import { parseError } from '@/lib/api/parseError';
+import { InvoiceType, INVOICE_TYPE_LABELS } from '@/types/invoices';
 import type { Invoice, InvoiceStatus, UpdateInvoiceInput } from '@/types/invoices';
 import type { Payment, PaymentMethod, PaymentStatus } from '@/types/payments';
 import type { ColumnsType } from 'antd/es/table';
@@ -54,6 +55,14 @@ const STATUS_LABEL_MAP: Record<string, string> = {
   unpaid: 'Unpaid',
   overdue: 'Overdue',
   cancelled: 'Cancelled',
+};
+
+const TYPE_COLOR_MAP: Record<string, string> = {
+  rent: 'blue',
+  security_deposit: 'purple',
+  service_fee: 'cyan',
+  maintenance: 'orange',
+  other: 'default',
 };
 
 const PAYMENT_METHOD_LABEL: Record<string, string> = {
@@ -210,9 +219,12 @@ export default function InvoiceDetailPage() {
     );
   }
 
-  const tenantName = invoice.tenant
+  const isRentInvoice = invoice.invoiceType === InvoiceType.RENT;
+  const hasUtilityCharges = Number(invoice.waterCharge) > 0 || Number(invoice.electricityCharge) > 0 || Number(invoice.otherCharges) > 0;
+
+  const recipientName = invoice.tenant
     ? `${invoice.tenant.user?.firstName || ''} ${invoice.tenant.user?.lastName || ''}`.trim()
-    : '-';
+    : (invoice.recipientName || '-');
 
   return (
     <div>
@@ -226,6 +238,9 @@ export default function InvoiceDetailPage() {
             <FileTextOutlined style={{ marginRight: 8 }} />
             {invoice.invoiceNumber}
           </Title>
+          <Tag color={TYPE_COLOR_MAP[invoice.invoiceType] || 'default'}>
+            {INVOICE_TYPE_LABELS[invoice.invoiceType] || invoice.invoiceType}
+          </Tag>
           <Tag color={STATUS_COLOR_MAP[invoice.status] || 'default'}>
             {STATUS_LABEL_MAP[invoice.status] || invoice.status}
           </Tag>
@@ -251,14 +266,16 @@ export default function InvoiceDetailPage() {
       {/* Invoice Details */}
       <Card style={{ marginBottom: 24 }}>
         <Descriptions column={{ xs: 1, sm: 2, lg: 3 }} bordered>
-          <Descriptions.Item label="Tenant">
+          <Descriptions.Item label={isRentInvoice ? 'Tenant' : 'Recipient'}>
             {invoice.tenant ? (
-              <Link href={`/dashboard/tenants/${invoice.tenantId}`}>{tenantName}</Link>
-            ) : tenantName}
+              <Link href={`/dashboard/tenants/${invoice.tenantId}`}>{recipientName}</Link>
+            ) : recipientName}
           </Descriptions.Item>
-          <Descriptions.Item label="Unit">
-            {invoice.tenant?.unit?.unitNumber || '-'}
-          </Descriptions.Item>
+          {isRentInvoice && (
+            <Descriptions.Item label="Unit">
+              {invoice.tenant?.unit?.unitNumber || '-'}
+            </Descriptions.Item>
+          )}
           <Descriptions.Item label="Billing Month">
             {invoice.billingMonth ? dayjs(invoice.billingMonth).format('MMMM YYYY') : '-'}
           </Descriptions.Item>
@@ -277,17 +294,23 @@ export default function InvoiceDetailPage() {
       {/* Financial Breakdown */}
       <Card title="Charges Breakdown" style={{ marginBottom: 24 }}>
         <Descriptions column={1} bordered size="small">
-          <Descriptions.Item label="Rent">{formatKES(invoice.rentAmount)}</Descriptions.Item>
-          {Number(invoice.waterCharge) > 0 && (
-            <Descriptions.Item label="Water Charge">{formatKES(invoice.waterCharge)}</Descriptions.Item>
-          )}
-          {Number(invoice.electricityCharge) > 0 && (
-            <Descriptions.Item label="Electricity Charge">{formatKES(invoice.electricityCharge)}</Descriptions.Item>
-          )}
-          {Number(invoice.otherCharges) > 0 && (
-            <Descriptions.Item label={`Other Charges${invoice.otherChargesDesc ? ` (${invoice.otherChargesDesc})` : ''}`}>
-              {formatKES(invoice.otherCharges)}
-            </Descriptions.Item>
+          <Descriptions.Item label={isRentInvoice ? 'Rent' : 'Amount'}>
+            {formatKES(invoice.rentAmount)}
+          </Descriptions.Item>
+          {(isRentInvoice || hasUtilityCharges) && (
+            <>
+              {Number(invoice.waterCharge) > 0 && (
+                <Descriptions.Item label="Water Charge">{formatKES(invoice.waterCharge)}</Descriptions.Item>
+              )}
+              {Number(invoice.electricityCharge) > 0 && (
+                <Descriptions.Item label="Electricity Charge">{formatKES(invoice.electricityCharge)}</Descriptions.Item>
+              )}
+              {Number(invoice.otherCharges) > 0 && (
+                <Descriptions.Item label={`Other Charges${invoice.otherChargesDesc ? ` (${invoice.otherChargesDesc})` : ''}`}>
+                  {formatKES(invoice.otherCharges)}
+                </Descriptions.Item>
+              )}
+            </>
           )}
           <Descriptions.Item label="Subtotal">
             <Text strong>{formatKES(invoice.subtotal)}</Text>
@@ -344,8 +367,8 @@ export default function InvoiceDetailPage() {
         <Form form={editForm} layout="vertical" style={{ marginTop: 16 }}>
           <Form.Item
             name="rentAmount"
-            label="Rent Amount (KES)"
-            rules={[{ required: true, message: 'Please enter the rent amount' }]}
+            label={isRentInvoice ? 'Rent Amount (KES)' : 'Amount (KES)'}
+            rules={[{ required: true, message: 'Please enter the amount' }]}
           >
             <InputNumber<number>
               min={0}
@@ -355,39 +378,43 @@ export default function InvoiceDetailPage() {
             />
           </Form.Item>
 
-          <Form.Item name="waterCharge" label="Water Charge (KES)">
-            <InputNumber<number>
-              min={0}
-              style={{ width: '100%' }}
-              placeholder="Optional"
-              formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-              parser={(value) => Number(value!.replace(/,/g, ''))}
-            />
-          </Form.Item>
+          {isRentInvoice && (
+            <>
+              <Form.Item name="waterCharge" label="Water Charge (KES)">
+                <InputNumber<number>
+                  min={0}
+                  style={{ width: '100%' }}
+                  placeholder="Optional"
+                  formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                  parser={(value) => Number(value!.replace(/,/g, ''))}
+                />
+              </Form.Item>
 
-          <Form.Item name="electricityCharge" label="Electricity Charge (KES)">
-            <InputNumber<number>
-              min={0}
-              style={{ width: '100%' }}
-              placeholder="Optional"
-              formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-              parser={(value) => Number(value!.replace(/,/g, ''))}
-            />
-          </Form.Item>
+              <Form.Item name="electricityCharge" label="Electricity Charge (KES)">
+                <InputNumber<number>
+                  min={0}
+                  style={{ width: '100%' }}
+                  placeholder="Optional"
+                  formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                  parser={(value) => Number(value!.replace(/,/g, ''))}
+                />
+              </Form.Item>
 
-          <Form.Item name="otherCharges" label="Other Charges (KES)">
-            <InputNumber<number>
-              min={0}
-              style={{ width: '100%' }}
-              placeholder="Optional"
-              formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-              parser={(value) => Number(value!.replace(/,/g, ''))}
-            />
-          </Form.Item>
+              <Form.Item name="otherCharges" label="Other Charges (KES)">
+                <InputNumber<number>
+                  min={0}
+                  style={{ width: '100%' }}
+                  placeholder="Optional"
+                  formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                  parser={(value) => Number(value!.replace(/,/g, ''))}
+                />
+              </Form.Item>
 
-          <Form.Item name="otherChargesDesc" label="Other Charges Description">
-            <Input placeholder="e.g. Garbage collection" />
-          </Form.Item>
+              <Form.Item name="otherChargesDesc" label="Other Charges Description">
+                <Input placeholder="e.g. Garbage collection" />
+              </Form.Item>
+            </>
+          )}
 
           <Form.Item name="dueDate" label="Due Date">
             <DatePicker style={{ width: '100%' }} />

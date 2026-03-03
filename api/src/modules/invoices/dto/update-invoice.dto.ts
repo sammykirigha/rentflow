@@ -7,9 +7,19 @@ import {
 	IsString,
 	Min,
 } from 'class-validator';
-import { InvoiceStatus } from '../entities/invoice.entity';
+import { InvoiceStatus, InvoiceType } from '../entities/invoice.entity';
 
 export class UpdateInvoiceDto {
+	@ApiProperty({ description: 'Invoice type/purpose', enum: InvoiceType, required: false })
+	@IsEnum(InvoiceType)
+	@IsOptional()
+	invoiceType?: InvoiceType;
+
+	@ApiProperty({ description: 'Recipient name (for non-rent invoices)', required: false })
+	@IsString()
+	@IsOptional()
+	recipientName?: string;
+
 	@ApiProperty({ description: 'Billing month (ISO 8601 date string)', required: false })
 	@IsDateString()
 	@IsOptional()

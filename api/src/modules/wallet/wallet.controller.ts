@@ -7,9 +7,11 @@ import {
 	ParseIntPipe,
 	Post,
 	Query,
+	Inject,
 	Res,
 	UseGuards,
 	UseInterceptors,
+	forwardRef,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
@@ -42,7 +44,7 @@ export class WalletController {
 	constructor(
 		private readonly walletService: WalletService,
 		private readonly pdfService: PdfService,
-		private readonly settingsService: SettingsService,
+		@Inject(forwardRef(() => SettingsService)) private readonly settingsService: SettingsService,
 	) {}
 
 	@Get('my-balance')

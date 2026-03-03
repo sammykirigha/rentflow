@@ -34,6 +34,7 @@ export interface SystemSetting {
 
   // Invoice Settings
   recurringCharges: RecurringCharge[];
+  walletSettlementIntervalMinutes: number;
 
   createdAt: string;
   updatedAt: string;

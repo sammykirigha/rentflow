@@ -8,10 +8,28 @@ export enum InvoiceStatus {
   CANCELLED = 'cancelled',
 }
 
+export enum InvoiceType {
+  RENT = 'rent',
+  SECURITY_DEPOSIT = 'security_deposit',
+  SERVICE_FEE = 'service_fee',
+  MAINTENANCE = 'maintenance',
+  OTHER = 'other',
+}
+
+export const INVOICE_TYPE_LABELS: Record<InvoiceType, string> = {
+  [InvoiceType.RENT]: 'Rent',
+  [InvoiceType.SECURITY_DEPOSIT]: 'Security Deposit',
+  [InvoiceType.SERVICE_FEE]: 'Service Fee',
+  [InvoiceType.MAINTENANCE]: 'Maintenance',
+  [InvoiceType.OTHER]: 'Other',
+};
+
 export interface Invoice {
   invoiceId: string;
   invoiceNumber: string;
-  tenantId: string;
+  invoiceType: InvoiceType;
+  tenantId: string | null;
+  recipientName?: string;
   billingMonth: string;
   rentAmount: number;
   waterCharge: number;
@@ -34,7 +52,9 @@ export interface Invoice {
 }
 
 export interface CreateInvoiceInput {
-  tenantId: string;
+  invoiceType: InvoiceType;
+  tenantId?: string;
+  recipientName?: string;
   billingMonth: string;
   rentAmount: number;
   waterCharge?: number;
@@ -46,6 +66,8 @@ export interface CreateInvoiceInput {
 }
 
 export interface UpdateInvoiceInput {
+  invoiceType?: InvoiceType;
+  recipientName?: string;
   billingMonth?: string;
   rentAmount?: number;
   waterCharge?: number;

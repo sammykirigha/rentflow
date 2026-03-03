@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Tenant } from '@/modules/tenants/entities/tenant.entity';
 import { WalletTransaction } from '@/modules/wallet/entities/wallet-transaction.entity';
@@ -17,6 +17,7 @@ import { InvoicesRepository } from './invoices.repository';
 import { InvoicesService } from './invoices.service';
 import { PenaltyEngineService } from './penalty-engine.service';
 import { ReminderService } from './reminder.service';
+import { SettlementCoreService } from './settlement-core.service';
 import { WalletSettlementService } from './wallet-settlement.service';
 
 @Module({
@@ -27,10 +28,10 @@ import { WalletSettlementService } from './wallet-settlement.service';
 		MailModule,
 		WalletModule,
 		PdfModule,
-		SettingsModule,
+		forwardRef(() => SettingsModule),
 	],
 	controllers: [InvoicesController],
-	providers: [InvoicesService, InvoicesRepository, InvoiceEngineService, PenaltyEngineService, ReminderService, WalletSettlementService],
-	exports: [InvoicesService, InvoicesRepository, InvoiceEngineService, PenaltyEngineService, ReminderService, WalletSettlementService],
+	providers: [InvoicesService, InvoicesRepository, InvoiceEngineService, PenaltyEngineService, ReminderService, SettlementCoreService, WalletSettlementService],
+	exports: [InvoicesService, InvoicesRepository, InvoiceEngineService, PenaltyEngineService, ReminderService, SettlementCoreService, WalletSettlementService],
 })
 export class InvoicesModule {}

@@ -1,19 +1,34 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
 	IsDateString,
+	IsEnum,
 	IsNotEmpty,
 	IsNumber,
 	IsOptional,
 	IsString,
 	IsUUID,
 	Min,
+	ValidateIf,
 } from 'class-validator';
+import { InvoiceType } from '../entities/invoice.entity';
 
 export class CreateInvoiceDto {
-	@ApiProperty({ description: 'UUID of the tenant', example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
+	@ApiProperty({ description: 'Invoice type/purpose', enum: InvoiceType, example: InvoiceType.RENT })
+	@IsEnum(InvoiceType)
+	@IsNotEmpty()
+	invoiceType: InvoiceType;
+
+	@ApiProperty({ description: 'UUID of the tenant', required: false })
+	@ValidateIf((o) => o.invoiceType === InvoiceType.RENT || o.tenantId)
 	@IsUUID()
 	@IsNotEmpty()
-	tenantId: string;
+	tenantId?: string;
+
+	@ApiProperty({ description: 'Recipient name (required for non-rent invoices without a tenant)', required: false })
+	@ValidateIf((o) => o.invoiceType !== InvoiceType.RENT && !o.tenantId)
+	@IsString()
+	@IsNotEmpty()
+	recipientName?: string;
 
 	@ApiProperty({ description: 'Billing month (ISO 8601 date string)', example: '2026-02-01T00:00:00.000Z' })
 	@IsDateString()
@@ -54,8 +69,9 @@ export class CreateInvoiceDto {
 	@IsNotEmpty()
 	dueDate: string;
 
-	@ApiProperty({ description: 'Additional notes', required: false })
+	@ApiProperty({ description: 'Additional notes / description (required for "other" type)', required: false })
+	@ValidateIf((o) => o.invoiceType === InvoiceType.OTHER)
 	@IsString()
-	@IsOptional()
+	@IsNotEmpty({ message: 'Description is required for "Other" invoice type' })
 	notes?: string;
 }

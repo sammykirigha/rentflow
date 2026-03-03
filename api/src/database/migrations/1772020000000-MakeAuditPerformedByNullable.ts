@@ -4,9 +4,9 @@ export class MakeAuditPerformedByNullable1772020000000 implements MigrationInter
     name = 'MakeAuditPerformedByNullable1772020000000';
 
     public async up(queryRunner: QueryRunner): Promise<void> {
-        // Drop the existing FK constraint (references users.user_id with ON DELETE NO ACTION)
+        // Drop the existing FK constraint if it exists (name may vary depending on migration history)
         await queryRunner.query(
-            `ALTER TABLE "audit_logs" DROP CONSTRAINT "FK_audit_logs_user"`,
+            `ALTER TABLE "audit_logs" DROP CONSTRAINT IF EXISTS "FK_audit_logs_user"`,
         );
 
         // Make performed_by nullable

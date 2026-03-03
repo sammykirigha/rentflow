@@ -1,7 +1,8 @@
 import { AuditAction } from '@/common/enums/audit-action.enum';
 import { AuditTargetType } from '@/common/enums/audit-target-type.enum';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
+import { WalletSettlementService } from '../invoices/wallet-settlement.service';
 import { UpdateSystemSettingsDto } from './dto/update-system-settings.dto';
 import { SystemSetting } from './entities/system-setting.entity';
 import { SystemSettingsRepository } from './system-settings.repository';
@@ -11,6 +12,8 @@ export class SettingsService {
   constructor(
     private readonly systemSettingsRepository: SystemSettingsRepository,
     private readonly auditService: AuditService,
+    @Inject(forwardRef(() => WalletSettlementService))
+    private readonly walletSettlementService: WalletSettlementService,
   ) { }
 
   /**
@@ -42,6 +45,11 @@ export class SettingsService {
 
     if (!updatedSettings) {
       throw new NotFoundException('Failed to update settings');
+    }
+
+    // Update wallet settlement cron if interval changed
+    if (updateDto.walletSettlementIntervalMinutes !== undefined) {
+      this.walletSettlementService.updateCronInterval(updateDto.walletSettlementIntervalMinutes);
     }
 
     // Create audit log for settings update

@@ -236,6 +236,11 @@ export class PenaltyEngineService {
 		penaltyAmount: number,
 		newBalance: number,
 	): Promise<void> {
+		if (!invoice.tenantId) {
+			this.logger.log(`Skipping penalty notification for non-tenant invoice ${invoice.invoiceNumber}`);
+			return;
+		}
+
 		const tenant = await this.tenantRepository.findOne({
 			where: { tenantId: invoice.tenantId },
 			relations: ['user'],

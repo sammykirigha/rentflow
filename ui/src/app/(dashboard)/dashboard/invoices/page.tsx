@@ -15,6 +15,7 @@ import {
   Card,
   App,
   Space,
+  Radio,
 } from 'antd';
 import {
   PlusOutlined,
@@ -30,6 +31,7 @@ import { invoicesApi } from '@/lib/api/invoices.api';
 import { tenantsApi } from '@/lib/api/tenants.api';
 import { parseError } from '@/lib/api/parseError';
 import { formatKES } from '@/lib/format-kes';
+import { InvoiceType, INVOICE_TYPE_LABELS } from '@/types/invoices';
 import type { Invoice, CreateInvoiceInput, InvoiceStatus } from '@/types/invoices';
 import type { Tenant } from '@/types/tenants';
 import type { ColumnsType } from 'antd/es/table';
@@ -54,6 +56,14 @@ const STATUS_LABEL_MAP: Record<string, string> = {
   cancelled: 'Cancelled',
 };
 
+const TYPE_COLOR_MAP: Record<string, string> = {
+  rent: 'blue',
+  security_deposit: 'purple',
+  service_fee: 'cyan',
+  maintenance: 'orange',
+  other: 'default',
+};
+
 export default function InvoicesPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
@@ -65,6 +75,12 @@ export default function InvoicesPage() {
   const [form] = Form.useForm();
 
   const { isAuthenticated } = useAuth();
+
+  const [recipientMode, setRecipientMode] = useState<'tenant' | 'custom'>('tenant');
+
+  const invoiceType = Form.useWatch('invoiceType', form);
+  const isRent = invoiceType === InvoiceType.RENT;
+  const isOther = invoiceType === InvoiceType.OTHER;
 
   const { data, isLoading } = useQuery({
     queryKey: ['invoices', statusFilter, page, pageSize],
@@ -96,24 +112,50 @@ export default function InvoicesPage() {
     },
   });
 
+  const handleTenantChange = (tenantId: string) => {
+    const tenant = tenantsList.find((t) => t.tenantId === tenantId);
+    if (tenant?.unit?.rentAmount) {
+      form.setFieldsValue({ rentAmount: Number(tenant.unit.rentAmount) });
+    }
+  };
+
   const handleCreate = async () => {
     try {
       const values = await form.validateFields();
+      const typeIsRent = values.invoiceType === InvoiceType.RENT;
       const payload: CreateInvoiceInput = {
-        tenantId: values.tenantId,
+        invoiceType: values.invoiceType,
         billingMonth: values.billingMonth.startOf('month').toISOString(),
         rentAmount: values.rentAmount,
-        waterCharge: values.waterCharge ?? undefined,
-        electricityCharge: values.electricityCharge ?? undefined,
-        otherCharges: values.otherCharges ?? undefined,
-        otherChargesDesc: values.otherChargesDesc || undefined,
         dueDate: values.dueDate.toISOString(),
         notes: values.notes || undefined,
       };
+
+      if (typeIsRent) {
+        payload.tenantId = values.tenantId;
+        payload.waterCharge = values.waterCharge ?? undefined;
+        payload.electricityCharge = values.electricityCharge ?? undefined;
+        payload.otherCharges = values.otherCharges ?? undefined;
+        payload.otherChargesDesc = values.otherChargesDesc || undefined;
+      } else if (recipientMode === 'tenant') {
+        payload.tenantId = values.tenantId;
+      } else {
+        payload.recipientName = values.recipientName;
+      }
+
       createMutation.mutate(payload);
     } catch {
       // validation errors are shown inline by Ant Design
     }
+  };
+
+  const getRecipientDisplay = (record: Invoice) => {
+    if (record.tenant) {
+      const firstName = record.tenant?.user?.firstName || '';
+      const lastName = record.tenant?.user?.lastName || '';
+      return `${firstName} ${lastName}`.trim() || '-';
+    }
+    return record.recipientName || '-';
   };
 
   const columns: ColumnsType<Invoice> = [
@@ -124,16 +166,24 @@ export default function InvoicesPage() {
       sorter: (a, b) => a.invoiceNumber.localeCompare(b.invoiceNumber),
     },
     {
-      title: 'Tenant',
+      title: 'Type',
+      dataIndex: 'invoiceType',
+      key: 'invoiceType',
+      render: (type: InvoiceType) => (
+        <Tag color={TYPE_COLOR_MAP[type] || 'default'}>
+          {INVOICE_TYPE_LABELS[type] || type}
+        </Tag>
+      ),
+      filters: Object.entries(INVOICE_TYPE_LABELS).map(([value, text]) => ({ text, value })),
+      onFilter: (value, record) => record.invoiceType === value,
+    },
+    {
+      title: 'Recipient',
       key: 'tenant',
-      render: (_: unknown, record: Invoice) => {
-        const firstName = record.tenant?.user?.firstName || '';
-        const lastName = record.tenant?.user?.lastName || '';
-        return `${firstName} ${lastName}`.trim() || '-';
-      },
+      render: (_: unknown, record: Invoice) => getRecipientDisplay(record),
       sorter: (a, b) => {
-        const nameA = `${a.tenant?.user?.firstName || ''} ${a.tenant?.user?.lastName || ''}`.trim();
-        const nameB = `${b.tenant?.user?.firstName || ''} ${b.tenant?.user?.lastName || ''}`.trim();
+        const nameA = getRecipientDisplay(a);
+        const nameB = getRecipientDisplay(b);
         return nameA.localeCompare(nameB);
       },
     },
@@ -233,7 +283,8 @@ export default function InvoicesPage() {
                 const allData: Invoice[] = Array.isArray(all?.data) ? all.data : [];
                 const csvColumns: CsvColumn<Invoice>[] = [
                   { header: 'Invoice #', accessor: (r) => r.invoiceNumber },
-                  { header: 'Tenant', accessor: (r) => `${r.tenant?.user?.firstName || ''} ${r.tenant?.user?.lastName || ''}`.trim() },
+                  { header: 'Type', accessor: (r) => INVOICE_TYPE_LABELS[r.invoiceType] || r.invoiceType },
+                  { header: 'Recipient', accessor: (r) => getRecipientDisplay(r) },
                   { header: 'Billing Month', accessor: (r) => r.billingMonth ? dayjs(r.billingMonth).format('MMM YYYY') : '' },
                   { header: 'Total Amount', accessor: (r) => Number(r.totalAmount) },
                   { header: 'Paid', accessor: (r) => Number(r.amountPaid) },
@@ -311,23 +362,100 @@ export default function InvoicesPage() {
           form={form}
           layout="vertical"
           style={{ marginTop: 16 }}
+          initialValues={{ invoiceType: InvoiceType.RENT }}
         >
           <Form.Item
-            name="tenantId"
-            label="Tenant"
-            rules={[{ required: true, message: 'Please select a tenant' }]}
+            name="invoiceType"
+            label="Invoice Purpose"
+            rules={[{ required: true, message: 'Please select the invoice purpose' }]}
           >
             <Select
-              placeholder="Select a tenant"
-              showSearch
-              optionFilterProp="label"
-              options={tenantsList.map((t) => ({
-                label: `${t.user?.firstName || ''} ${t.user?.lastName || ''}`.trim() +
-                  (t.unit?.unitNumber ? ` (${t.unit.unitNumber})` : ''),
-                value: t.tenantId,
+              options={Object.entries(INVOICE_TYPE_LABELS).map(([value, label]) => ({
+                label,
+                value,
               }))}
+              onChange={() => {
+                // Clear type-specific fields when switching
+                form.setFieldsValue({
+                  tenantId: undefined,
+                  recipientName: undefined,
+                  rentAmount: undefined,
+                  waterCharge: undefined,
+                  electricityCharge: undefined,
+                  otherCharges: undefined,
+                  otherChargesDesc: undefined,
+                  notes: undefined,
+                });
+                setRecipientMode('tenant');
+              }}
             />
           </Form.Item>
+
+          {isRent ? (
+            <Form.Item
+              name="tenantId"
+              label="Tenant"
+              rules={[{ required: true, message: 'Please select a tenant' }]}
+            >
+              <Select
+                placeholder="Select a tenant"
+                showSearch
+                optionFilterProp="label"
+                onChange={handleTenantChange}
+                options={tenantsList.map((t) => ({
+                  label: `${t.user?.firstName || ''} ${t.user?.lastName || ''}`.trim() +
+                    (t.unit?.unitNumber ? ` (${t.unit.unitNumber})` : ''),
+                  value: t.tenantId,
+                }))}
+              />
+            </Form.Item>
+          ) : (
+            <>
+              <Form.Item label="Recipient">
+                <Radio.Group
+                  value={recipientMode}
+                  onChange={(e) => {
+                    setRecipientMode(e.target.value);
+                    form.setFieldsValue({ tenantId: undefined, recipientName: undefined });
+                  }}
+                  optionType="button"
+                  buttonStyle="solid"
+                  size="small"
+                  style={{ marginBottom: 12 }}
+                >
+                  <Radio.Button value="tenant">Select Tenant</Radio.Button>
+                  <Radio.Button value="custom">Custom Name</Radio.Button>
+                </Radio.Group>
+
+                {recipientMode === 'tenant' ? (
+                  <Form.Item
+                    name="tenantId"
+                    noStyle
+                    rules={[{ required: true, message: 'Please select a tenant' }]}
+                  >
+                    <Select
+                      placeholder="Select a tenant"
+                      showSearch
+                      optionFilterProp="label"
+                      options={tenantsList.map((t) => ({
+                        label: `${t.user?.firstName || ''} ${t.user?.lastName || ''}`.trim() +
+                          (t.unit?.unitNumber ? ` (${t.unit.unitNumber})` : ''),
+                        value: t.tenantId,
+                      }))}
+                    />
+                  </Form.Item>
+                ) : (
+                  <Form.Item
+                    name="recipientName"
+                    noStyle
+                    rules={[{ required: true, message: 'Please enter the recipient name' }]}
+                  >
+                    <Input placeholder="e.g. John Doe" />
+                  </Form.Item>
+                )}
+              </Form.Item>
+            </>
+          )}
 
           <Form.Item
             name="billingMonth"
@@ -339,63 +467,67 @@ export default function InvoicesPage() {
 
           <Form.Item
             name="rentAmount"
-            label="Rent Amount (KES)"
-            rules={[{ required: true, message: 'Please enter the rent amount' }]}
+            label={isRent ? 'Rent Amount (KES)' : 'Amount (KES)'}
+            rules={[{ required: true, message: `Please enter the ${isRent ? 'rent ' : ''}amount` }]}
           >
             <InputNumber<number>
               min={0}
               style={{ width: '100%' }}
-              placeholder="e.g. 35000"
+              placeholder={isRent ? 'e.g. 35000' : 'e.g. 10000'}
               formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
               parser={(value) => Number(value!.replace(/,/g, ''))}
             />
           </Form.Item>
 
-          <Form.Item
-            name="waterCharge"
-            label="Water Charge (KES)"
-          >
-            <InputNumber<number>
-              min={0}
-              style={{ width: '100%' }}
-              placeholder="Optional"
-              formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-              parser={(value) => Number(value!.replace(/,/g, ''))}
-            />
-          </Form.Item>
+          {isRent && (
+            <>
+              <Form.Item
+                name="waterCharge"
+                label="Water Charge (KES)"
+              >
+                <InputNumber<number>
+                  min={0}
+                  style={{ width: '100%' }}
+                  placeholder="Optional"
+                  formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                  parser={(value) => Number(value!.replace(/,/g, ''))}
+                />
+              </Form.Item>
 
-          <Form.Item
-            name="electricityCharge"
-            label="Electricity Charge (KES)"
-          >
-            <InputNumber<number>
-              min={0}
-              style={{ width: '100%' }}
-              placeholder="Optional"
-              formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-              parser={(value) => Number(value!.replace(/,/g, ''))}
-            />
-          </Form.Item>
+              <Form.Item
+                name="electricityCharge"
+                label="Electricity Charge (KES)"
+              >
+                <InputNumber<number>
+                  min={0}
+                  style={{ width: '100%' }}
+                  placeholder="Optional"
+                  formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                  parser={(value) => Number(value!.replace(/,/g, ''))}
+                />
+              </Form.Item>
 
-          <Form.Item
-            name="otherCharges"
-            label="Other Charges (KES)"
-          >
-            <InputNumber<number>
-              min={0}
-              style={{ width: '100%' }}
-              placeholder="Optional"
-              formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-              parser={(value) => Number(value!.replace(/,/g, ''))}
-            />
-          </Form.Item>
+              <Form.Item
+                name="otherCharges"
+                label="Other Charges (KES)"
+              >
+                <InputNumber<number>
+                  min={0}
+                  style={{ width: '100%' }}
+                  placeholder="Optional"
+                  formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                  parser={(value) => Number(value!.replace(/,/g, ''))}
+                />
+              </Form.Item>
 
-          <Form.Item
-            name="otherChargesDesc"
-            label="Other Charges Description"
-          >
-            <Input placeholder="e.g. Garbage collection" />
-          </Form.Item>
+              <Form.Item
+                name="otherChargesDesc"
+                label="Other Charges Description"
+              >
+                <Input placeholder="e.g. Garbage collection" />
+              </Form.Item>
+            </>
+          )}
 
           <Form.Item
             name="dueDate"
@@ -407,9 +539,13 @@ export default function InvoicesPage() {
 
           <Form.Item
             name="notes"
-            label="Notes"
+            label={isOther ? 'Description' : 'Notes'}
+            rules={isOther ? [{ required: true, message: 'Please enter a description for this invoice' }] : undefined}
           >
-            <Input.TextArea rows={3} placeholder="Optional notes for this invoice" />
+            <Input.TextArea
+              rows={3}
+              placeholder={isOther ? 'Describe the purpose of this invoice' : (isRent ? 'Optional notes for this invoice' : 'Optional description')}
+            />
           </Form.Item>
         </Form>
       </Modal>
