@@ -1,7 +1,9 @@
 import { AuditAction } from '@/common/enums/audit-action.enum';
 import { AuditTargetType } from '@/common/enums/audit-target-type.enum';
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { DataSource, FindOptionsWhere, ILike } from 'typeorm';
+import { Unit } from '@/modules/units/entities/unit.entity';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { DataSource, FindOptionsWhere, ILike, Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
 import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
@@ -14,6 +16,8 @@ export class PropertiesService {
 		private readonly propertiesRepository: PropertiesRepository,
 		private readonly auditService: AuditService,
 		private readonly dataSource: DataSource,
+		@InjectRepository(Unit)
+		private readonly unitRepository: Repository<Unit>,
 	) { }
 
 	async create(createPropertyDto: CreatePropertyDto, userId: string): Promise<Property> {
@@ -154,5 +158,56 @@ export class PropertiesService {
 
 		// Will connect to UnitsRepository later
 		return [];
+	}
+
+	async delete(propertyId: string, userId: string): Promise<void> {
+		const property = await this.findOne(propertyId);
+
+		// Check all units belong to this property and none are occupied
+		const units = await this.unitRepository.find({ where: { propertyId } });
+		const occupiedUnits = units.filter((u) => u.isOccupied);
+
+		if (occupiedUnits.length > 0) {
+			const occupiedNumbers = occupiedUnits.map((u) => u.unitNumber).join(', ');
+			throw new BadRequestException(
+				`Cannot delete property: ${occupiedUnits.length} unit(s) are still occupied (${occupiedNumbers}). ` +
+				`Please vacate all tenants before deleting this property.`,
+			);
+		}
+
+		const queryRunner = this.dataSource.createQueryRunner();
+		await queryRunner.connect();
+		await queryRunner.startTransaction();
+
+		try {
+			// Delete all units first (foreign key constraint)
+			if (units.length > 0) {
+				await queryRunner.manager.delete(Unit, { propertyId });
+			}
+
+			// Delete the property
+			await queryRunner.manager.delete(Property, { propertyId });
+
+			await queryRunner.commitTransaction();
+		} catch (err) {
+			await queryRunner.rollbackTransaction();
+			throw err;
+		} finally {
+			await queryRunner.release();
+		}
+
+		await this.auditService.createLog({
+			action: AuditAction.PROPERTY_DELETED,
+			performedBy: userId,
+			targetType: AuditTargetType.PROPERTY,
+			targetId: propertyId,
+			details: `Property "${property.name}" deleted with ${units.length} unit(s)`,
+			metadata: {
+				propertyId,
+				name: property.name,
+				location: property.location,
+				unitsDeleted: units.length,
+			},
+		});
 	}
 }

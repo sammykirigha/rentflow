@@ -8,6 +8,7 @@ import {
 	Body,
 	ClassSerializerInterceptor,
 	Controller,
+	Delete,
 	Get,
 	Param,
 	ParseBoolPipe,
@@ -89,5 +90,19 @@ export class PropertiesController {
 	@ApiResponse({ status: 404, description: 'Property not found' })
 	async getPropertyUnits(@Param('propertyId') propertyId: string) {
 		return await this.propertiesService.getPropertyUnits(propertyId);
+	}
+
+	@Delete(':propertyId')
+	@RequirePermissions(Permission(PermissionResource.PROPERTIES, PermissionAction.DELETE))
+	@ApiOperation({ summary: 'Delete a property and all its units' })
+	@ApiResponse({ status: 200, description: 'Property deleted successfully' })
+	@ApiResponse({ status: 400, description: 'Property has occupied units' })
+	@ApiResponse({ status: 404, description: 'Property not found' })
+	async delete(
+		@Param('propertyId') propertyId: string,
+		@CurrentUser() user: JwtPayload,
+	) {
+		await this.propertiesService.delete(propertyId, user.sub);
+		return { message: 'Property deleted successfully' };
 	}
 }

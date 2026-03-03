@@ -18,6 +18,9 @@ export const propertiesApi = {
     const response = await api.patch(`/properties/${propertyId}`, data);
     return response.data;
   },
+  delete: async (propertyId: string): Promise<void> => {
+    await api.delete(`/properties/${propertyId}`);
+  },
 };
 
 export const unitsApi = {

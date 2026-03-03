@@ -23,10 +23,13 @@ import {
   PlusOutlined,
   HomeOutlined,
   EditOutlined,
+  DeleteOutlined,
+  ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { propertiesApi, unitsApi } from '@/lib/api/properties.api';
+import { parseError } from '@/lib/api/parseError';
 import { formatKES } from '@/lib/format-kes';
 import type { Property, Unit, CreateUnitInput } from '@/types/properties';
 import { UnitType, UNIT_TYPE_LABELS } from '@/types/properties';
@@ -38,7 +41,7 @@ const { Title, Text } = Typography;
 export default function PropertyDetailPage() {
   const { propertyId } = useParams<{ propertyId: string }>();
   const router = useRouter();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
   const { isAuthenticated } = useAuth();
 
@@ -109,6 +112,41 @@ export default function PropertyDetailPage() {
       message.error('Failed to update unit');
     },
   });
+
+  const deletePropertyMutation = useMutation({
+    mutationFn: () => propertiesApi.delete(propertyId),
+    onSuccess: () => {
+      message.success('Property deleted successfully');
+      queryClient.invalidateQueries({ queryKey: ['properties'] });
+      router.push('/dashboard/properties');
+    },
+    onError: (error) => {
+      message.error(parseError(error, 'Failed to delete property'));
+    },
+  });
+
+  const handleDeleteProperty = () => {
+    modal.confirm({
+      title: 'Delete Property',
+      icon: <ExclamationCircleOutlined />,
+      content: (
+        <div>
+          <p>Are you sure you want to delete <strong>{property?.name}</strong>?</p>
+          <p>This will permanently remove the property and all its {units.length} unit(s). This action cannot be undone.</p>
+          {occupiedCount > 0 && (
+            <p style={{ color: '#ff4d4f' }}>
+              <strong>Warning:</strong> {occupiedCount} unit(s) are currently occupied. You must vacate all tenants before deleting.
+            </p>
+          )}
+        </div>
+      ),
+      okText: 'Delete',
+      okType: 'danger',
+      cancelText: 'Cancel',
+      okButtonProps: { disabled: occupiedCount > 0 },
+      onOk: () => deletePropertyMutation.mutateAsync(),
+    });
+  };
 
   const handleAddUnit = async () => {
     try {
@@ -258,9 +296,19 @@ export default function PropertyDetailPage() {
             {property.isActive ? 'Active' : 'Inactive'}
           </Tag>
         </Space>
-        <Button icon={<EditOutlined />} onClick={openEditModal}>
-          Edit Property
-        </Button>
+        <Space>
+          <Button icon={<EditOutlined />} onClick={openEditModal}>
+            Edit Property
+          </Button>
+          <Button
+            danger
+            icon={<DeleteOutlined />}
+            onClick={handleDeleteProperty}
+            loading={deletePropertyMutation.isPending}
+          >
+            Delete
+          </Button>
+        </Space>
       </div>
 
       {/* Property Details */}
