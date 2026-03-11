@@ -1,6 +1,5 @@
 import LoginForm from '@/components/forms/login-form';
 import type { Metadata } from 'next';
-import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Sign In | RentFlow',
@@ -28,12 +27,6 @@ export default function LoginPage() {
           <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>
             Sign in to RentFlow
           </h2>
-          <p style={{ color: '#666', marginTop: 8 }}>
-            Or{' '}
-            <Link href="/register" style={{ color: '#1890ff' }}>
-              Create a new account
-            </Link>
-          </p>
         </div>
         <LoginForm />
       </div>
