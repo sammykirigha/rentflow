@@ -1,6 +1,5 @@
 import ForgotPasswordForm from '@/components/forms/ForgotPasswordForm';
 import type { Metadata } from 'next';
-import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Forgot Password | RentFlow',

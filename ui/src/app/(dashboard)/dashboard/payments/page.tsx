@@ -1,55 +1,55 @@
 "use client";
 
-import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import TenantReconcilePreview from '@/components/payments/TenantReconcilePreview';
+import { useAuth } from '@/contexts/AuthContext';
+import { mpesaApi } from '@/lib/api/mpesa.api';
+import { parseError } from '@/lib/api/parseError';
+import { paymentsApi } from '@/lib/api/payments.api';
+import { propertiesApi } from '@/lib/api/properties.api';
+import { tenantsApi } from '@/lib/api/tenants.api';
 import {
-  Typography,
-  Table,
+  PAYMENT_METHOD_COLOR,
+  PAYMENT_METHOD_LABEL,
+  PAYMENT_STATUS_COLOR,
+  PAYMENT_STATUS_LABEL,
+} from '@/lib/constants/status-maps';
+import { downloadCsv, type CsvColumn } from '@/lib/csv-export';
+import { formatKES } from '@/lib/format-kes';
+import type { Payment, PaymentMethod, PaymentStatus, RecordPaymentInput } from '@/types/payments';
+import type { Property } from '@/types/properties';
+import type { Tenant } from '@/types/tenants';
+import {
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  DollarOutlined,
+  ExportOutlined,
+  LoadingOutlined,
+  MobileOutlined,
+  PlusOutlined,
+  WarningOutlined,
+} from '@ant-design/icons';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  App,
+  Badge,
   Button,
-  Tag,
-  Modal,
+  Card,
   Form,
   Input,
   InputNumber,
-  Select,
-  Card,
-  App,
-  Tabs,
-  Badge,
-  Space,
+  Modal,
   Result,
+  Select,
+  Space,
   Spin,
+  Table,
+  Tabs,
+  Tag,
+  Typography,
 } from 'antd';
-import {
-  PlusOutlined,
-  DollarOutlined,
-  WarningOutlined,
-  ExportOutlined,
-  MobileOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  LoadingOutlined,
-} from '@ant-design/icons';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '@/contexts/AuthContext';
-import { mpesaApi } from '@/lib/api/mpesa.api';
-import { paymentsApi } from '@/lib/api/payments.api';
-import { tenantsApi } from '@/lib/api/tenants.api';
-import { propertiesApi } from '@/lib/api/properties.api';
-import { parseError } from '@/lib/api/parseError';
-import { formatKES } from '@/lib/format-kes';
-import {
-  PAYMENT_STATUS_COLOR,
-  PAYMENT_STATUS_LABEL,
-  PAYMENT_METHOD_LABEL,
-  PAYMENT_METHOD_COLOR,
-} from '@/lib/constants/status-maps';
-import TenantReconcilePreview from '@/components/payments/TenantReconcilePreview';
-import type { Payment, RecordPaymentInput, PaymentMethod, PaymentStatus } from '@/types/payments';
-import type { Tenant } from '@/types/tenants';
-import type { Property } from '@/types/properties';
 import type { ColumnsType } from 'antd/es/table';
-import { downloadCsv, type CsvColumn } from '@/lib/csv-export';
 import dayjs from 'dayjs';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const { Title, Text } = Typography;
 
@@ -272,17 +272,14 @@ export default function PaymentsPage() {
 
       setStkState('waiting');
       pollStkStatus(result.paymentId, 0);
-    } catch (err: any) {
-      if (err?.errorFields) {
+    } catch (err) {
+      const error = err as Record<string, unknown>;
+      if (error?.errorFields) {
         // Form validation error — stay idle
         return;
       }
       setStkState('failed');
-      const errorMsg =
-        err?.response?.data?.message ||
-        err?.response?.data?.error?.message ||
-        'Failed to initiate M-Pesa payment. Please try again.';
-      setStkError(errorMsg);
+      setStkError(parseError(err, 'Failed to initiate M-Pesa payment. Please try again.'));
     }
   };
 

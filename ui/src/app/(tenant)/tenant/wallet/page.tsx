@@ -166,11 +166,15 @@ export default function TenantWalletPage() {
 
       // Start polling for payment status
       pollStkStatus(result.paymentId, 0);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setStkState("failed");
+      const error = err as Record<string, unknown>;
+      const axiosError = error?.response as Record<string, unknown> | undefined;
+      const axiosData = axiosError?.data as Record<string, unknown> | undefined;
+      const nestedError = axiosData?.error as Record<string, unknown> | undefined;
       const errorMsg =
-        err?.response?.data?.message ||
-        err?.response?.data?.error?.message ||
+        (axiosData?.message as string) ||
+        (nestedError?.message as string) ||
         "Failed to initiate M-Pesa payment. Please try again.";
       setStkError(errorMsg);
     }

@@ -397,6 +397,7 @@ export default function TenantsPage() {
               min={0}
               max={10000000}
               formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               parser={(value) => Number(value?.replace(/,/g, '') || 0) as any}
             />
           </Form.Item>

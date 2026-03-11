@@ -18,7 +18,7 @@ export class InitialUsersSeed {
             {
                 firstName: "Samuel",
                 lastName: "Kirigha",
-                email: "landlord@rentflow.co.ke",
+                email: "dkirigha18+landlord@gmail.com",
                 emailVerified: true,
                 password: "Password@254",
                 status: UserStatus.ACTIVE,
@@ -29,7 +29,7 @@ export class InitialUsersSeed {
             {
                 firstName: "Jane",
                 lastName: "Wanjiku",
-                email: "manager@rentflow.co.ke",
+                email: "dkirigha18+manager@gmail.com",
                 emailVerified: true,
                 password: "Password@254",
                 status: UserStatus.ACTIVE,
@@ -40,7 +40,7 @@ export class InitialUsersSeed {
             {
                 firstName: "John",
                 lastName: "Kamau",
-                email: "tenant@rentflow.co.ke",
+                email: "dkirigha18+tenant@gmail.com",
                 emailVerified: true,
                 password: "Password@254",
                 status: UserStatus.ACTIVE,
