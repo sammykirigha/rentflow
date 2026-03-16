@@ -1,17 +1,17 @@
 import {
-  WalletOutlined,
-  FileTextOutlined,
   AlertOutlined,
-  MessageOutlined,
-  ToolOutlined,
-  DashboardOutlined,
-  MobileOutlined,
   BankOutlined,
-  CreditCardOutlined,
   CheckCircleOutlined,
-  SafetyOutlined,
   CloudOutlined,
+  CreditCardOutlined,
   CustomerServiceOutlined,
+  DashboardOutlined,
+  FileTextOutlined,
+  MessageOutlined,
+  MobileOutlined,
+  SafetyOutlined,
+  ToolOutlined,
+  WalletOutlined,
 } from '@ant-design/icons';
 
 // ─── Features ───────────────────────────────────────────
@@ -417,8 +417,8 @@ export const footerLinks: FooterLinkGroup[] = [
   {
     title: 'Contact',
     links: [
-      { label: 'info@rentflow.co.ke', href: 'mailto:info@rentflow.co.ke' },
-      { label: '+254 700 000 000', href: 'tel:+254700000000' },
+      { label: 'info@mcdorcis.com', href: 'info@mcdorcis.com' },
+      { label: '+254 704093039', href: 'tel:+254704093039' },
       { label: 'Nairobi, Kenya', href: '#' },
     ],
   },
