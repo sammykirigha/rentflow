@@ -24,6 +24,7 @@ async function bootstrap() {
 	const allowedOrigins = [
 		'http://localhost:3001',
 		'http://localhost:3000',
+		'https://rentflow.manosiventures.com'
 	];
 	const frontendUrl = configService.get<string>('FRONTEND_URL');
 	if (frontendUrl) {
