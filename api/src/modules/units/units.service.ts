@@ -98,7 +98,7 @@ export class UnitsService {
 
 	async findByProperty(
 		propertyId: string,
-		{ page = 1, limit = 10 }: { page: number; limit: number },
+		{ page = 1, limit = 20 }: { page: number; limit: number },
 	): Promise<{
 		data: Unit[];
 		pagination: {
