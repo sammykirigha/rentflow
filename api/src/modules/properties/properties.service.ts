@@ -56,7 +56,7 @@ export class PropertiesService {
 		return property;
 	}
 
-	async findAll({ page = 1, limit = 10, search, isActive }: {
+	async findAll({ page = 1, limit = 20, search, isActive }: {
 		page: number;
 		limit: number;
 		search?: string;
