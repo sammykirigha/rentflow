@@ -13,6 +13,7 @@ import {
   Card,
   App,
   Space,
+  Grid,
 } from 'antd';
 import { PlusOutlined, EyeOutlined, HomeOutlined, ExportOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -24,7 +25,8 @@ import type { Property, CreatePropertyInput } from '@/types/properties';
 import type { ColumnsType } from 'antd/es/table';
 import { downloadCsv, type CsvColumn } from '@/lib/csv-export';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
+const { useBreakpoint } = Grid;
 
 export default function PropertiesPage() {
   const { message } = App.useApp();
@@ -34,6 +36,8 @@ export default function PropertiesPage() {
   const [pageSize, setPageSize] = useState(10);
   const [exporting, setExporting] = useState(false);
   const [form] = Form.useForm<CreatePropertyInput>();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
 
   const { isAuthenticated } = useAuth();
 
@@ -122,64 +126,123 @@ export default function PropertiesPage() {
     },
   ];
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const all = await propertiesApi.getAll({ limit: 10000 });
+      const allData: Property[] = Array.isArray(all?.data) ? all.data : [];
+      const csvColumns: CsvColumn<Property>[] = [
+        { header: 'Name', accessor: (r) => r.name },
+        { header: 'Location', accessor: (r) => r.location },
+        { header: 'Total Units', accessor: (r) => r.totalUnits },
+        { header: 'Paybill', accessor: (r) => r.paybillNumber || '' },
+        { header: 'Status', accessor: (r) => r.isActive ? 'Active' : 'Inactive' },
+      ];
+      downloadCsv(allData, csvColumns, 'properties.csv');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const renderMobilePropertyCard = (property: Property) => (
+    <Link key={property.propertyId} href={`/dashboard/properties/${property.propertyId}`} style={{ textDecoration: 'none' }}>
+      <Card size="small" style={{ marginBottom: 8, cursor: 'pointer' }} styles={{ body: { padding: '12px 14px' } }} hoverable>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <Text strong style={{ fontSize: 14, display: 'block' }}>{property.name}</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>{property.location}</Text>
+          </div>
+          <Tag color={property.isActive ? 'green' : 'red'} style={{ margin: 0 }}>
+            {property.isActive ? 'Active' : 'Inactive'}
+          </Tag>
+        </div>
+        <div style={{ display: 'flex', gap: 16, marginTop: 8, paddingTop: 8, borderTop: '1px solid #f5f5f5' }}>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            <HomeOutlined style={{ marginRight: 4 }} />{property.totalUnits} units
+          </Text>
+          {property.paybillNumber && (
+            <Text type="secondary" style={{ fontSize: 12 }}>Paybill: {property.paybillNumber}</Text>
+          )}
+        </div>
+      </Card>
+    </Link>
+  );
+
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Title level={4} style={{ margin: 0 }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: isMobile ? 'flex-start' : 'center',
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: isMobile ? 8 : 0,
+        marginBottom: isMobile ? 12 : 24,
+      }}>
+        <Title level={isMobile ? 5 : 4} style={{ margin: 0 }}>
           <HomeOutlined style={{ marginRight: 8 }} />
           Properties
         </Title>
         <Space>
           <Button
             icon={<ExportOutlined />}
-            onClick={async () => {
-              setExporting(true);
-              try {
-                const all = await propertiesApi.getAll({ limit: 10000 });
-                const allData: Property[] = Array.isArray(all?.data) ? all.data : [];
-                const csvColumns: CsvColumn<Property>[] = [
-                  { header: 'Name', accessor: (r) => r.name },
-                  { header: 'Location', accessor: (r) => r.location },
-                  { header: 'Total Units', accessor: (r) => r.totalUnits },
-                  { header: 'Paybill', accessor: (r) => r.paybillNumber || '' },
-                  { header: 'Status', accessor: (r) => r.isActive ? 'Active' : 'Inactive' },
-                ];
-                downloadCsv(allData, csvColumns, 'properties.csv');
-              } finally {
-                setExporting(false);
-              }
-            }}
+            onClick={handleExport}
             loading={exporting}
             disabled={isLoading || properties.length === 0}
+            size={isMobile ? 'small' : 'middle'}
           >
-            Export CSV
+            {!isMobile && 'Export CSV'}
           </Button>
           <Button
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => setIsModalOpen(true)}
+            size={isMobile ? 'small' : 'middle'}
           >
             Add Property
           </Button>
         </Space>
       </div>
 
-      <Card>
-        <Table<Property>
-          columns={columns}
-          dataSource={properties}
-          loading={isLoading}
-          rowKey="propertyId"
-          pagination={{
-            current: page,
-            pageSize,
-            total: pagination?.total || 0,
-            showSizeChanger: true,
-            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} properties`,
-            onChange: (p, ps) => { setPage(p); setPageSize(ps); },
-          }}
-        />
-      </Card>
+      {isMobile ? (
+        <div>
+          {isLoading ? (
+            <div style={{ textAlign: 'center', padding: 40 }}><Text type="secondary">Loading...</Text></div>
+          ) : properties.length === 0 ? (
+            <Card><Text type="secondary">No properties yet. Create your first property.</Text></Card>
+          ) : (
+            <>
+              {properties.map(renderMobilePropertyCard)}
+              <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  Showing {properties.length} of {pagination?.total || 0}
+                </Text>
+                {(pagination?.total || 0) > properties.length && (
+                  <div style={{ marginTop: 8 }}>
+                    <Button size="small" onClick={() => setPageSize(pageSize + 10)}>Load More</Button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <Card>
+          <Table<Property>
+            columns={columns}
+            dataSource={properties}
+            loading={isLoading}
+            rowKey="propertyId"
+            pagination={{
+              current: page,
+              pageSize,
+              total: pagination?.total || 0,
+              showSizeChanger: true,
+              showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} properties`,
+              onChange: (p, ps) => { setPage(p); setPageSize(ps); },
+            }}
+          />
+        </Card>
+      )}
 
       <Modal
         title="Add Property"

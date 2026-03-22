@@ -17,6 +17,7 @@ export enum UnitType {
   ONE_BEDROOM = 'one_bedroom',
   TWO_BEDROOM = 'two_bedroom',
   THREE_BEDROOM = 'three_bedroom',
+  SHOP = 'shop',
 }
 
 export const UNIT_TYPE_LABELS: Record<UnitType, string> = {
@@ -25,6 +26,7 @@ export const UNIT_TYPE_LABELS: Record<UnitType, string> = {
   [UnitType.ONE_BEDROOM]: '1 Bedroom',
   [UnitType.TWO_BEDROOM]: '2 Bedroom',
   [UnitType.THREE_BEDROOM]: '3 Bedroom',
+  [UnitType.SHOP]: 'Shop',
 };
 
 export interface Unit {

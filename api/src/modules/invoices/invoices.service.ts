@@ -794,4 +794,69 @@ export class InvoicesService {
 
 		return this.findOne(invoiceId);
 	}
+
+	async disputeInvoice(
+		invoiceId: string,
+		reason: string,
+		comment: string,
+		userId: string,
+	): Promise<{ message: string }> {
+		const invoice = await this.findOne(invoiceId);
+
+		// Create a notification for the admin about the dispute
+		const reasonLabels: Record<string, string> = {
+			incorrect_rent: 'Incorrect rent amount',
+			wrong_utilities: 'Wrong water/electricity charges',
+			already_paid: 'Already paid (not reflected)',
+			unfair_penalty: 'Penalty applied unfairly',
+			duplicate: 'Duplicate invoice',
+			other: 'Other',
+		};
+
+		const tenant = await this.tenantRepository.findOne({
+			where: { tenantId: invoice.tenantId },
+			relations: ['user', 'unit', 'unit.property'],
+		});
+
+		const tenantName = tenant?.user ? `${tenant.user.firstName} ${tenant.user.lastName}` : 'Unknown';
+		const unitNumber = tenant?.unit?.unitNumber || 'N/A';
+
+		const disputeMessage =
+			`Invoice Dispute: ${invoice.invoiceNumber}\n` +
+			`Tenant: ${tenantName} (Unit ${unitNumber})\n` +
+			`Reason: ${reasonLabels[reason] || reason}\n` +
+			`Details: ${comment}`;
+
+		// Save as a notification record for audit trail
+		const notification = this.notificationRepository.create({
+			tenantId: invoice.tenantId,
+			invoiceId: invoice.invoiceId,
+			type: NotificationType.GENERAL,
+			channel: NotificationChannel.EMAIL,
+			subject: `Invoice Dispute: ${invoice.invoiceNumber}`,
+			message: disputeMessage,
+			status: NotificationStatus.PENDING,
+		});
+		await this.notificationRepository.save(notification);
+
+		await this.auditService.createLog({
+			action: AuditAction.INVOICE_DISPUTED,
+			performedBy: userId,
+			targetType: AuditTargetType.INVOICE,
+			targetId: invoiceId,
+			details: `Tenant disputed invoice ${invoice.invoiceNumber}: ${reasonLabels[reason] || reason}`,
+			metadata: {
+				invoiceId,
+				invoiceNumber: invoice.invoiceNumber,
+				reason,
+				comment,
+				tenantName,
+				unitNumber,
+			},
+		});
+
+		this.logger.log(`Invoice ${invoice.invoiceNumber} disputed by ${tenantName}: ${reason}`);
+
+		return { message: 'Dispute submitted successfully' };
+	}
 }

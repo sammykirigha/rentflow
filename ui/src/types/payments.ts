@@ -77,6 +77,7 @@ export interface StkPushResponse {
 
 export interface StkStatusResponse {
   status: PaymentStatus;
+  resultCode?: string;
   resultDesc?: string;
 }
 

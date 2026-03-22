@@ -1,6 +1,8 @@
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { FileResponse } from '@/common/interfaces/file-response.interface';
 import {
+	BadRequestException,
+	Body,
 	Controller,
 	Get,
 	Header,
@@ -62,5 +64,32 @@ export class StorageController {
 	async uploadFile(@UploadedFile() file?: Express.Multer.File,
 	) {
 		return await this.s3Service.uploadFile(file);
+	}
+
+	@Post('presigned-upload')
+	@ApiExcludeEndpoint()
+	async getPresignedUploadUrl(
+		@Body() body: { filename: string; contentType: string },
+	) {
+		if (!body.filename || !body.contentType) {
+			throw new BadRequestException('filename and contentType are required');
+		}
+
+		const allowed = [
+			'application/pdf',
+			'image/jpeg',
+			'image/png',
+			'image/jpg',
+		];
+
+		if (!allowed.includes(body.contentType)) {
+			throw new BadRequestException('File type not allowed. Accepted: PDF, JPEG, PNG');
+		}
+
+		return this.s3Service.getPresignedUploadUrl(
+			body.filename,
+			body.contentType,
+			'documents',
+		);
 	}
 }

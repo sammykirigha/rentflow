@@ -29,6 +29,7 @@ export enum AuditAction {
 	INVOICE_CANCELLED = 'invoice_cancelled',
 	INVOICE_AUTO_SETTLED = 'invoice_auto_settled',
 	INVOICE_PARTIALLY_SETTLED = 'invoice_partially_settled',
+	INVOICE_DISPUTED = 'invoice_disputed',
 
 	// Payment actions
 	PAYMENT_RECEIVED = 'payment_received',

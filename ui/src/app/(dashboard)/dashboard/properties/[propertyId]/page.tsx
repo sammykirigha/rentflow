@@ -17,6 +17,7 @@ import {
   Space,
   Spin,
   Empty,
+  Grid,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -37,6 +38,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { useParams, useRouter } from 'next/navigation';
 
 const { Title, Text } = Typography;
+const { useBreakpoint } = Grid;
 
 export default function PropertyDetailPage() {
   const { propertyId } = useParams<{ propertyId: string }>();
@@ -44,6 +46,8 @@ export default function PropertyDetailPage() {
   const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
   const { isAuthenticated } = useAuth();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
 
   const [isAddUnitOpen, setIsAddUnitOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -61,7 +65,7 @@ export default function PropertyDetailPage() {
 
   const { data: unitsData, isLoading: isLoadingUnits } = useQuery({
     queryKey: ['units', propertyId],
-    queryFn: () => unitsApi.getByProperty(propertyId),
+    queryFn: () => unitsApi.getByProperty(propertyId, { page: 1, limit: 1000 }),
     enabled: isAuthenticated && !!propertyId,
   });
 
@@ -280,16 +284,59 @@ export default function PropertyDetailPage() {
     );
   }
 
+  const renderMobileUnitCard = (unit: Unit) => (
+    <Card
+      key={unit.unitId}
+      size="small"
+      style={{ marginBottom: 8 }}
+      styles={{ body: { padding: '12px 14px' } }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <Text strong style={{ fontSize: 14, display: 'block' }}>{unit.unitNumber}</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {UNIT_TYPE_LABELS[unit.unitType] || unit.unitType}
+          </Text>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <Text strong style={{ fontSize: 14, display: 'block' }}>{formatKES(unit.rentAmount)}</Text>
+          <Tag color={unit.isOccupied ? 'blue' : 'green'} style={{ margin: 0, fontSize: 10 }}>
+            {unit.isOccupied ? 'Occupied' : 'Vacant'}
+          </Tag>
+        </div>
+      </div>
+      <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #f5f5f5', textAlign: 'right' }}>
+        <Button
+          type="link"
+          size="small"
+          icon={<EditOutlined />}
+          onClick={() => openEditUnitModal(unit)}
+          style={{ padding: 0 }}
+        >
+          Edit
+        </Button>
+      </div>
+    </Card>
+  );
+
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Space>
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: isMobile ? 'flex-start' : 'center',
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: isMobile ? 8 : 0,
+        marginBottom: isMobile ? 12 : 24,
+      }}>
+        <Space wrap>
           <Button
             icon={<ArrowLeftOutlined />}
             onClick={() => router.push('/dashboard/properties')}
+            size={isMobile ? 'small' : 'middle'}
           />
-          <Title level={4} style={{ margin: 0 }}>
-            <HomeOutlined style={{ marginRight: 8 }} />
+          <Title level={isMobile ? 5 : 4} style={{ margin: 0 }}>
             {property.name}
           </Title>
           <Tag color={property.isActive ? 'green' : 'red'}>
@@ -297,14 +344,15 @@ export default function PropertyDetailPage() {
           </Tag>
         </Space>
         <Space>
-          <Button icon={<EditOutlined />} onClick={openEditModal}>
-            Edit Property
+          <Button icon={<EditOutlined />} onClick={openEditModal} size={isMobile ? 'small' : 'middle'}>
+            {isMobile ? 'Edit' : 'Edit Property'}
           </Button>
           <Button
             danger
             icon={<DeleteOutlined />}
             onClick={handleDeleteProperty}
             loading={deletePropertyMutation.isPending}
+            size={isMobile ? 'small' : 'middle'}
           >
             Delete
           </Button>
@@ -312,8 +360,8 @@ export default function PropertyDetailPage() {
       </div>
 
       {/* Property Details */}
-      <Card style={{ marginBottom: 24 }}>
-        <Descriptions column={{ xs: 1, sm: 2, lg: 4 }}>
+      <Card style={{ marginBottom: isMobile ? 8 : 24 }} size={isMobile ? 'small' : 'default'}>
+        <Descriptions column={{ xs: 1, sm: 2, lg: 4 }} size={isMobile ? 'small' : 'default'}>
           <Descriptions.Item label="Location">{property.location}</Descriptions.Item>
           <Descriptions.Item label="Address">{property.address || '-'}</Descriptions.Item>
           <Descriptions.Item label="Paybill Number">{property.paybillNumber || '-'}</Descriptions.Item>
@@ -322,50 +370,67 @@ export default function PropertyDetailPage() {
       </Card>
 
       {/* Unit Stats */}
-      <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
-        <Card style={{ flex: 1, textAlign: 'center' }}>
-          <Text type="secondary">Total Units</Text>
-          <Title level={3} style={{ margin: '4px 0 0' }}>{units.length}</Title>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr 1fr',
+        gap: isMobile ? 8 : 16,
+        marginBottom: isMobile ? 8 : 24,
+      }}>
+        <Card size="small" styles={isMobile ? { body: { padding: 10 } } : undefined} style={{ textAlign: 'center' }}>
+          <Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>Total Units</Text>
+          <Title level={isMobile ? 4 : 3} style={{ margin: '4px 0 0' }}>{units.length || property.totalUnits}</Title>
         </Card>
-        <Card style={{ flex: 1, textAlign: 'center' }}>
-          <Text type="secondary">Occupied</Text>
-          <Title level={3} style={{ margin: '4px 0 0', color: '#1890ff' }}>{occupiedCount}</Title>
+        <Card size="small" styles={isMobile ? { body: { padding: 10 } } : undefined} style={{ textAlign: 'center' }}>
+          <Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>Occupied</Text>
+          <Title level={isMobile ? 4 : 3} style={{ margin: '4px 0 0', color: '#1890ff' }}>{occupiedCount}</Title>
         </Card>
-        <Card style={{ flex: 1, textAlign: 'center' }}>
-          <Text type="secondary">Vacant</Text>
-          <Title level={3} style={{ margin: '4px 0 0', color: '#52c41a' }}>{vacantCount}</Title>
+        <Card size="small" styles={isMobile ? { body: { padding: 10 } } : undefined} style={{ textAlign: 'center' }}>
+          <Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>Vacant</Text>
+          <Title level={isMobile ? 4 : 3} style={{ margin: '4px 0 0', color: '#52c41a' }}>{vacantCount}</Title>
         </Card>
-        <Card style={{ flex: 1, textAlign: 'center' }}>
-          <Text type="secondary">Total Rent Potential</Text>
-          <Title level={3} style={{ margin: '4px 0 0' }}>{formatKES(totalRent)}</Title>
+        <Card size="small" styles={isMobile ? { body: { padding: 10 } } : undefined} style={{ textAlign: 'center' }}>
+          <Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>Rent Potential</Text>
+          <Title level={isMobile ? 5 : 3} style={{ margin: '4px 0 0' }}>{formatKES(totalRent)}</Title>
         </Card>
       </div>
 
-      {/* Units Table */}
+      {/* Units */}
       <Card
-        title="Units"
+        title={<Text strong style={{ fontSize: isMobile ? 14 : 16 }}>Units</Text>}
+        size={isMobile ? 'small' : 'default'}
         extra={
           <Button
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => setIsAddUnitOpen(true)}
+            size={isMobile ? 'small' : 'middle'}
           >
             Add Unit
           </Button>
         }
       >
-        <Table<Unit>
-          columns={unitColumns}
-          dataSource={units}
-          loading={isLoadingUnits}
-          rowKey="unitId"
-          pagination={{
-            defaultPageSize: 10,
-            showSizeChanger: true,
-            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} units`,
-          }}
-          locale={{ emptyText: <Empty description="No units yet. Add your first unit." /> }}
-        />
+        {isMobile ? (
+          isLoadingUnits ? (
+            <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+          ) : units.length === 0 ? (
+            <Empty description="No units yet. Add your first unit." />
+          ) : (
+            units.map(renderMobileUnitCard)
+          )
+        ) : (
+          <Table<Unit>
+            columns={unitColumns}
+            dataSource={units}
+            loading={isLoadingUnits}
+            rowKey="unitId"
+            pagination={{
+              defaultPageSize: 10,
+              showSizeChanger: true,
+              showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} units`,
+            }}
+            locale={{ emptyText: <Empty description="No units yet. Add your first unit." /> }}
+          />
+        )}
       </Card>
 
       {/* Add Unit Modal */}

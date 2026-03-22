@@ -16,6 +16,7 @@ import {
   App,
   Space,
   Radio,
+  Grid,
 } from 'antd';
 import {
   PlusOutlined,
@@ -38,7 +39,8 @@ import type { ColumnsType } from 'antd/es/table';
 import { downloadCsv, type CsvColumn } from '@/lib/csv-export';
 import dayjs from 'dayjs';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
+const { useBreakpoint } = Grid;
 
 const STATUS_COLOR_MAP: Record<string, string> = {
   paid: 'green',
@@ -75,6 +77,8 @@ export default function InvoicesPage() {
   const [form] = Form.useForm();
 
   const { isAuthenticated } = useAuth();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
 
   const [recipientMode, setRecipientMode] = useState<'tenant' | 'custom'>('tenant');
 
@@ -266,85 +270,149 @@ export default function InvoicesPage() {
     },
   ];
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const all = await invoicesApi.getAll({ limit: 10000, status: statusFilter });
+      const allData: Invoice[] = Array.isArray(all?.data) ? all.data : [];
+      const csvColumns: CsvColumn<Invoice>[] = [
+        { header: 'Invoice #', accessor: (r) => r.invoiceNumber },
+        { header: 'Type', accessor: (r) => INVOICE_TYPE_LABELS[r.invoiceType] || r.invoiceType },
+        { header: 'Recipient', accessor: (r) => getRecipientDisplay(r) },
+        { header: 'Billing Month', accessor: (r) => r.billingMonth ? dayjs(r.billingMonth).format('MMM YYYY') : '' },
+        { header: 'Total Amount', accessor: (r) => Number(r.totalAmount) },
+        { header: 'Paid', accessor: (r) => Number(r.amountPaid) },
+        { header: 'Balance', accessor: (r) => Number(r.balanceDue) },
+        { header: 'Status', accessor: (r) => STATUS_LABEL_MAP[r.status] || r.status },
+        { header: 'Due Date', accessor: (r) => r.dueDate ? dayjs(r.dueDate).format('DD MMM YYYY') : '' },
+      ];
+      downloadCsv(allData, csvColumns, 'invoices.csv');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const renderMobileInvoiceCard = (invoice: Invoice) => (
+    <Link key={invoice.invoiceId} href={`/dashboard/invoices/${invoice.invoiceId}`} style={{ textDecoration: 'none' }}>
+      <Card size="small" style={{ marginBottom: 8, cursor: 'pointer' }} styles={{ body: { padding: '12px 14px' } }} hoverable>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <Text strong style={{ fontSize: 13, display: 'block' }}>{invoice.invoiceNumber}</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>{getRecipientDisplay(invoice)}</Text>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <Text strong style={{ fontSize: 14, display: 'block' }}>{formatKES(invoice.totalAmount)}</Text>
+            <Tag color={STATUS_COLOR_MAP[invoice.status] || 'default'} style={{ margin: 0, fontSize: 10 }}>
+              {STATUS_LABEL_MAP[invoice.status] || invoice.status}
+            </Tag>
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTop: '1px solid #f5f5f5' }}>
+          <Text type="secondary" style={{ fontSize: 11 }}>
+            {invoice.billingMonth ? dayjs(invoice.billingMonth).format('MMM YYYY') : '-'}
+            {invoice.dueDate && ` · Due ${dayjs(invoice.dueDate).format('DD MMM')}`}
+          </Text>
+          {Number(invoice.balanceDue) > 0 && (
+            <Text type="danger" style={{ fontSize: 12, fontWeight: 600 }}>Bal: {formatKES(invoice.balanceDue)}</Text>
+          )}
+        </div>
+      </Card>
+    </Link>
+  );
+
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Title level={4} style={{ margin: 0 }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: isMobile ? 'flex-start' : 'center',
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: isMobile ? 8 : 0,
+        marginBottom: isMobile ? 12 : 24,
+      }}>
+        <Title level={isMobile ? 5 : 4} style={{ margin: 0 }}>
           <FileTextOutlined style={{ marginRight: 8 }} />
           Invoices
         </Title>
         <Space>
           <Button
             icon={<ExportOutlined />}
-            onClick={async () => {
-              setExporting(true);
-              try {
-                const all = await invoicesApi.getAll({ limit: 10000, status: statusFilter });
-                const allData: Invoice[] = Array.isArray(all?.data) ? all.data : [];
-                const csvColumns: CsvColumn<Invoice>[] = [
-                  { header: 'Invoice #', accessor: (r) => r.invoiceNumber },
-                  { header: 'Type', accessor: (r) => INVOICE_TYPE_LABELS[r.invoiceType] || r.invoiceType },
-                  { header: 'Recipient', accessor: (r) => getRecipientDisplay(r) },
-                  { header: 'Billing Month', accessor: (r) => r.billingMonth ? dayjs(r.billingMonth).format('MMM YYYY') : '' },
-                  { header: 'Total Amount', accessor: (r) => Number(r.totalAmount) },
-                  { header: 'Paid', accessor: (r) => Number(r.amountPaid) },
-                  { header: 'Balance', accessor: (r) => Number(r.balanceDue) },
-                  { header: 'Status', accessor: (r) => STATUS_LABEL_MAP[r.status] || r.status },
-                  { header: 'Due Date', accessor: (r) => r.dueDate ? dayjs(r.dueDate).format('DD MMM YYYY') : '' },
-                ];
-                downloadCsv(allData, csvColumns, 'invoices.csv');
-              } finally {
-                setExporting(false);
-              }
-            }}
+            onClick={handleExport}
             loading={exporting}
             disabled={isLoading || invoices.length === 0}
+            size={isMobile ? 'small' : 'middle'}
           >
-            Export CSV
+            {!isMobile && 'Export CSV'}
           </Button>
           <Button
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => setIsModalOpen(true)}
+            size={isMobile ? 'small' : 'middle'}
           >
-            Create Invoice
+            {isMobile ? 'Create' : 'Create Invoice'}
           </Button>
         </Space>
       </div>
 
-      <Card>
-        <div style={{ marginBottom: 16 }}>
-          <Select
-            placeholder="Filter by status"
-            allowClear
-            value={statusFilter}
-            onChange={(value) => { setStatusFilter(value); setPage(1); }}
-            style={{ width: 200 }}
-            options={[
-              { label: 'Paid', value: 'paid' },
-              { label: 'Partially Paid', value: 'partially_paid' },
-              { label: 'Unpaid', value: 'unpaid' },
-              { label: 'Overdue', value: 'overdue' },
-              { label: 'Cancelled', value: 'cancelled' },
-            ]}
-          />
-        </div>
-
-        <Table<Invoice>
-          columns={columns}
-          dataSource={invoices}
-          loading={isLoading}
-          rowKey="invoiceId"
-          pagination={{
-            current: page,
-            pageSize,
-            total: pagination?.total || 0,
-            showSizeChanger: true,
-            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} invoices`,
-            onChange: (p, ps) => { setPage(p); setPageSize(ps); },
-          }}
+      <div style={{ marginBottom: isMobile ? 8 : 16 }}>
+        <Select
+          placeholder="Filter by status"
+          allowClear
+          value={statusFilter}
+          onChange={(value) => { setStatusFilter(value); setPage(1); }}
+          style={{ width: isMobile ? '100%' : 200 }}
+          size={isMobile ? 'middle' : 'large'}
+          options={[
+            { label: 'Paid', value: 'paid' },
+            { label: 'Partially Paid', value: 'partially_paid' },
+            { label: 'Unpaid', value: 'unpaid' },
+            { label: 'Overdue', value: 'overdue' },
+            { label: 'Cancelled', value: 'cancelled' },
+          ]}
         />
-      </Card>
+      </div>
+
+      {isMobile ? (
+        <div>
+          {isLoading ? (
+            <div style={{ textAlign: 'center', padding: 40 }}><Text type="secondary">Loading...</Text></div>
+          ) : invoices.length === 0 ? (
+            <Card><Text type="secondary">No invoices found.</Text></Card>
+          ) : (
+            <>
+              {invoices.map(renderMobileInvoiceCard)}
+              <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  Showing {invoices.length} of {pagination?.total || 0}
+                </Text>
+                {(pagination?.total || 0) > invoices.length && (
+                  <div style={{ marginTop: 8 }}>
+                    <Button size="small" onClick={() => setPageSize(pageSize + 10)}>Load More</Button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <Card>
+          <Table<Invoice>
+            columns={columns}
+            dataSource={invoices}
+            loading={isLoading}
+            rowKey="invoiceId"
+            pagination={{
+              current: page,
+              pageSize,
+              total: pagination?.total || 0,
+              showSizeChanger: true,
+              showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} invoices`,
+              onChange: (p, ps) => { setPage(p); setPageSize(ps); },
+            }}
+          />
+        </Card>
+      )}
 
       <Modal
         title="Create Invoice"

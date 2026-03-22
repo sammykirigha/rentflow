@@ -20,7 +20,10 @@ import {
   Empty,
   Tabs,
   Divider,
+  Upload,
+  Grid,
 } from 'antd';
+import type { RcFile } from 'antd/es/upload';
 import {
   ArrowLeftOutlined,
   UserOutlined,
@@ -32,6 +35,8 @@ import {
   SafetyOutlined,
   PlusOutlined,
   MinusCircleOutlined,
+  UploadOutlined,
+  LinkOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -40,6 +45,8 @@ import { invoicesApi } from '@/lib/api/invoices.api';
 import { paymentsApi, walletApi } from '@/lib/api/payments.api';
 import { propertiesApi, unitsApi } from '@/lib/api/properties.api';
 import { parseError } from '@/lib/api/parseError';
+import { uploadFileDirect } from '@/lib/api/upload.api';
+import { getFileUrl } from '@/lib/utils';
 import { formatKES } from '@/lib/format-kes';
 import {
   INVOICE_STATUS_COLOR,
@@ -59,6 +66,7 @@ import { useParams, useRouter } from 'next/navigation';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
+const { useBreakpoint } = Grid;
 
 const STATUS_COLOR_MAP: Record<string, string> = {
   active: 'green',
@@ -92,11 +100,19 @@ export default function TenantDetailPage() {
   const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
   const { isAuthenticated } = useAuth();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
 
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isRefundOpen, setIsRefundOpen] = useState(false);
   const [editFormStatus, setEditFormStatus] = useState<string | undefined>(undefined);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | undefined>(undefined);
+  const [editIdCopyKey, setEditIdCopyKey] = useState<string | undefined>(undefined);
+  const [editIdCopyName, setEditIdCopyName] = useState<string | undefined>(undefined);
+  const [editKraCertKey, setEditKraCertKey] = useState<string | undefined>(undefined);
+  const [editKraCertName, setEditKraCertName] = useState<string | undefined>(undefined);
+  const [uploadingEditIdCopy, setUploadingEditIdCopy] = useState(false);
+  const [uploadingEditKraCert, setUploadingEditKraCert] = useState(false);
   const [editForm] = Form.useForm();
   const [refundForm] = Form.useForm();
 
@@ -148,7 +164,7 @@ export default function TenantDetailPage() {
   const walletTxns: WalletTransaction[] = Array.isArray(walletTxnsRaw) ? walletTxnsRaw : [];
 
   const updateMutation = useMutation({
-    mutationFn: (values: Partial<{ leaseEnd: string; status: string; unitId: string }>) =>
+    mutationFn: (values: Partial<{ leaseEnd: string; status: string; unitId: string; name: string; email: string; phone: string; idNumber: string; idCopyKey: string; kraCertificateKey: string }>) =>
       tenantsApi.update(tenantId, values),
     onSuccess: () => {
       message.success('Tenant updated successfully');
@@ -158,6 +174,10 @@ export default function TenantDetailPage() {
       setIsEditOpen(false);
       setEditFormStatus(undefined);
       setSelectedPropertyId(undefined);
+      setEditIdCopyKey(undefined);
+      setEditIdCopyName(undefined);
+      setEditKraCertKey(undefined);
+      setEditKraCertName(undefined);
     },
     onError: (error) => {
       message.error(parseError(error, 'Failed to update tenant'));
@@ -227,13 +247,48 @@ export default function TenantDetailPage() {
     }
   };
 
+  const handleEditFileUpload = async (
+    file: RcFile,
+    setKey: (key: string | undefined) => void,
+    setName: (name: string | undefined) => void,
+    setUploading: (uploading: boolean) => void,
+    label: string,
+  ) => {
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      message.error('File must be smaller than 5MB');
+      return;
+    }
+    setUploading(true);
+    try {
+      const result = await uploadFileDirect(file);
+      if (result?.key) {
+        setKey(result.key);
+        setName(file.name);
+        message.success(`${label} uploaded successfully`);
+      } else {
+        message.error(`Failed to upload ${label}`);
+      }
+    } catch {
+      message.error(`Failed to upload ${label}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleEdit = async () => {
     try {
       const values = await editForm.validateFields();
-      const payload: Partial<{ leaseEnd: string; status: string; unitId: string }> = {};
+      const payload: Partial<{ leaseEnd: string; status: string; unitId: string; name: string; email: string; phone: string; idNumber: string; idCopyKey: string; kraCertificateKey: string }> = {};
       if (values.leaseEnd) payload.leaseEnd = values.leaseEnd.toISOString();
       if (values.status) payload.status = values.status;
       if (values.unitId) payload.unitId = values.unitId;
+      if (values.name) payload.name = values.name;
+      if (values.email) payload.email = values.email;
+      if (values.phone) payload.phone = values.phone;
+      if (values.idNumber !== undefined) payload.idNumber = values.idNumber || undefined;
+      if (editIdCopyKey !== undefined) payload.idCopyKey = editIdCopyKey;
+      if (editKraCertKey !== undefined) payload.kraCertificateKey = editKraCertKey;
       updateMutation.mutate(payload);
     } catch {
       // validation inline
@@ -242,11 +297,20 @@ export default function TenantDetailPage() {
 
   const openEditModal = () => {
     if (tenant) {
+      const fullNameValue = `${tenant.user?.firstName || ''} ${tenant.user?.lastName || ''}`.trim();
       editForm.setFieldsValue({
         status: tenant.status,
         leaseEnd: tenant.leaseEnd ? dayjs(tenant.leaseEnd) : undefined,
+        name: fullNameValue,
+        email: tenant.user?.email || '',
+        phone: tenant.user?.phone || '',
+        idNumber: tenant.idNumber || '',
       });
       setEditFormStatus(tenant.status);
+      setEditIdCopyKey(undefined);
+      setEditIdCopyName(undefined);
+      setEditKraCertKey(undefined);
+      setEditKraCertName(undefined);
     }
     setSelectedPropertyId(undefined);
     setIsEditOpen(true);
@@ -463,24 +527,106 @@ export default function TenantDetailPage() {
     .filter((inv) => inv.status !== 'cancelled')
     .reduce((sum, inv) => sum + Number(inv.amountPaid), 0);
 
+  const renderMobileInvoice = (inv: Invoice) => (
+    <div key={inv.invoiceId} style={{ padding: '10px 0', borderBottom: '1px solid #f5f5f5' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <Text strong style={{ fontSize: 13, display: 'block' }}>{inv.invoiceNumber}</Text>
+          <Text type="secondary" style={{ fontSize: 11 }}>
+            {inv.billingMonth ? dayjs(inv.billingMonth).format('MMM YYYY') : '-'}
+            {inv.dueDate && ` · Due ${dayjs(inv.dueDate).format('DD MMM')}`}
+          </Text>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <Text strong style={{ fontSize: 13, display: 'block' }}>{formatKES(inv.totalAmount)}</Text>
+          <Tag color={INVOICE_STATUS_COLOR[inv.status] || 'default'} style={{ margin: 0, fontSize: 10 }}>
+            {INVOICE_STATUS_LABEL[inv.status] || inv.status}
+          </Tag>
+        </div>
+      </div>
+      {Number(inv.balanceDue) > 0 && (
+        <Text type="danger" style={{ fontSize: 11 }}>Balance: {formatKES(inv.balanceDue)}</Text>
+      )}
+    </div>
+  );
+
+  const renderMobilePayment = (p: Payment) => (
+    <div key={p.paymentId} style={{ padding: '10px 0', borderBottom: '1px solid #f5f5f5' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <Text strong style={{ fontSize: 13, display: 'block' }}>{formatKES(p.amount)}</Text>
+          <Text type="secondary" style={{ fontSize: 11 }}>
+            {PAYMENT_METHOD_LABEL[p.method] || p.method}
+            {p.mpesaReceiptNumber && ` · ${p.mpesaReceiptNumber}`}
+          </Text>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <Tag color={PAYMENT_STATUS_COLOR[p.status] || 'default'} style={{ margin: 0, fontSize: 10 }}>
+            {p.status?.toUpperCase()}
+          </Tag>
+          <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 2 }}>
+            {p.transactionDate ? dayjs(p.transactionDate).format('DD MMM YY') : '-'}
+          </Text>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderMobileWalletTxn = (txn: WalletTransaction) => {
+    const isCredit = txn.type === 'credit' || txn.type === 'credit_reconciliation' || txn.type === 'refund';
+    return (
+      <div key={txn.walletTransactionId} style={{ padding: '10px 0', borderBottom: '1px solid #f5f5f5' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <Tag color={WALLET_TXN_TYPE_COLOR[txn.type] || 'default'} style={{ margin: 0, fontSize: 10 }}>
+              {WALLET_TXN_TYPE_LABEL[txn.type] || txn.type}
+            </Tag>
+            <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
+              {txn.reference || txn.description || '-'}
+            </Text>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <Text type={isCredit ? 'success' : 'danger'} strong style={{ fontSize: 13 }}>
+              {isCredit ? '+' : '-'}{formatKES(txn.amount)}
+            </Text>
+            <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>
+              Bal: {formatKES(txn.balanceAfter)}
+            </Text>
+          </div>
+        </div>
+        <Text type="secondary" style={{ fontSize: 10 }}>
+          {txn.createdAt ? dayjs(txn.createdAt).format('DD MMM YY HH:mm') : '-'}
+        </Text>
+      </div>
+    );
+  };
+
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Space>
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: isMobile ? 'flex-start' : 'center',
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: isMobile ? 8 : 0,
+        marginBottom: isMobile ? 12 : 24,
+      }}>
+        <Space wrap>
           <Button
             icon={<ArrowLeftOutlined />}
             onClick={() => router.push('/dashboard/tenants')}
+            size={isMobile ? 'small' : 'middle'}
           />
-          <Title level={4} style={{ margin: 0 }}>
-            <UserOutlined style={{ marginRight: 8 }} />
+          <Title level={isMobile ? 5 : 4} style={{ margin: 0 }}>
             {fullName || 'Tenant'}
           </Title>
           <Tag color={STATUS_COLOR_MAP[tenant.status] || 'default'}>
             {STATUS_LABEL_MAP[tenant.status] || tenant.status}
           </Tag>
         </Space>
-        <Space>
-          <Button onClick={openEditModal}>Edit</Button>
+        <Space wrap>
+          <Button onClick={openEditModal} size={isMobile ? 'small' : 'middle'}>Edit</Button>
           {(tenant.depositStatus === 'collected' || tenant.depositStatus === 'partially_refunded') && (
             <Button
               icon={<SafetyOutlined />}
@@ -488,12 +634,13 @@ export default function TenantDetailPage() {
                 refundForm.resetFields();
                 setIsRefundOpen(true);
               }}
+              size={isMobile ? 'small' : 'middle'}
             >
-              Refund Deposit
+              {isMobile ? 'Refund' : 'Refund Deposit'}
             </Button>
           )}
           {tenant.status !== 'vacated' && (
-            <Button danger onClick={confirmVacate} loading={vacateMutation.isPending}>
+            <Button danger onClick={confirmVacate} loading={vacateMutation.isPending} size={isMobile ? 'small' : 'middle'}>
               Vacate
             </Button>
           )}
@@ -504,18 +651,34 @@ export default function TenantDetailPage() {
               icon={<DeleteOutlined />}
               onClick={confirmDelete}
               loading={deleteMutation.isPending}
+              size={isMobile ? 'small' : 'middle'}
             >
-              Delete Tenant
+              Delete
             </Button>
           )}
         </Space>
       </div>
 
       {/* Tenant Details */}
-      <Card style={{ marginBottom: 24 }}>
-        <Descriptions column={{ xs: 1, sm: 2, lg: 4 }}>
+      <Card style={{ marginBottom: isMobile ? 8 : 24 }} size={isMobile ? 'small' : 'default'}>
+        <Descriptions column={{ xs: 1, sm: 2, lg: 4 }} size={isMobile ? 'small' : 'default'}>
           <Descriptions.Item label="Email">{tenant.user?.email || '-'}</Descriptions.Item>
           <Descriptions.Item label="Phone">{tenant.user?.phone || '-'}</Descriptions.Item>
+          <Descriptions.Item label="ID Number">{tenant.idNumber || '-'}</Descriptions.Item>
+          <Descriptions.Item label="ID Copy">
+            {tenant.idCopyKey ? (
+              <a href={getFileUrl(tenant.idCopyKey)} target="_blank" rel="noopener noreferrer">
+                <Button type="link" size="small" icon={<LinkOutlined />} style={{ padding: 0 }}>View</Button>
+              </a>
+            ) : '-'}
+          </Descriptions.Item>
+          <Descriptions.Item label="KRA Cert">
+            {tenant.kraCertificateKey ? (
+              <a href={getFileUrl(tenant.kraCertificateKey)} target="_blank" rel="noopener noreferrer">
+                <Button type="link" size="small" icon={<LinkOutlined />} style={{ padding: 0 }}>View</Button>
+              </a>
+            ) : '-'}
+          </Descriptions.Item>
           <Descriptions.Item label="Property">{tenant.unit?.property?.name || '-'}</Descriptions.Item>
           <Descriptions.Item label="Unit">{tenant.unit?.unitNumber || '-'}</Descriptions.Item>
           <Descriptions.Item label="Rent">{formatKES(tenant.unit?.rentAmount ?? 0)}</Descriptions.Item>
@@ -529,48 +692,53 @@ export default function TenantDetailPage() {
       </Card>
 
       {/* Stats */}
-      <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
-        <Card style={{ flex: 1, textAlign: 'center' }}>
-          <WalletOutlined style={{ fontSize: 24, color: '#1890ff', marginBottom: 8 }} />
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr 1fr' : tenant.depositAmount > 0 ? '1fr 1fr 1fr 1fr 1fr' : '1fr 1fr 1fr 1fr',
+        gap: isMobile ? 8 : 16,
+        marginBottom: isMobile ? 8 : 24,
+      }}>
+        <Card size="small" styles={isMobile ? { body: { padding: 10 } } : undefined} style={{ textAlign: 'center' }}>
+          <WalletOutlined style={{ fontSize: isMobile ? 18 : 24, color: '#1890ff', marginBottom: 4 }} />
           <br />
-          <Text type="secondary">Wallet Balance</Text>
-          <Title level={3} style={{ margin: '4px 0 0', color: '#1890ff' }}>
+          <Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>Wallet</Text>
+          <Title level={isMobile ? 5 : 3} style={{ margin: '4px 0 0', color: '#1890ff' }}>
             {formatKES(tenant.walletBalance ?? 0)}
           </Title>
         </Card>
-        <Card style={{ flex: 1, textAlign: 'center' }}>
-          <FileTextOutlined style={{ fontSize: 24, color: '#fa541c', marginBottom: 8 }} />
+        <Card size="small" styles={isMobile ? { body: { padding: 10 } } : undefined} style={{ textAlign: 'center' }}>
+          <FileTextOutlined style={{ fontSize: isMobile ? 18 : 24, color: '#fa541c', marginBottom: 4 }} />
           <br />
-          <Text type="secondary">Outstanding</Text>
-          <Title level={3} style={{ margin: '4px 0 0', color: totalOutstanding > 0 ? '#fa541c' : '#52c41a' }}>
+          <Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>Outstanding</Text>
+          <Title level={isMobile ? 5 : 3} style={{ margin: '4px 0 0', color: totalOutstanding > 0 ? '#fa541c' : '#52c41a' }}>
             {formatKES(totalOutstanding)}
           </Title>
         </Card>
-        <Card style={{ flex: 1, textAlign: 'center' }}>
-          <DollarOutlined style={{ fontSize: 24, color: '#52c41a', marginBottom: 8 }} />
+        <Card size="small" styles={isMobile ? { body: { padding: 10 } } : undefined} style={{ textAlign: 'center' }}>
+          <DollarOutlined style={{ fontSize: isMobile ? 18 : 24, color: '#52c41a', marginBottom: 4 }} />
           <br />
-          <Text type="secondary">Total Paid</Text>
-          <Title level={3} style={{ margin: '4px 0 0', color: '#52c41a' }}>
+          <Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>Total Paid</Text>
+          <Title level={isMobile ? 5 : 3} style={{ margin: '4px 0 0', color: '#52c41a' }}>
             {formatKES(totalPaid)}
           </Title>
         </Card>
-        <Card style={{ flex: 1, textAlign: 'center' }}>
-          <FileTextOutlined style={{ fontSize: 24, color: '#722ed1', marginBottom: 8 }} />
+        <Card size="small" styles={isMobile ? { body: { padding: 10 } } : undefined} style={{ textAlign: 'center' }}>
+          <FileTextOutlined style={{ fontSize: isMobile ? 18 : 24, color: '#722ed1', marginBottom: 4 }} />
           <br />
-          <Text type="secondary">Invoices</Text>
-          <Title level={3} style={{ margin: '4px 0 0' }}>
+          <Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>Invoices</Text>
+          <Title level={isMobile ? 5 : 3} style={{ margin: '4px 0 0' }}>
             {invoices.length}
           </Title>
         </Card>
         {tenant.depositAmount > 0 && (
-          <Card style={{ flex: 1, textAlign: 'center' }}>
-            <SafetyOutlined style={{ fontSize: 24, color: '#722ed1', marginBottom: 8 }} />
+          <Card size="small" styles={isMobile ? { body: { padding: 10 } } : undefined} style={{ textAlign: 'center' }}>
+            <SafetyOutlined style={{ fontSize: isMobile ? 18 : 24, color: '#722ed1', marginBottom: 4 }} />
             <br />
-            <Text type="secondary">Deposit</Text>
-            <Title level={3} style={{ margin: '4px 0 0', color: '#722ed1' }}>
+            <Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>Deposit</Text>
+            <Title level={isMobile ? 5 : 3} style={{ margin: '4px 0 0', color: '#722ed1' }}>
               {formatKES(tenant.depositAmount)}
             </Title>
-            <Tag color={DEPOSIT_STATUS_COLOR[tenant.depositStatus] || 'default'}>
+            <Tag color={DEPOSIT_STATUS_COLOR[tenant.depositStatus] || 'default'} style={{ fontSize: 10 }}>
               {DEPOSIT_STATUS_LABEL[tenant.depositStatus] || tenant.depositStatus}
             </Tag>
           </Card>
@@ -578,14 +746,23 @@ export default function TenantDetailPage() {
       </div>
 
       {/* Tabs for Invoices, Payments, Wallet */}
-      <Card>
+      <Card size={isMobile ? 'small' : 'default'}>
         <Tabs
           defaultActiveKey="invoices"
+          size={isMobile ? 'small' : 'middle'}
           items={[
             {
               key: 'invoices',
               label: `Invoices (${invoices.length})`,
-              children: (
+              children: isMobile ? (
+                isLoadingInvoices ? (
+                  <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+                ) : invoices.length === 0 ? (
+                  <Empty description="No invoices yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                ) : (
+                  invoices.map(renderMobileInvoice)
+                )
+              ) : (
                 <Table<Invoice>
                   columns={invoiceColumns}
                   dataSource={invoices}
@@ -603,7 +780,15 @@ export default function TenantDetailPage() {
             {
               key: 'payments',
               label: `Payments (${payments.length})`,
-              children: (
+              children: isMobile ? (
+                isLoadingPayments ? (
+                  <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+                ) : payments.length === 0 ? (
+                  <Empty description="No payments yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                ) : (
+                  payments.map(renderMobilePayment)
+                )
+              ) : (
                 <Table<Payment>
                   columns={paymentColumns}
                   dataSource={payments}
@@ -620,8 +805,16 @@ export default function TenantDetailPage() {
             },
             {
               key: 'wallet',
-              label: 'Wallet History',
-              children: (
+              label: 'Wallet',
+              children: isMobile ? (
+                isLoadingWallet ? (
+                  <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+                ) : walletTxns.length === 0 ? (
+                  <Empty description="No transactions yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                ) : (
+                  walletTxns.map(renderMobileWalletTxn)
+                )
+              ) : (
                 <Table<WalletTransaction>
                   columns={walletColumns}
                   dataSource={walletTxns}
@@ -649,11 +842,157 @@ export default function TenantDetailPage() {
           setIsEditOpen(false);
           setEditFormStatus(undefined);
           setSelectedPropertyId(undefined);
+          setEditIdCopyKey(undefined);
+          setEditIdCopyName(undefined);
+          setEditKraCertKey(undefined);
+          setEditKraCertName(undefined);
         }}
         confirmLoading={updateMutation.isPending}
         okText={isReactivating ? 'Reactivate' : 'Save Changes'}
       >
         <Form form={editForm} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item
+            name="name"
+            label="Full Name"
+            rules={[
+              { required: true, message: 'Please enter the tenant name' },
+              { min: 2, message: 'Name must be at least 2 characters' },
+            ]}
+          >
+            <Input placeholder="e.g. Jane Wanjiku" />
+          </Form.Item>
+
+          <Form.Item
+            name="email"
+            label="Email"
+            rules={[
+              { required: true, message: 'Please enter the email address' },
+              { type: 'email', message: 'Please enter a valid email' },
+            ]}
+          >
+            <Input placeholder="e.g. jane@example.com" />
+          </Form.Item>
+
+          <Form.Item
+            name="phone"
+            label="Phone Number"
+            rules={[
+              { required: true, message: 'Please enter the phone number' },
+              {
+                pattern: /^(?:\+254|0)\d{9}$/,
+                message: 'Please enter a valid Kenyan phone number',
+              },
+            ]}
+          >
+            <Input placeholder="e.g. 0712345678" />
+          </Form.Item>
+
+          <Form.Item name="idNumber" label="ID / Passport Number">
+            <Input placeholder="e.g. 12345678" />
+          </Form.Item>
+
+          <Form.Item label="ID Copy (scan/photo)">
+            {(editIdCopyKey || tenant?.idCopyKey) && !editIdCopyName ? (
+              <Space>
+                <FileTextOutlined />
+                <span>Current document uploaded</span>
+                <Upload
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  showUploadList={false}
+                  beforeUpload={(file) => {
+                    if (file.size > 5 * 1024 * 1024) {
+                      message.error('File must be smaller than 5MB');
+                      return false;
+                    }
+                    return true;
+                  }}
+                  customRequest={({ file }) => handleEditFileUpload(file as RcFile, setEditIdCopyKey, setEditIdCopyName, setUploadingEditIdCopy, 'ID Copy')}
+                >
+                  <Button size="small" icon={<UploadOutlined />} loading={uploadingEditIdCopy}>Replace</Button>
+                </Upload>
+              </Space>
+            ) : editIdCopyName ? (
+              <Space>
+                <FileTextOutlined />
+                <span>{editIdCopyName}</span>
+                <Button
+                  type="text"
+                  size="small"
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={() => { setEditIdCopyKey(undefined); setEditIdCopyName(undefined); }}
+                />
+              </Space>
+            ) : (
+              <Upload
+                accept=".pdf,.jpg,.jpeg,.png"
+                showUploadList={false}
+                beforeUpload={(file) => {
+                  if (file.size > 5 * 1024 * 1024) {
+                    message.error('File must be smaller than 5MB');
+                    return false;
+                  }
+                  return true;
+                }}
+                customRequest={({ file }) => handleEditFileUpload(file as RcFile, setEditIdCopyKey, setEditIdCopyName, setUploadingEditIdCopy, 'ID Copy')}
+              >
+                <Button icon={<UploadOutlined />} loading={uploadingEditIdCopy}>Upload ID Copy</Button>
+              </Upload>
+            )}
+          </Form.Item>
+
+          <Form.Item label="KRA Certificate">
+            {(editKraCertKey || tenant?.kraCertificateKey) && !editKraCertName ? (
+              <Space>
+                <FileTextOutlined />
+                <span>Current document uploaded</span>
+                <Upload
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  showUploadList={false}
+                  beforeUpload={(file) => {
+                    if (file.size > 5 * 1024 * 1024) {
+                      message.error('File must be smaller than 5MB');
+                      return false;
+                    }
+                    return true;
+                  }}
+                  customRequest={({ file }) => handleEditFileUpload(file as RcFile, setEditKraCertKey, setEditKraCertName, setUploadingEditKraCert, 'KRA Certificate')}
+                >
+                  <Button size="small" icon={<UploadOutlined />} loading={uploadingEditKraCert}>Replace</Button>
+                </Upload>
+              </Space>
+            ) : editKraCertName ? (
+              <Space>
+                <FileTextOutlined />
+                <span>{editKraCertName}</span>
+                <Button
+                  type="text"
+                  size="small"
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={() => { setEditKraCertKey(undefined); setEditKraCertName(undefined); }}
+                />
+              </Space>
+            ) : (
+              <Upload
+                accept=".pdf,.jpg,.jpeg,.png"
+                showUploadList={false}
+                beforeUpload={(file) => {
+                  if (file.size > 5 * 1024 * 1024) {
+                    message.error('File must be smaller than 5MB');
+                    return false;
+                  }
+                  return true;
+                }}
+                customRequest={({ file }) => handleEditFileUpload(file as RcFile, setEditKraCertKey, setEditKraCertName, setUploadingEditKraCert, 'KRA Certificate')}
+              >
+                <Button icon={<UploadOutlined />} loading={uploadingEditKraCert}>Upload KRA Certificate</Button>
+              </Upload>
+            )}
+          </Form.Item>
+
+          <Divider />
+
           <Form.Item name="status" label="Status">
             <Select
               onChange={(value) => {

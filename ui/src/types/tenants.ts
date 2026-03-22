@@ -31,6 +31,9 @@ export interface Tenant {
   status: TenantStatus;
   leaseStart: string;
   leaseEnd?: string;
+  idNumber?: string;
+  idCopyKey?: string;
+  kraCertificateKey?: string;
   user: TenantUser;
   unit: Unit;
   createdAt: string;
@@ -45,4 +48,7 @@ export interface CreateTenantInput {
   leaseStart: string;
   leaseEnd?: string;
   depositAmount?: number;
+  idNumber?: string;
+  idCopyKey?: string;
+  kraCertificateKey?: string;
 }

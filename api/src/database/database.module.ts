@@ -16,6 +16,12 @@ import { AddRecurringChargesToSystemSettings1771970000000 } from './migrations/1
 import { BackfillDepositStatusForPaidDeposits1771980000000 } from './migrations/1771980000000-BackfillDepositStatusForPaidDeposits';
 import { AddDepositRefundedAuditAction1771990000000 } from './migrations/1771990000000-AddDepositRefundedAuditAction';
 import { AddMpesaCheckoutRequestIdToPayments1772000000000 } from './migrations/1772000000000-AddMpesaCheckoutRequestIdToPayments';
+import { AddMissingAuditActionEnumValues1772010000000 } from './migrations/1772010000000-AddMissingAuditActionEnumValues';
+import { MakeAuditPerformedByNullable1772020000000 } from './migrations/1772020000000-MakeAuditPerformedByNullable';
+import { AddWalletSettlementIntervalToSystemSettings1772030000000 } from './migrations/1772030000000-AddWalletSettlementIntervalToSystemSettings';
+import { AddInvoiceTypeAndRecipientName1772040000000 } from './migrations/1772040000000-AddInvoiceTypeAndRecipientName';
+import { AddTenantIdDocumentFields1772050000000 } from './migrations/1772050000000-AddTenantIdDocumentFields';
+import { AddShopUnitType1772060000000 } from './migrations/1772060000000-AddShopUnitType';
 
 const migrations = [
 	InitialSchema1771270000000,
@@ -31,6 +37,12 @@ const migrations = [
 	BackfillDepositStatusForPaidDeposits1771980000000,
 	AddDepositRefundedAuditAction1771990000000,
 	AddMpesaCheckoutRequestIdToPayments1772000000000,
+	AddMissingAuditActionEnumValues1772010000000,
+	MakeAuditPerformedByNullable1772020000000,
+	AddWalletSettlementIntervalToSystemSettings1772030000000,
+	AddInvoiceTypeAndRecipientName1772040000000,
+	AddTenantIdDocumentFields1772050000000,
+	AddShopUnitType1772060000000,
 ];
 
 @Global()

@@ -15,6 +15,7 @@ import {
   Space,
   Descriptions,
   Dropdown,
+  Grid,
 } from 'antd';
 import {
   SendOutlined,
@@ -42,7 +43,8 @@ import type { ColumnsType } from 'antd/es/table';
 import { downloadCsv, type CsvColumn } from '@/lib/csv-export';
 import dayjs from 'dayjs';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
+const { useBreakpoint } = Grid;
 
 const CHANNEL_COLOR_MAP: Record<string, string> = {
   sms: 'green',
@@ -77,6 +79,8 @@ export default function CommunicationsPage() {
   const [bulkMessageForm] = Form.useForm();
 
   const { isAuthenticated } = useAuth();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
 
   const { data, isLoading } = useQuery({
     queryKey: ['communications', typeFilter, statusFilter, page, pageSize],
@@ -297,14 +301,62 @@ export default function CommunicationsPage() {
     },
   ];
 
+  const renderMobileNotificationCard = (notification: Notification) => {
+    const tenantName = `${notification.tenant?.user?.firstName || ''} ${notification.tenant?.user?.lastName || ''}`.trim() || '-';
+    const statusColor = notification.status === 'sent' ? 'green' : notification.status === 'failed' ? 'red' : 'orange';
+    const statusLabel = notification.status === 'sent' ? 'Sent' : notification.status === 'failed' ? `Failed (${notification.retryCount})` : 'Pending';
+    return (
+      <Card
+        key={notification.notificationId}
+        size="small"
+        style={{ marginBottom: 8, cursor: 'pointer' }}
+        styles={{ body: { padding: '12px 14px' } }}
+        onClick={() => setViewNotification(notification)}
+        hoverable
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Text strong style={{ fontSize: 13, display: 'block' }}>{tenantName}</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {notification.subject || notification.message?.slice(0, 50) + (notification.message?.length > 50 ? '...' : '')}
+            </Text>
+          </div>
+          <div style={{ textAlign: 'right', marginLeft: 8, flexShrink: 0 }}>
+            <Tag color={statusColor} style={{ margin: 0, fontSize: 10 }}>
+              {statusLabel}
+            </Tag>
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTop: '1px solid #f5f5f5' }}>
+          <Space size={4}>
+            <Tag style={{ margin: 0, fontSize: 10 }}>{TYPE_LABEL_MAP[notification.type] || notification.type}</Tag>
+            <Tag color={CHANNEL_COLOR_MAP[notification.channel] || 'default'} style={{ margin: 0, fontSize: 10 }}>
+              {notification.channel?.toUpperCase()}
+            </Tag>
+          </Space>
+          <Text type="secondary" style={{ fontSize: 11 }}>
+            {notification.sentAt ? dayjs(notification.sentAt).format('DD MMM, HH:mm') : 'Pending'}
+          </Text>
+        </div>
+      </Card>
+    );
+  };
+
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Title level={4} style={{ margin: 0 }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: isMobile ? 'flex-start' : 'center',
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: isMobile ? 8 : 0,
+        marginBottom: isMobile ? 12 : 24,
+      }}>
+        <Title level={isMobile ? 5 : 4} style={{ margin: 0 }}>
           <MailOutlined style={{ marginRight: 8 }} />
           Communications
         </Title>
-        <Space>
+        <Space wrap={isMobile}>
           <Button
             icon={<ExportOutlined />}
             onClick={async () => {
@@ -328,39 +380,44 @@ export default function CommunicationsPage() {
             }}
             loading={exporting}
             disabled={isLoading || notifications.length === 0}
+            size={isMobile ? 'small' : 'middle'}
           >
-            Export CSV
+            {!isMobile && 'Export CSV'}
           </Button>
           <Button
             icon={<SendOutlined />}
             onClick={() => setIsSendModalOpen(true)}
+            size={isMobile ? 'small' : 'middle'}
           >
-            Send Message
+            {isMobile ? 'Send' : 'Send Message'}
           </Button>
           <Button
             icon={<MailOutlined />}
             onClick={() => setIsBulkMessageModalOpen(true)}
+            size={isMobile ? 'small' : 'middle'}
           >
-            Bulk Message
+            {isMobile ? 'Bulk Msg' : 'Bulk Message'}
           </Button>
           <Button
             type="primary"
             icon={<NotificationOutlined />}
             onClick={() => setIsBulkModalOpen(true)}
+            size={isMobile ? 'small' : 'middle'}
           >
-            Bulk Reminder
+            {isMobile ? 'Reminder' : 'Bulk Reminder'}
           </Button>
         </Space>
       </div>
 
-      <Card>
-        <Space style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: isMobile ? 8 : 16 }}>
+        <Space wrap={isMobile} style={{ width: isMobile ? '100%' : undefined }}>
           <Select
             placeholder="Filter by type"
             allowClear
             value={typeFilter}
             onChange={(value) => { setTypeFilter(value); setPage(1); }}
-            style={{ width: 200 }}
+            style={{ width: isMobile ? '100%' : 200, minWidth: isMobile ? undefined : 200 }}
+            size={isMobile ? 'middle' : 'large'}
             options={Object.entries(TYPE_LABEL_MAP).map(([value, label]) => ({
               label,
               value,
@@ -371,7 +428,8 @@ export default function CommunicationsPage() {
             allowClear
             value={statusFilter}
             onChange={(value) => { setStatusFilter(value); setPage(1); }}
-            style={{ width: 160 }}
+            style={{ width: isMobile ? '100%' : 160, minWidth: isMobile ? undefined : 160 }}
+            size={isMobile ? 'middle' : 'large'}
             options={[
               { label: 'Sent', value: 'sent' },
               { label: 'Failed', value: 'failed' },
@@ -379,22 +437,48 @@ export default function CommunicationsPage() {
             ]}
           />
         </Space>
+      </div>
 
-        <Table<Notification>
-          columns={columns}
-          dataSource={notifications}
-          loading={isLoading}
-          rowKey="notificationId"
-          pagination={{
-            current: page,
-            pageSize,
-            total: paginationData?.total || 0,
-            showSizeChanger: true,
-            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} notifications`,
-            onChange: (p, ps) => { setPage(p); setPageSize(ps); },
-          }}
-        />
-      </Card>
+      {isMobile ? (
+        <div>
+          {isLoading ? (
+            <div style={{ textAlign: 'center', padding: 40 }}><Text type="secondary">Loading...</Text></div>
+          ) : notifications.length === 0 ? (
+            <Card><Text type="secondary">No notifications found.</Text></Card>
+          ) : (
+            <>
+              {notifications.map(renderMobileNotificationCard)}
+              <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  Showing {notifications.length} of {paginationData?.total || 0}
+                </Text>
+                {(paginationData?.total || 0) > notifications.length && (
+                  <div style={{ marginTop: 8 }}>
+                    <Button size="small" onClick={() => setPageSize(pageSize + 10)}>Load More</Button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <Card>
+          <Table<Notification>
+            columns={columns}
+            dataSource={notifications}
+            loading={isLoading}
+            rowKey="notificationId"
+            pagination={{
+              current: page,
+              pageSize,
+              total: paginationData?.total || 0,
+              showSizeChanger: true,
+              showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} notifications`,
+              onChange: (p, ps) => { setPage(p); setPageSize(ps); },
+            }}
+          />
+        </Card>
+      )}
 
       {/* Send Individual Message Modal */}
       <Modal

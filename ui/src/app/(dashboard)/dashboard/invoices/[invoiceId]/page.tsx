@@ -18,6 +18,7 @@ import {
   InputNumber,
   DatePicker,
   Select,
+  Grid,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -40,6 +41,7 @@ import Link from 'next/link';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
+const { useBreakpoint } = Grid;
 
 const STATUS_COLOR_MAP: Record<string, string> = {
   paid: 'green',
@@ -85,6 +87,8 @@ export default function InvoiceDetailPage() {
   const queryClient = useQueryClient();
   const { isAuthenticated } = useAuth();
   const { message } = App.useApp();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm] = Form.useForm();
@@ -161,6 +165,37 @@ export default function InvoiceDetailPage() {
     }
   };
 
+  const renderMobilePaymentCard = (payment: Payment) => (
+    <Card
+      key={payment.paymentId}
+      size="small"
+      styles={{ body: { padding: '12px 14px' } }}
+      style={{ marginBottom: 8 }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ flex: 1 }}>
+          <Text strong style={{ color: '#52c41a', fontSize: 15 }}>{formatKES(payment.amount)}</Text>
+          <div style={{ marginTop: 4 }}>
+            <Tag color={PAYMENT_STATUS_COLOR[payment.status] || 'default'} style={{ marginRight: 4 }}>
+              {payment.status?.toUpperCase()}
+            </Tag>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {PAYMENT_METHOD_LABEL[payment.method] || payment.method}
+            </Text>
+          </div>
+          {payment.mpesaReceiptNumber && (
+            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 2 }}>
+              Ref: {payment.mpesaReceiptNumber}
+            </Text>
+          )}
+        </div>
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          {payment.transactionDate ? dayjs(payment.transactionDate).format('DD MMM YYYY') : '-'}
+        </Text>
+      </div>
+    </Card>
+  );
+
   const paymentColumns: ColumnsType<Payment> = [
     {
       title: 'Date',
@@ -228,13 +263,21 @@ export default function InvoiceDetailPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Space>
+      <div style={{
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        justifyContent: 'space-between',
+        alignItems: isMobile ? 'stretch' : 'center',
+        gap: isMobile ? 12 : 0,
+        marginBottom: isMobile ? 16 : 24,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
           <Button
             icon={<ArrowLeftOutlined />}
+            size={isMobile ? 'small' : 'middle'}
             onClick={() => router.push('/dashboard/invoices')}
           />
-          <Title level={4} style={{ margin: 0 }}>
+          <Title level={isMobile ? 5 : 4} style={{ margin: 0 }}>
             <FileTextOutlined style={{ marginRight: 8 }} />
             {invoice.invoiceNumber}
           </Title>
@@ -244,28 +287,30 @@ export default function InvoiceDetailPage() {
           <Tag color={STATUS_COLOR_MAP[invoice.status] || 'default'}>
             {STATUS_LABEL_MAP[invoice.status] || invoice.status}
           </Tag>
-        </Space>
-        <Space>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
           <Button
             icon={<EditOutlined />}
+            size={isMobile ? 'small' : 'middle'}
             onClick={openEditModal}
           >
-            Edit Invoice
+            {isMobile ? 'Edit' : 'Edit Invoice'}
           </Button>
           <Button
             type="primary"
             icon={<DownloadOutlined />}
+            size={isMobile ? 'small' : 'middle'}
             loading={downloadingPdf}
             onClick={handleDownloadPdf}
           >
-            Download PDF
+            {isMobile ? 'PDF' : 'Download PDF'}
           </Button>
-        </Space>
+        </div>
       </div>
 
       {/* Invoice Details */}
-      <Card style={{ marginBottom: 24 }}>
-        <Descriptions column={{ xs: 1, sm: 2, lg: 3 }} bordered>
+      <Card style={{ marginBottom: isMobile ? 12 : 24 }} size={isMobile ? 'small' : 'default'}>
+        <Descriptions column={{ xs: 1, sm: 2, lg: 3 }} bordered size={isMobile ? 'small' : 'default'}>
           <Descriptions.Item label={isRentInvoice ? 'Tenant' : 'Recipient'}>
             {invoice.tenant ? (
               <Link href={`/dashboard/tenants/${invoice.tenantId}`}>{recipientName}</Link>
@@ -292,7 +337,7 @@ export default function InvoiceDetailPage() {
       </Card>
 
       {/* Financial Breakdown */}
-      <Card title="Charges Breakdown" style={{ marginBottom: 24 }}>
+      <Card title="Charges Breakdown" style={{ marginBottom: isMobile ? 12 : 24 }} size={isMobile ? 'small' : 'default'}>
         <Descriptions column={1} bordered size="small">
           <Descriptions.Item label={isRentInvoice ? 'Rent' : 'Amount'}>
             {formatKES(invoice.rentAmount)}
@@ -340,15 +385,25 @@ export default function InvoiceDetailPage() {
       </Card>
 
       {/* Payments */}
-      <Card title={`Payments (${payments.length})`}>
-        <Table<Payment>
-          columns={paymentColumns}
-          dataSource={payments}
-          loading={isLoadingPayments}
-          rowKey="paymentId"
-          pagination={false}
-          locale={{ emptyText: <Empty description="No payments recorded for this invoice" /> }}
-        />
+      <Card title={`Payments (${payments.length})`} size={isMobile ? 'small' : 'default'}>
+        {isMobile ? (
+          isLoadingPayments ? (
+            <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
+          ) : payments.length === 0 ? (
+            <Empty description="No payments recorded for this invoice" />
+          ) : (
+            payments.map(renderMobilePaymentCard)
+          )
+        ) : (
+          <Table<Payment>
+            columns={paymentColumns}
+            dataSource={payments}
+            loading={isLoadingPayments}
+            rowKey="paymentId"
+            pagination={false}
+            locale={{ emptyText: <Empty description="No payments recorded for this invoice" /> }}
+          />
+        )}
       </Card>
 
       {/* Edit Invoice Modal */}

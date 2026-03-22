@@ -16,6 +16,7 @@ import {
   App,
   Space,
   Descriptions,
+  Grid,
 } from 'antd';
 import {
   PlusOutlined,
@@ -42,7 +43,8 @@ import type { ColumnsType } from 'antd/es/table';
 import { downloadCsv, type CsvColumn } from '@/lib/csv-export';
 import dayjs from 'dayjs';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
+const { useBreakpoint } = Grid;
 
 const STATUS_COLOR_MAP: Record<string, string> = {
   pending: 'orange',
@@ -114,6 +116,8 @@ export default function ExpensesPage() {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
 
   const { isAuthenticated } = useAuth();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
 
   const { data, isLoading } = useQuery({
     queryKey: ['expenses', statusFilter, categoryFilter, propertyFilter, page, pageSize],
@@ -286,8 +290,15 @@ export default function ExpensesPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Title level={4} style={{ margin: 0 }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: isMobile ? 'flex-start' : 'center',
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: isMobile ? 8 : 0,
+        marginBottom: isMobile ? 12 : 24,
+      }}>
+        <Title level={isMobile ? 5 : 4} style={{ margin: 0 }}>
           <ToolOutlined style={{ marginRight: 8 }} />
           Expenses
         </Title>
@@ -316,27 +327,30 @@ export default function ExpensesPage() {
             }}
             loading={exporting}
             disabled={isLoading || expenses.length === 0}
+            size={isMobile ? 'small' : 'middle'}
           >
-            Export CSV
+            {!isMobile && 'Export CSV'}
           </Button>
           <Button
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => setIsModalOpen(true)}
+            size={isMobile ? 'small' : 'middle'}
           >
-            Log Expense
+            {isMobile ? 'Log' : 'Log Expense'}
           </Button>
         </Space>
       </div>
 
-      <Card>
-        <Space style={{ marginBottom: 16 }} wrap>
+      <div style={{ marginBottom: isMobile ? 8 : 16 }}>
+        <Space style={{ width: '100%' }} direction={isMobile ? 'vertical' : 'horizontal'} wrap>
           <Select
             placeholder="Filter by property"
             allowClear
             value={propertyFilter}
             onChange={(value) => { setPropertyFilter(value); setPage(1); }}
-            style={{ width: 200 }}
+            style={{ width: isMobile ? '100%' : 200 }}
+            size={isMobile ? 'middle' : 'large'}
             options={propertiesList.map((p) => ({
               label: p.name,
               value: p.propertyId,
@@ -347,7 +361,8 @@ export default function ExpensesPage() {
             allowClear
             value={statusFilter}
             onChange={(value) => { setStatusFilter(value); setPage(1); }}
-            style={{ width: 160 }}
+            style={{ width: isMobile ? '100%' : 160 }}
+            size={isMobile ? 'middle' : 'large'}
             options={Object.entries(STATUS_LABEL_MAP).map(([value, label]) => ({
               label,
               value,
@@ -358,33 +373,93 @@ export default function ExpensesPage() {
             allowClear
             value={categoryFilter}
             onChange={(value) => { setCategoryFilter(value); setPage(1); }}
-            style={{ width: 200 }}
+            style={{ width: isMobile ? '100%' : 200 }}
+            size={isMobile ? 'middle' : 'large'}
             options={Object.entries(CATEGORY_LABEL_MAP).map(([value, label]) => ({
               label,
               value,
             }))}
           />
         </Space>
+      </div>
 
-        <Table<Expense>
-          columns={columns}
-          dataSource={expenses}
-          loading={isLoading}
-          rowKey="expenseId"
-          onRow={(record) => ({
-            onClick: () => handleRowClick(record),
-            style: { cursor: 'pointer' },
-          })}
-          pagination={{
-            current: page,
-            pageSize,
-            total: pagination?.total || 0,
-            showSizeChanger: true,
-            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} expenses`,
-            onChange: (p, ps) => { setPage(p); setPageSize(ps); },
-          }}
-        />
-      </Card>
+      {isMobile ? (
+        <div>
+          {isLoading ? (
+            <div style={{ textAlign: 'center', padding: 40 }}><Text type="secondary">Loading...</Text></div>
+          ) : expenses.length === 0 ? (
+            <Card><Text type="secondary">No expenses found.</Text></Card>
+          ) : (
+            <>
+              {expenses.map((expense) => (
+                <Card
+                  key={expense.expenseId}
+                  size="small"
+                  style={{ marginBottom: 8, cursor: 'pointer' }}
+                  styles={{ body: { padding: '12px 14px' } }}
+                  hoverable
+                  onClick={() => handleRowClick(expense)}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Text strong style={{ fontSize: 13, display: 'block' }} ellipsis>{expense.description}</Text>
+                      <Text type="secondary" style={{ fontSize: 12 }}>{expense.property?.name || '-'}</Text>
+                    </div>
+                    <div style={{ textAlign: 'right', marginLeft: 8 }}>
+                      <Text strong style={{ fontSize: 14, display: 'block' }}>{formatKES(expense.amount)}</Text>
+                      <Tag color={STATUS_COLOR_MAP[expense.status] || 'default'} style={{ margin: 0, fontSize: 10 }}>
+                        {STATUS_LABEL_MAP[expense.status] || expense.status}
+                      </Tag>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTop: '1px solid #f5f5f5' }}>
+                    <Text type="secondary" style={{ fontSize: 11 }}>
+                      <Tag style={{ fontSize: 10, marginRight: 4 }}>{CATEGORY_LABEL_MAP[expense.category] || expense.category}</Tag>
+                      <Tag color={PRIORITY_COLOR_MAP[expense.priority] || 'default'} style={{ fontSize: 10, marginRight: 4 }}>
+                        {expense.priority?.toUpperCase()}
+                      </Tag>
+                    </Text>
+                    <Text type="secondary" style={{ fontSize: 11 }}>
+                      {expense.createdAt ? dayjs(expense.createdAt).format('DD MMM YYYY') : '-'}
+                    </Text>
+                  </div>
+                </Card>
+              ))}
+              <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  Showing {expenses.length} of {pagination?.total || 0}
+                </Text>
+                {(pagination?.total || 0) > expenses.length && (
+                  <div style={{ marginTop: 8 }}>
+                    <Button size="small" onClick={() => setPageSize(pageSize + 10)}>Load More</Button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <Card>
+          <Table<Expense>
+            columns={columns}
+            dataSource={expenses}
+            loading={isLoading}
+            rowKey="expenseId"
+            onRow={(record) => ({
+              onClick: () => handleRowClick(record),
+              style: { cursor: 'pointer' },
+            })}
+            pagination={{
+              current: page,
+              pageSize,
+              total: pagination?.total || 0,
+              showSizeChanger: true,
+              showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} expenses`,
+              onChange: (p, ps) => { setPage(p); setPageSize(ps); },
+            }}
+          />
+        </Card>
+      )}
 
       {/* Create Expense Modal */}
       <Modal

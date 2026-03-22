@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from 'react';
-import { Typography, Table, Tag, Tabs, Empty, Spin, Alert } from 'antd';
+import { Typography, Table, Tag, Tabs, Empty, Spin, Alert, Card } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import { invoicesApi } from '@/lib/api/invoices.api';
 import { paymentsApi, walletApi } from '@/lib/api/payments.api';
@@ -30,6 +30,7 @@ interface TenantReconcilePreviewProps {
   paymentDate: string | undefined;
   isOpen: boolean;
   tenantsList: Tenant[];
+  isMobile?: boolean;
 }
 
 export default function TenantReconcilePreview({
@@ -37,6 +38,7 @@ export default function TenantReconcilePreview({
   paymentDate,
   isOpen,
   tenantsList,
+  isMobile = false,
 }: TenantReconcilePreviewProps) {
   const enabled = isOpen && !!tenantId;
 
@@ -237,6 +239,69 @@ export default function TenantReconcilePreview({
     },
   ];
 
+  const renderMobileInvoiceCard = (inv: Invoice) => (
+    <Card key={inv.invoiceId} size="small" style={{ marginBottom: 6 }} styles={{ body: { padding: '8px 10px' } }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <Text style={{ fontSize: 12 }}>{dayjs(inv.billingMonth).format('MMM YYYY')}</Text>
+          <Text strong style={{ fontSize: 13, display: 'block' }}>{formatKES(inv.totalAmount)}</Text>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <Tag color={INVOICE_STATUS_COLOR[inv.status] || 'default'} style={{ margin: 0, fontSize: 10 }}>
+            {INVOICE_STATUS_LABEL[inv.status] || inv.status}
+          </Tag>
+          {Number(inv.balanceDue) > 0 && (
+            <Text type="danger" style={{ fontSize: 11, display: 'block', marginTop: 2 }}>
+              Due: {formatKES(inv.balanceDue)}
+            </Text>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+
+  const renderMobilePaymentCard = (p: Payment) => (
+    <Card key={p.paymentId} size="small" style={{ marginBottom: 6 }} styles={{ body: { padding: '8px 10px' } }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <Text style={{ fontSize: 12 }}>{dayjs(p.transactionDate).format('DD MMM YYYY')}</Text>
+          <div style={{ marginTop: 2 }}>
+            <Tag color={PAYMENT_METHOD_COLOR[p.method] || 'default'} style={{ margin: 0, fontSize: 10 }}>
+              {PAYMENT_METHOD_LABEL[p.method] || p.method}
+            </Tag>
+          </div>
+        </div>
+        <Text strong style={{ fontSize: 13 }}>{formatKES(p.amount)}</Text>
+      </div>
+    </Card>
+  );
+
+  const renderMobileWalletCard = (txn: WalletTransaction) => {
+    const isCredit = txn.type === 'credit' || txn.type === 'credit_reconciliation' || txn.type === 'refund';
+    return (
+      <Card key={txn.walletTransactionId} size="small" style={{ marginBottom: 6 }} styles={{ body: { padding: '8px 10px' } }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <Tag color={WALLET_TXN_TYPE_COLOR[txn.type] || 'default'} style={{ margin: 0, fontSize: 10 }}>
+              {WALLET_TXN_TYPE_LABEL[txn.type] || txn.type}
+            </Tag>
+            <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 2 }}>
+              {dayjs(txn.createdAt).format('DD MMM YYYY')}
+            </Text>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <Text type={isCredit ? 'success' : 'danger'} strong style={{ fontSize: 13 }}>
+              {isCredit ? '+' : '-'}{formatKES(txn.amount)}
+            </Text>
+            <Text type="secondary" style={{ fontSize: 10, display: 'block' }}>
+              Bal: {formatKES(txn.balanceAfter)}
+            </Text>
+          </div>
+        </div>
+      </Card>
+    );
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header */}
@@ -286,7 +351,10 @@ export default function TenantReconcilePreview({
           {
             key: 'invoices',
             label: `Invoices (${invoices.length})`,
-            children: (
+            children: isMobile ? (
+              invoices.length === 0 ? <Empty description="No invoices" /> :
+              <div style={{ maxHeight: 250, overflowY: 'auto' }}>{invoices.map(renderMobileInvoiceCard)}</div>
+            ) : (
               <Table<Invoice>
                 size="small"
                 columns={invoiceColumns}
@@ -305,7 +373,10 @@ export default function TenantReconcilePreview({
           {
             key: 'payments',
             label: `Payments (${payments.length})`,
-            children: (
+            children: isMobile ? (
+              payments.length === 0 ? <Empty description="No payments" /> :
+              <div style={{ maxHeight: 250, overflowY: 'auto' }}>{payments.map(renderMobilePaymentCard)}</div>
+            ) : (
               <Table<Payment>
                 size="small"
                 columns={paymentColumns}
@@ -318,7 +389,10 @@ export default function TenantReconcilePreview({
           {
             key: 'wallet',
             label: `Wallet (${walletTxns.length})`,
-            children: (
+            children: isMobile ? (
+              walletTxns.length === 0 ? <Empty description="No transactions" /> :
+              <div style={{ maxHeight: 250, overflowY: 'auto' }}>{walletTxns.map(renderMobileWalletCard)}</div>
+            ) : (
               <Table<WalletTransaction>
                 size="small"
                 columns={walletColumns}

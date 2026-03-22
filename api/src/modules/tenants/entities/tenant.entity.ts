@@ -46,6 +46,15 @@ export class Tenant extends AbstractEntity<Tenant> {
 	@Column({ name: 'lease_end', type: 'timestamp', nullable: true })
 	leaseEnd?: Date;
 
+	@Column({ name: 'id_number', type: 'varchar', nullable: true })
+	idNumber?: string;
+
+	@Column({ name: 'id_copy_key', type: 'varchar', nullable: true })
+	idCopyKey?: string;
+
+	@Column({ name: 'kra_certificate_key', type: 'varchar', nullable: true })
+	kraCertificateKey?: string;
+
 	// Relations
 	@OneToOne(() => User, { eager: true })
 	@JoinColumn({ name: 'user_id' })

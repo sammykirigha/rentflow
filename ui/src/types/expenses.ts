@@ -138,6 +138,7 @@ export interface CreateMaintenanceRequestInput {
   description: string;
   category: ExpenseCategory;
   priority?: ExpensePriority;
+  photos?: string[];
 }
 
 export interface UpdateMaintenanceRequestInput {

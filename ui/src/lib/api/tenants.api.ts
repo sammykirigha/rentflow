@@ -14,7 +14,7 @@ export const tenantsApi = {
     const response = await api.post('/tenants', data);
     return response.data;
   },
-  update: async (tenantId: string, data: Partial<{ leaseEnd: string; status: string; unitId: string }>): Promise<Tenant> => {
+  update: async (tenantId: string, data: Partial<{ leaseEnd: string; status: string; unitId: string; name: string; email: string; phone: string; idNumber: string; idCopyKey: string; kraCertificateKey: string }>): Promise<Tenant> => {
     const response = await api.patch(`/tenants/${tenantId}`, data);
     return response.data;
   },

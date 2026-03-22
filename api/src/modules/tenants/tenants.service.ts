@@ -149,6 +149,9 @@ export class TenantsService {
 					status: TenantStatus.ACTIVE,
 					depositAmount: dto.depositAmount || 0,
 					depositStatus: DepositStatus.PENDING,
+					idNumber: dto.idNumber,
+					idCopyKey: dto.idCopyKey,
+					kraCertificateKey: dto.kraCertificateKey,
 				}),
 			);
 
@@ -553,11 +556,57 @@ export class TenantsService {
 			updateData.status = dto.status;
 		}
 
+		if (dto.idNumber !== undefined) {
+			updateData.idNumber = dto.idNumber;
+		}
+
+		if (dto.idCopyKey !== undefined) {
+			updateData.idCopyKey = dto.idCopyKey;
+		}
+
+		if (dto.kraCertificateKey !== undefined) {
+			updateData.kraCertificateKey = dto.kraCertificateKey;
+		}
+
+		// Build user update data if name/email/phone provided
+		const userUpdateData: Partial<User> = {};
+
+		if (dto.name !== undefined) {
+			const nameParts = dto.name.trim().split(/\s+/);
+			userUpdateData.firstName = nameParts[0];
+			userUpdateData.lastName = nameParts.slice(1).join(' ') || '';
+		}
+
+		if (dto.email !== undefined && dto.email !== tenant.user?.email) {
+			const existingByEmail = await this.usersService['usersRepository'].findOne({
+				where: { email: dto.email },
+			});
+			if (existingByEmail && existingByEmail.userId !== tenant.userId) {
+				throw new ConflictException('A user with this email already exists');
+			}
+			userUpdateData.email = dto.email;
+		}
+
+		if (dto.phone !== undefined && dto.phone !== tenant.user?.phone) {
+			const existingByPhone = await this.usersService['usersRepository'].findOne({
+				where: { phone: dto.phone },
+			});
+			if (existingByPhone && existingByPhone.userId !== tenant.userId) {
+				throw new ConflictException('A user with this phone number already exists');
+			}
+			userUpdateData.phone = dto.phone;
+		}
+
 		const queryRunner = this.dataSource.createQueryRunner();
 		await queryRunner.connect();
 		await queryRunner.startTransaction();
 
 		try {
+			// Update user record if any user fields changed
+			if (Object.keys(userUpdateData).length > 0) {
+				await queryRunner.manager.update(User, { userId: tenant.userId }, userUpdateData as any);
+			}
+
 			if (isReactivating) {
 				// Verify the target unit exists and is not occupied
 				const unit = await queryRunner.manager.findOne(Unit, {
@@ -576,7 +625,7 @@ export class TenantsService {
 
 				await queryRunner.manager.update(Tenant, { tenantId }, updateData as any);
 				await queryRunner.manager.update(Unit, dto.unitId, { isOccupied: true });
-			} else {
+			} else if (Object.keys(updateData).length > 0) {
 				await queryRunner.manager.update(Tenant, { tenantId }, updateData as any);
 			}
 

@@ -26,6 +26,10 @@ export const invoicesApi = {
     const response = await api.patch(`/invoices/${invoiceId}`, data);
     return response.data;
   },
+  disputeInvoice: async (invoiceId: string, data: { reason: string; comment: string }): Promise<void> => {
+    await api.post(`/invoices/${invoiceId}/dispute`, data);
+  },
+
   downloadPdf: async (invoiceId: string): Promise<void> => {
     const response = await api.get(`/invoices/${invoiceId}/pdf`, {
       responseType: 'blob',

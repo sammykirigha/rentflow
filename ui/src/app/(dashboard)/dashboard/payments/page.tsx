@@ -35,6 +35,7 @@ import {
   Button,
   Card,
   Form,
+  Grid,
   Input,
   InputNumber,
   Modal,
@@ -52,6 +53,7 @@ import dayjs from 'dayjs';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const { Title, Text } = Typography;
+const { useBreakpoint } = Grid;
 
 type StkModalState = 'idle' | 'initiating' | 'waiting' | 'success' | 'failed' | 'timeout';
 
@@ -62,6 +64,8 @@ const POLL_INTERVAL_MS = 3000;
 export default function PaymentsPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isReconcileModalOpen, setIsReconcileModalOpen] = useState(false);
   const [selectedPaymentForReconcile, setSelectedPaymentForReconcile] = useState<Payment | null>(null);
@@ -442,73 +446,171 @@ export default function PaymentsPage() {
     },
   ];
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      if (activeTab === 'reconciliation') {
+        const all = await paymentsApi.getReconciliationQueue({ limit: 10000 });
+        const allData: Payment[] = Array.isArray(all?.data) ? all.data : [];
+        const csvCols: CsvColumn<Payment>[] = [
+          { header: 'Date', accessor: (r) => r.transactionDate ? dayjs(r.transactionDate).format('DD MMM YYYY, HH:mm') : '' },
+          { header: 'M-Pesa Receipt #', accessor: (r) => r.mpesaReceiptNumber || '' },
+          { header: 'Phone Number', accessor: (r) => r.mpesaPhoneNumber || '' },
+          { header: 'Paybill', accessor: (r) => r.mpesaPaybillNumber || '' },
+          { header: 'Account Ref', accessor: (r) => r.mpesaAccountReference || '' },
+          { header: 'Amount', accessor: (r) => Number(r.amount) },
+        ];
+        downloadCsv(allData, csvCols, 'reconciliation-queue.csv');
+      } else {
+        const all = await paymentsApi.getAll({ limit: 10000 });
+        const allData: Payment[] = Array.isArray(all?.data) ? all.data : [];
+        const csvCols: CsvColumn<Payment>[] = [
+          { header: 'Date', accessor: (r) => r.transactionDate ? dayjs(r.transactionDate).format('DD MMM YYYY, HH:mm') : '' },
+          { header: 'Tenant', accessor: (r) => `${r.tenant?.user?.firstName || ''} ${r.tenant?.user?.lastName || ''}`.trim() },
+          { header: 'Amount', accessor: (r) => Number(r.amount) },
+          { header: 'Method', accessor: (r) => PAYMENT_METHOD_LABEL[r.method] || r.method },
+          { header: 'Status', accessor: (r) => PAYMENT_STATUS_LABEL[r.status] || r.status },
+          { header: 'M-Pesa Receipt #', accessor: (r) => r.mpesaReceiptNumber || '' },
+          { header: 'Invoice #', accessor: (r) => r.invoice?.invoiceNumber || '' },
+        ];
+        downloadCsv(allData, csvCols, 'payments.csv');
+      }
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const renderMobilePaymentCard = (payment: Payment) => {
+    const tenantName = `${payment.tenant?.user?.firstName || ''} ${payment.tenant?.user?.lastName || ''}`.trim() || '-';
+    return (
+      <Card key={payment.paymentId} size="small" style={{ marginBottom: 8 }} styles={{ body: { padding: '12px 14px' } }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <Text strong style={{ fontSize: 14, display: 'block' }}>{tenantName}</Text>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {payment.transactionDate ? dayjs(payment.transactionDate).format('DD MMM YY, HH:mm') : '-'}
+            </Text>
+          </div>
+          <Text strong style={{ fontSize: 15, color: '#52c41a' }}>{formatKES(payment.amount)}</Text>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTop: '1px solid #f5f5f5', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <Tag color={PAYMENT_METHOD_COLOR[payment.method] || 'default'} style={{ margin: 0, fontSize: 10 }}>
+              {PAYMENT_METHOD_LABEL[payment.method] || payment.method}
+            </Tag>
+            <Tag color={PAYMENT_STATUS_COLOR[payment.status] || 'default'} style={{ margin: 0, fontSize: 10 }}>
+              {PAYMENT_STATUS_LABEL[payment.status] || payment.status}
+            </Tag>
+          </div>
+          {payment.mpesaReceiptNumber && (
+            <Text type="secondary" style={{ fontSize: 10 }}>{payment.mpesaReceiptNumber}</Text>
+          )}
+        </div>
+      </Card>
+    );
+  };
+
+  const renderMobileReconCard = (payment: Payment) => (
+    <Card key={payment.paymentId} size="small" style={{ marginBottom: 8 }} styles={{ body: { padding: '12px 14px' } }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <Text strong style={{ fontSize: 13, display: 'block' }}>{payment.mpesaReceiptNumber || '-'}</Text>
+          <Text type="secondary" style={{ fontSize: 11 }}>{payment.mpesaPhoneNumber || '-'}</Text>
+        </div>
+        <Text strong style={{ fontSize: 14 }}>{formatKES(payment.amount)}</Text>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTop: '1px solid #f5f5f5', alignItems: 'center' }}>
+        <Text type="secondary" style={{ fontSize: 11 }}>
+          {payment.mpesaPaybillNumber || '-'} · {payment.mpesaAccountReference || '-'}
+        </Text>
+        <Button
+          type="primary"
+          size="small"
+          onClick={() => {
+            setSelectedPaymentForReconcile(payment);
+            setIsReconcileModalOpen(true);
+            if (payment.mpesaPhoneNumber) {
+              const paymentPhone = normalizePhone(payment.mpesaPhoneNumber);
+              const matched = tenantsList.find((t) =>
+                t.user?.phone ? normalizePhone(t.user.phone) === paymentPhone : false,
+              );
+              if (matched) {
+                setTimeout(() => reconcileForm.setFieldValue('targetTenantId', matched.tenantId), 0);
+              }
+            }
+          }}
+        >
+          Reconcile
+        </Button>
+      </div>
+    </Card>
+  );
+
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Title level={4} style={{ margin: 0 }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: isMobile ? 'flex-start' : 'center',
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: isMobile ? 8 : 0,
+        marginBottom: isMobile ? 12 : 24,
+      }}>
+        <Title level={isMobile ? 5 : 4} style={{ margin: 0 }}>
           <DollarOutlined style={{ marginRight: 8 }} />
           Payments
         </Title>
         <Space>
           <Button
             icon={<ExportOutlined />}
-            onClick={async () => {
-              setExporting(true);
-              try {
-                if (activeTab === 'reconciliation') {
-                  const all = await paymentsApi.getReconciliationQueue({ limit: 10000 });
-                  const allData: Payment[] = Array.isArray(all?.data) ? all.data : [];
-                  const csvCols: CsvColumn<Payment>[] = [
-                    { header: 'Date', accessor: (r) => r.transactionDate ? dayjs(r.transactionDate).format('DD MMM YYYY, HH:mm') : '' },
-                    { header: 'M-Pesa Receipt #', accessor: (r) => r.mpesaReceiptNumber || '' },
-                    { header: 'Phone Number', accessor: (r) => r.mpesaPhoneNumber || '' },
-                    { header: 'Paybill', accessor: (r) => r.mpesaPaybillNumber || '' },
-                    { header: 'Account Ref', accessor: (r) => r.mpesaAccountReference || '' },
-                    { header: 'Amount', accessor: (r) => Number(r.amount) },
-                  ];
-                  downloadCsv(allData, csvCols, 'reconciliation-queue.csv');
-                } else {
-                  const all = await paymentsApi.getAll({ limit: 10000 });
-                  const allData: Payment[] = Array.isArray(all?.data) ? all.data : [];
-                  const csvCols: CsvColumn<Payment>[] = [
-                    { header: 'Date', accessor: (r) => r.transactionDate ? dayjs(r.transactionDate).format('DD MMM YYYY, HH:mm') : '' },
-                    { header: 'Tenant', accessor: (r) => `${r.tenant?.user?.firstName || ''} ${r.tenant?.user?.lastName || ''}`.trim() },
-                    { header: 'Amount', accessor: (r) => Number(r.amount) },
-                    { header: 'Method', accessor: (r) => PAYMENT_METHOD_LABEL[r.method] || r.method },
-                    { header: 'Status', accessor: (r) => PAYMENT_STATUS_LABEL[r.status] || r.status },
-                    { header: 'M-Pesa Receipt #', accessor: (r) => r.mpesaReceiptNumber || '' },
-                    { header: 'Invoice #', accessor: (r) => r.invoice?.invoiceNumber || '' },
-                  ];
-                  downloadCsv(allData, csvCols, 'payments.csv');
-                }
-              } finally {
-                setExporting(false);
-              }
-            }}
+            onClick={handleExport}
             loading={exporting}
             disabled={activeTab === 'reconciliation' ? (reconLoading || reconPayments.length === 0) : (isLoading || payments.length === 0)}
+            size={isMobile ? 'small' : 'middle'}
           >
-            Export CSV
+            {!isMobile && 'Export CSV'}
           </Button>
           <Button
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => setIsModalOpen(true)}
+            size={isMobile ? 'small' : 'middle'}
           >
-            Record Payment
+            {isMobile ? 'Record' : 'Record Payment'}
           </Button>
         </Space>
       </div>
 
-      <Card>
+      <Card size={isMobile ? 'small' : 'default'}>
         <Tabs
           activeKey={activeTab}
           onChange={(key) => setActiveTab(key)}
+          size={isMobile ? 'small' : 'middle'}
           items={[
             {
               key: 'all',
               label: 'All Payments',
-              children: (
+              children: isMobile ? (
+                isLoading ? (
+                  <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+                ) : payments.length === 0 ? (
+                  <Text type="secondary">No payments recorded yet.</Text>
+                ) : (
+                  <>
+                    {payments.map(renderMobilePaymentCard)}
+                    <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        Showing {payments.length} of {pagination?.total || 0}
+                      </Text>
+                      {(pagination?.total || 0) > payments.length && (
+                        <div style={{ marginTop: 8 }}>
+                          <Button size="small" onClick={() => setPageSize(pageSize + 10)}>Load More</Button>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )
+              ) : (
                 <Table<Payment>
                   columns={columns}
                   dataSource={payments}
@@ -532,7 +634,15 @@ export default function PaymentsPage() {
                   <span><WarningOutlined style={{ marginRight: 4 }} />Reconciliation</span>
                 </Badge>
               ),
-              children: (
+              children: isMobile ? (
+                reconLoading ? (
+                  <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+                ) : reconPayments.length === 0 ? (
+                  <Text type="secondary">No payments need reconciliation.</Text>
+                ) : (
+                  reconPayments.map(renderMobileReconCard)
+                )
+              ) : (
                 <Table<Payment>
                   columns={reconciliationColumns}
                   dataSource={reconPayments}
@@ -564,7 +674,7 @@ export default function PaymentsPage() {
         okText={isStkPush ? 'Send STK Push' : 'Record Payment'}
         okButtonProps={{ style: stkState !== 'idle' ? { display: 'none' } : undefined }}
         cancelButtonProps={{ style: stkState !== 'idle' && stkState !== 'failed' ? { display: 'none' } : undefined }}
-        width={520}
+        width={isMobile ? '100%' : 520}
         closable={stkState === 'idle' || stkState === 'success' || stkState === 'failed' || stkState === 'timeout'}
         maskClosable={stkState === 'idle'}
       >
@@ -754,14 +864,14 @@ export default function PaymentsPage() {
         }}
         confirmLoading={reconcileMutation.isPending}
         okText="Reconcile"
-        width={1100}
+        width={isMobile ? '100%' : 1100}
       >
-        <div style={{ display: 'flex', gap: 24 }}>
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 16 : 24 }}>
           {/* Left column: payment details + form */}
-          <div style={{ width: 440, flexShrink: 0 }}>
+          <div style={{ width: isMobile ? '100%' : 440, flexShrink: 0 }}>
             {selectedPaymentForReconcile && (
               <>
-                <div style={{ marginBottom: 12, padding: 12, background: '#f5f5f5', borderRadius: 6 }}>
+                <div style={{ marginBottom: 12, padding: isMobile ? 10 : 12, background: '#f5f5f5', borderRadius: 6, fontSize: isMobile ? 13 : 14 }}>
                   <p style={{ margin: '0 0 4px' }}>
                     <strong>M-Pesa Receipt:</strong> {selectedPaymentForReconcile.mpesaReceiptNumber || '-'}
                   </p>
@@ -793,7 +903,7 @@ export default function PaymentsPage() {
                   </p>
                 </div>
                 {matchedTenant && (
-                  <div style={{ marginBottom: 12, padding: 8, background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 6 }}>
+                  <div style={{ marginBottom: 12, padding: 8, background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 6, fontSize: isMobile ? 13 : 14 }}>
                     <strong>Suggested tenant:</strong>{' '}
                     {`${matchedTenant.user?.firstName || ''} ${matchedTenant.user?.lastName || ''}`.trim()}
                     {matchedTenant.unit?.unitNumber ? ` — Unit ${matchedTenant.unit.unitNumber}` : ''}
@@ -844,19 +954,27 @@ export default function PaymentsPage() {
               >
                 <Input.TextArea
                   placeholder="Reason for reconciliation (e.g., wrong account number used)"
-                  rows={3}
+                  rows={isMobile ? 2 : 3}
                 />
               </Form.Item>
             </Form>
           </div>
 
           {/* Right column: tenant preview panel */}
-          <div style={{ flex: 1, minWidth: 0, borderLeft: '1px solid #f0f0f0', paddingLeft: 24 }}>
+          <div style={{
+            flex: 1,
+            minWidth: 0,
+            borderLeft: isMobile ? 'none' : '1px solid #f0f0f0',
+            borderTop: isMobile ? '1px solid #f0f0f0' : 'none',
+            paddingLeft: isMobile ? 0 : 24,
+            paddingTop: isMobile ? 16 : 0,
+          }}>
             <TenantReconcilePreview
               tenantId={reconSelectedTenantId}
               paymentDate={selectedPaymentForReconcile?.transactionDate}
               isOpen={isReconcileModalOpen}
               tenantsList={tenantsList}
+              isMobile={isMobile}
             />
           </div>
         </div>

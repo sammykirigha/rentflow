@@ -3,7 +3,7 @@ import {
 	DeleteObjectCommand,
 	GetObjectCommand,
 	PutObjectCommand,
-	S3Client
+	S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable, Logger } from '@nestjs/common';
@@ -98,6 +98,31 @@ export class S3Service {
 			this.logger.error(`Failed to upload file: ${error.message}`);
 			throw error;
 		}
+	}
+
+	async getPresignedUploadUrl(
+		filename: string,
+		contentType: string,
+		folder: string = 'uploads',
+		expiresIn: number = 300,
+	): Promise<{ key: string; uploadUrl: string }> {
+		const key = `${folder}/${uuidv4()}-${filename}`;
+
+		const command = new PutObjectCommand({
+			Bucket: this.bucketName,
+			Key: key,
+			ContentType: contentType,
+			ServerSideEncryption: 'AES256',
+			Metadata: {
+				originalName: filename,
+				uploadedAt: new Date().toISOString(),
+			},
+		});
+
+		const uploadUrl = await getSignedUrl(this.s3Client, command, { expiresIn });
+
+		this.logger.log(`Presigned upload URL generated for: ${key}`);
+		return { key, uploadUrl };
 	}
 
 	async getSignedUrl(key: string, expiresIn: number = 3600): Promise<string> {

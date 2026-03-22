@@ -23,6 +23,7 @@ import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
 import { PermissionAction, PermissionResource } from '@/modules/permissions/entities/permission.entity';
 import { WalletService } from '@/modules/wallet/wallet.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
+import { DisputeInvoiceDto } from './dto/dispute-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { InvoiceStatus } from './entities/invoice.entity';
 import { InvoicesService } from './invoices.service';
@@ -101,6 +102,21 @@ export class InvoicesController {
 		@Query('limit', new ParseIntPipe({ optional: true })) limit: number = 10,
 	) {
 		return this.invoicesService.findByTenant(tenantId, { page, limit });
+	}
+
+	@Post(':invoiceId/dispute')
+	@ApiOperation({ summary: 'Dispute an invoice (tenant)' })
+	async disputeInvoice(
+		@Param('invoiceId') invoiceId: string,
+		@Body() disputeDto: DisputeInvoiceDto,
+		@CurrentUser() user: JwtPayload,
+	) {
+		return this.invoicesService.disputeInvoice(
+			invoiceId,
+			disputeDto.reason,
+			disputeDto.comment,
+			user.sub,
+		);
 	}
 
 	@Get(':invoiceId/pdf')

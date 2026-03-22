@@ -92,4 +92,21 @@ export const communicationsApi = {
     const response = await api.get('/communications/my', { params });
     return response.data;
   },
+
+  getMyUnreadCount: async (): Promise<number> => {
+    try {
+      const response = await api.get('/communications/my/unread-count');
+      return response.data?.count ?? 0;
+    } catch {
+      return 0;
+    }
+  },
+
+  markAsRead: async (notificationIds: string[]): Promise<void> => {
+    await api.post('/communications/my/mark-read', { notificationIds });
+  },
+
+  markAllAsRead: async (): Promise<void> => {
+    await api.post('/communications/my/mark-all-read');
+  },
 };

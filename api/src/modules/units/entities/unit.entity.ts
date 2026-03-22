@@ -8,6 +8,7 @@ export enum UnitType {
 	ONE_BEDROOM = 'one_bedroom',
 	TWO_BEDROOM = 'two_bedroom',
 	THREE_BEDROOM = 'three_bedroom',
+	SHOP = 'shop',
 }
 
 @Entity('units')

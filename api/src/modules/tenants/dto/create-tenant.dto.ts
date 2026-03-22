@@ -39,4 +39,20 @@ export class CreateTenantDto {
 	@Min(0)
 	@Max(10000000)
 	depositAmount?: number;
+
+	@ApiProperty({ description: 'National ID / Passport number', example: '12345678', required: false })
+	@IsString()
+	@IsNotEmpty()
+	@IsOptional()
+	idNumber?: string;
+
+	@ApiProperty({ description: 'S3 storage key for ID copy document', required: false })
+	@IsString()
+	@IsOptional()
+	idCopyKey?: string;
+
+	@ApiProperty({ description: 'S3 storage key for KRA certificate', required: false })
+	@IsString()
+	@IsOptional()
+	kraCertificateKey?: string;
 }

@@ -1,12 +1,11 @@
 "use client";
 
-import { Avatar, Card, Col, Descriptions, Row, Tag, Typography } from "antd";
+import { Avatar, Card, Col, Descriptions, Row, Tag, Typography, Grid } from "antd";
 import {
   UserOutlined,
   LockOutlined,
   MailOutlined,
   PhoneOutlined,
-  CalendarOutlined,
   SafetyCertificateOutlined,
   EditOutlined,
   HomeOutlined,
@@ -19,6 +18,7 @@ import { formatKES } from "@/lib/format-kes";
 import dayjs from "dayjs";
 
 const { Title, Text } = Typography;
+const { useBreakpoint } = Grid;
 
 const tenantStatusColor: Record<string, string> = {
   active: "green",
@@ -51,55 +51,65 @@ export default function TenantProfilePage() {
   const tenant = user?.tenant;
   const unit = tenant?.unit;
   const property = unit?.property;
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
 
   return (
     <div style={{ maxWidth: 960, margin: "0 auto" }}>
       {/* Profile Header */}
-      <Card style={{ marginBottom: 24 }}>
+      <Card style={{ marginBottom: isMobile ? 12 : 24 }}>
         <div
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 24,
-            flexWrap: "wrap",
+            gap: isMobile ? 12 : 24,
+            flexDirection: isMobile ? "column" : "row",
+            textAlign: isMobile ? "center" : "left",
           }}
         >
           <Avatar
-            size={96}
+            size={isMobile ? 64 : 96}
             icon={<UserOutlined />}
             src={user?.avatarUrl}
             style={{ backgroundColor: "#1677ff", flexShrink: 0 }}
           />
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <Title level={3} style={{ margin: 0 }}>
+          <div style={{ flex: 1, minWidth: 0, width: isMobile ? '100%' : undefined }}>
+            <Title level={isMobile ? 4 : 3} style={{ margin: 0 }}>
               {user?.firstName} {user?.lastName}
             </Title>
             <Text
               type="secondary"
-              style={{ fontSize: 15, display: "block", marginTop: 4 }}
+              style={{ fontSize: isMobile ? 13 : 15, display: "block", marginTop: 4 }}
             >
               Tenant
             </Text>
             <div
               style={{
-                marginTop: 12,
+                marginTop: 8,
                 display: "flex",
                 flexWrap: "wrap",
-                gap: 16,
+                gap: isMobile ? 8 : 16,
+                justifyContent: isMobile ? "center" : "flex-start",
               }}
             >
-              <Text type="secondary">
+              <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>
                 <MailOutlined style={{ marginRight: 6 }} />
                 {user?.email}
               </Text>
               {user?.phone && (
-                <Text type="secondary">
+                <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>
                   <PhoneOutlined style={{ marginRight: 6 }} />
                   {user.phone}
                 </Text>
               )}
             </div>
-            <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div style={{
+              marginTop: 8,
+              display: "flex",
+              gap: 6,
+              flexWrap: "wrap",
+              justifyContent: isMobile ? "center" : "flex-start",
+            }}>
               <Tag
                 color={user?.status === "active" ? "green" : "red"}
               >
@@ -135,13 +145,14 @@ export default function TenantProfilePage() {
             Tenant Details
           </span>
         }
-        style={{ marginBottom: 24 }}
+        style={{ marginBottom: isMobile ? 12 : 24 }}
       >
         <Descriptions
-          column={{ xs: 1, sm: 2 }}
+          column={isMobile ? 1 : { xs: 1, sm: 2 }}
           colon
           labelStyle={{ fontWeight: 600, color: "#434343" }}
           contentStyle={{ fontWeight: 400, color: "#595959" }}
+          size={isMobile ? "small" : "default"}
         >
           <Descriptions.Item label="Unit Number">
             {unit?.unitNumber || "-"}
@@ -210,9 +221,9 @@ export default function TenantProfilePage() {
         </Descriptions>
       </Card>
 
-      <Row gutter={24}>
+      <Row gutter={isMobile ? [0, 12] : 24}>
         {/* Edit Profile */}
-        <Col xs={24} lg={14} style={{ marginBottom: 24 }}>
+        <Col xs={24} lg={14} style={{ marginBottom: isMobile ? 12 : 24 }}>
           <Card
             title={
               <span>
@@ -227,7 +238,7 @@ export default function TenantProfilePage() {
         </Col>
 
         {/* Security */}
-        <Col xs={24} lg={10} style={{ marginBottom: 24 }}>
+        <Col xs={24} lg={10} style={{ marginBottom: isMobile ? 12 : 24 }}>
           <Card
             title={
               <span>

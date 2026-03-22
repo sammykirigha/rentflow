@@ -1,6 +1,6 @@
 "use client";
 
-import { Avatar, Card, Col, Descriptions, Row, Tag, Typography } from "antd";
+import { Avatar, Card, Col, Descriptions, Grid, Row, Tag, Typography } from "antd";
 import {
   UserOutlined,
   LockOutlined,
@@ -16,54 +16,62 @@ import SecuritySettings from "./components/security-settings";
 import dayjs from "dayjs";
 
 const { Title, Text } = Typography;
+const { useBreakpoint } = Grid;
 
 export default function ProfilePage() {
   const user = useUserStore((state) => state.user);
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto' }}>
       {/* Profile Header */}
-      <Card style={{ marginBottom: 24 }}>
+      <Card style={{ marginBottom: isMobile ? 12 : 24 }} size={isMobile ? 'small' : 'default'}>
         <div style={{
           display: 'flex',
-          alignItems: 'center',
-          gap: 24,
+          alignItems: isMobile ? 'flex-start' : 'center',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: isMobile ? 16 : 24,
           flexWrap: 'wrap',
         }}>
           <Avatar
-            size={96}
+            size={isMobile ? 64 : 96}
             icon={<UserOutlined />}
             src={user?.avatarUrl}
             style={{ backgroundColor: '#1677ff', flexShrink: 0 }}
           />
           <div style={{ flex: 1, minWidth: 200 }}>
-            <Title level={3} style={{ margin: 0 }}>
+            <Title level={isMobile ? 4 : 3} style={{ margin: 0 }}>
               {user?.firstName} {user?.lastName}
             </Title>
-            <Text type="secondary" style={{ fontSize: 15, display: 'block', marginTop: 4 }}>
+            <Text type="secondary" style={{ fontSize: isMobile ? 13 : 15, display: 'block', marginTop: 4 }}>
               {user?.userRole?.name || 'User'}
             </Text>
-            <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-              <Text type="secondary">
+            <div style={{ marginTop: isMobile ? 8 : 12, display: 'flex', flexWrap: 'wrap', gap: isMobile ? 8 : 16 }}>
+              <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>
                 <MailOutlined style={{ marginRight: 6 }} />
                 {user?.email}
               </Text>
               {user?.phone && (
-                <Text type="secondary">
+                <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>
                   <PhoneOutlined style={{ marginRight: 6 }} />
                   {user.phone}
                 </Text>
               )}
             </div>
-            <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+            <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <Tag color={user?.status === 'active' ? 'green' : 'red'}>
                 {user?.status === 'active' ? 'Active' : user?.status || 'Unknown'}
               </Tag>
               {user?.emailVerified && (
-                <Tag icon={<SafetyCertificateOutlined />} color="blue">Email Verified</Tag>
+                <Tag icon={<SafetyCertificateOutlined />} color="blue">
+                  {isMobile ? 'Email' : 'Email Verified'}
+                </Tag>
               )}
               {user?.phoneVerified && (
-                <Tag icon={<SafetyCertificateOutlined />} color="blue">Phone Verified</Tag>
+                <Tag icon={<SafetyCertificateOutlined />} color="blue">
+                  {isMobile ? 'Phone' : 'Phone Verified'}
+                </Tag>
               )}
             </div>
           </div>
@@ -73,12 +81,15 @@ export default function ProfilePage() {
       {/* Account Details */}
       <Card
         title={<span><CalendarOutlined style={{ marginRight: 8 }} />Account Details</span>}
-        style={{ marginBottom: 24 }}
+        style={{ marginBottom: isMobile ? 12 : 24 }}
+        size={isMobile ? 'small' : 'default'}
       >
         <Descriptions
           column={{ xs: 1, sm: 2 }}
           colon={false}
-          labelStyle={{ fontWeight: 500, color: '#595959' }}
+          labelStyle={{ fontWeight: 500, color: '#595959', fontSize: isMobile ? 12 : 14 }}
+          contentStyle={{ fontSize: isMobile ? 12 : 14 }}
+          size={isMobile ? 'small' : 'default'}
         >
           <Descriptions.Item label="Member Since">
             {user?.createdAt ? dayjs(user.createdAt).format('DD MMMM YYYY') : '-'}
@@ -90,14 +101,14 @@ export default function ProfilePage() {
             {user?.userRole?.name || '-'}
           </Descriptions.Item>
           <Descriptions.Item label="User ID">
-            <Text copyable style={{ fontSize: 12 }}>{user?.userId}</Text>
+            <Text copyable style={{ fontSize: isMobile ? 11 : 12 }}>{user?.userId}</Text>
           </Descriptions.Item>
         </Descriptions>
       </Card>
 
-      <Row gutter={24}>
+      <Row gutter={isMobile ? 0 : 24}>
         {/* Edit Profile */}
-        <Col xs={24} lg={14} style={{ marginBottom: 24 }}>
+        <Col xs={24} lg={14} style={{ marginBottom: isMobile ? 12 : 24 }}>
           <Card
             title={
               <span>
@@ -106,13 +117,14 @@ export default function ProfilePage() {
               </span>
             }
             style={{ height: '100%' }}
+            size={isMobile ? 'small' : 'default'}
           >
             <UpdateUserProfileForm />
           </Card>
         </Col>
 
         {/* Security */}
-        <Col xs={24} lg={10} style={{ marginBottom: 24 }}>
+        <Col xs={24} lg={10} style={{ marginBottom: isMobile ? 12 : 24 }}>
           <Card
             title={
               <span>
@@ -121,6 +133,7 @@ export default function ProfilePage() {
               </span>
             }
             style={{ height: '100%' }}
+            size={isMobile ? 'small' : 'default'}
           >
             <SecuritySettings />
           </Card>
