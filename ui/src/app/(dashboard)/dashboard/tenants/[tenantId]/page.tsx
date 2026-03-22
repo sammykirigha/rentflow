@@ -45,7 +45,7 @@ import { invoicesApi } from '@/lib/api/invoices.api';
 import { paymentsApi, walletApi } from '@/lib/api/payments.api';
 import { propertiesApi, unitsApi } from '@/lib/api/properties.api';
 import { parseError } from '@/lib/api/parseError';
-import { uploadFileDirect } from '@/lib/api/upload.api';
+import { uploadImage } from '@/lib/api/upload.api';
 import { getFileUrl } from '@/lib/utils';
 import { formatKES } from '@/lib/format-kes';
 import {
@@ -261,7 +261,7 @@ export default function TenantDetailPage() {
     }
     setUploading(true);
     try {
-      const result = await uploadFileDirect(file);
+      const result = await uploadImage(file);
       if (result?.key) {
         setKey(result.key);
         setName(file.name);

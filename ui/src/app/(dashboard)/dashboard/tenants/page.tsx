@@ -28,7 +28,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { tenantsApi } from '@/lib/api/tenants.api';
 import { propertiesApi, unitsApi } from '@/lib/api/properties.api';
 import { parseError } from '@/lib/api/parseError';
-import { uploadFileDirect } from '@/lib/api/upload.api';
+import { uploadImage } from '@/lib/api/upload.api';
 import { formatKES } from '@/lib/format-kes';
 import type { Tenant, CreateTenantInput, TenantStatus } from '@/types/tenants';
 import type { Property, Unit } from '@/types/properties';
@@ -172,7 +172,7 @@ export default function TenantsPage() {
     }
     setUploading(true);
     try {
-      const result = await uploadFileDirect(file);
+      const result = await uploadImage(file);
       if (result?.key) {
         setKey(result.key);
         setName(file.name);

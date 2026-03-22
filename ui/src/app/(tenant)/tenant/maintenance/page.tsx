@@ -34,7 +34,7 @@ import {
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { maintenanceApi } from '@/lib/api/expenses.api';
-import { uploadFileDirect } from '@/lib/api/upload.api';
+import { uploadImage } from '@/lib/api/upload.api';
 import { getFileUrl } from '@/lib/utils';
 import { parseError } from '@/lib/api/parseError';
 import type {
@@ -175,7 +175,7 @@ export default function TenantMaintenancePage() {
     }
     setUploading(true);
     try {
-      const result = await uploadFileDirect(file);
+      const result = await uploadImage(file);
       if (result?.key) {
         setPhotoKeys((prev) => [...prev, result.key]);
       } else {
