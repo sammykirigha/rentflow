@@ -217,6 +217,7 @@ export class ReminderService {
 			where: {
 				invoiceId,
 				type,
+				status: NotificationStatus.SENT,
 				sentAt: Between(start, end),
 			},
 		});
@@ -596,19 +597,34 @@ export class ReminderService {
 		}
 
 		try {
-			await this.smsService.sendSms(phone, message);
+			const result = await this.smsService.sendSms(phone, message);
 
-			await this.notificationRepository.save(
-				this.notificationRepository.create({
-					tenantId: tenant.tenantId,
-					invoiceId: invoice.invoiceId,
-					type,
-					channel: NotificationChannel.SMS,
-					message,
-					sentAt: now,
-					status: NotificationStatus.SENT,
-				}),
-			);
+			if (result.success) {
+				await this.notificationRepository.save(
+					this.notificationRepository.create({
+						tenantId: tenant.tenantId,
+						invoiceId: invoice.invoiceId,
+						type,
+						channel: NotificationChannel.SMS,
+						message,
+						sentAt: now,
+						status: NotificationStatus.SENT,
+					}),
+				);
+			} else {
+				this.logger.warn(`SMS reminder not delivered for ${phone} (invoice ${invoice.invoiceNumber})`);
+				await this.notificationRepository.save(
+					this.notificationRepository.create({
+						tenantId: tenant.tenantId,
+						invoiceId: invoice.invoiceId,
+						type,
+						channel: NotificationChannel.SMS,
+						message,
+						status: NotificationStatus.FAILED,
+						failReason: 'SMS delivery failed',
+					}),
+				);
+			}
 		} catch (err) {
 			this.logger.error(`SMS reminder failed for ${phone}: ${err.message}`);
 			await this.notificationRepository.save(
@@ -643,20 +659,36 @@ export class ReminderService {
 		}
 
 		try {
-			await this.mailService.sendEmail({ to: email, subject, html });
+			const result = await this.mailService.sendEmail({ to: email, subject, html });
 
-			await this.notificationRepository.save(
-				this.notificationRepository.create({
-					tenantId: tenant.tenantId,
-					invoiceId: invoice.invoiceId,
-					type,
-					channel: NotificationChannel.EMAIL,
-					subject,
-					message: html,
-					sentAt: now,
-					status: NotificationStatus.SENT,
-				}),
-			);
+			if (result) {
+				await this.notificationRepository.save(
+					this.notificationRepository.create({
+						tenantId: tenant.tenantId,
+						invoiceId: invoice.invoiceId,
+						type,
+						channel: NotificationChannel.EMAIL,
+						subject,
+						message: html,
+						sentAt: now,
+						status: NotificationStatus.SENT,
+					}),
+				);
+			} else {
+				this.logger.warn(`Email reminder not delivered for ${email} (invoice ${invoice.invoiceNumber})`);
+				await this.notificationRepository.save(
+					this.notificationRepository.create({
+						tenantId: tenant.tenantId,
+						invoiceId: invoice.invoiceId,
+						type,
+						channel: NotificationChannel.EMAIL,
+						subject,
+						message: html,
+						status: NotificationStatus.FAILED,
+						failReason: 'Email delivery failed',
+					}),
+				);
+			}
 		} catch (err) {
 			this.logger.error(`Email reminder failed for ${email}: ${err.message}`);
 			await this.notificationRepository.save(

@@ -90,6 +90,7 @@ export default function InvoicesPage() {
     queryKey: ['invoices', statusFilter, page, pageSize],
     queryFn: () => invoicesApi.getAll({ status: statusFilter, page, limit: pageSize }),
     enabled: isAuthenticated,
+    refetchInterval: 30_000,
   });
 
   const invoices: Invoice[] = Array.isArray(data?.data) ? data.data : [];

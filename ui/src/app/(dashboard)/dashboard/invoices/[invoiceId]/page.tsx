@@ -108,12 +108,14 @@ export default function InvoiceDetailPage() {
     queryKey: ['invoice', invoiceId],
     queryFn: () => invoicesApi.getOne(invoiceId),
     enabled: isAuthenticated && !!invoiceId,
+    refetchInterval: 30_000,
   });
 
   const { data: paymentsData, isLoading: isLoadingPayments } = useQuery({
     queryKey: ['invoice-payments', invoiceId],
     queryFn: () => paymentsApi.getAll({ invoiceId, limit: 200 }),
     enabled: isAuthenticated && !!invoiceId,
+    refetchInterval: 30_000,
   });
 
   const payments: Payment[] = Array.isArray(paymentsData?.data) ? paymentsData.data : [];

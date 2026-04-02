@@ -102,8 +102,7 @@ export default function TenantInvoicesPage() {
     queryKey: ['my-invoices', page, pageSize, statusFilter, monthFilter],
     queryFn: () => invoicesApi.getMy({ page, limit: pageSize, status: statusFilter }),
     enabled: isAuthenticated,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
+    refetchInterval: 30_000,
     placeholderData: keepPreviousData,
   });
 

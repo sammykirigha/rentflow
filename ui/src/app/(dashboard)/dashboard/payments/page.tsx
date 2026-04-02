@@ -89,6 +89,7 @@ export default function PaymentsPage() {
     queryKey: ['payments', page, pageSize],
     queryFn: () => paymentsApi.getAll({ page, limit: pageSize }),
     enabled: isAuthenticated,
+    refetchInterval: 30_000,
   });
 
   const payments: Payment[] = Array.isArray(data?.data) ? data.data : [];
