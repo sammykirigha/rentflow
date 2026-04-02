@@ -23,6 +23,7 @@ import { CreateTenantDto } from './dto/create-tenant.dto';
 import { RefundDepositDto } from './dto/refund-deposit.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { TenantStatus } from './entities/tenant.entity';
+import { ChecklistType } from './entities/tenant-checklist.entity';
 import { TenantsService } from './tenants.service';
 
 @Controller('tenants')
@@ -109,5 +110,30 @@ export class TenantsController {
 	) {
 		await this.tenantsService.delete(tenantId, user.sub);
 		return { message: 'Tenant and all associated records deleted successfully' };
+	}
+
+	// ── Checklist Endpoints ──────────────────────────────
+
+	@Get(':tenantId/checklist/:type')
+	@RequirePermissions(Permission(PermissionResource.TENANTS, PermissionAction.READ))
+	@ApiOperation({ summary: 'Get or create a checklist for a tenant' })
+	async getChecklist(
+		@Param('tenantId') tenantId: string,
+		@Param('type') type: ChecklistType,
+	) {
+		return this.tenantsService.getOrCreateChecklist(tenantId, type);
+	}
+
+	@Patch(':tenantId/checklist/:type/items/:index')
+	@RequirePermissions(Permission(PermissionResource.TENANTS, PermissionAction.UPDATE))
+	@ApiOperation({ summary: 'Update a checklist item completion status' })
+	async updateChecklistItem(
+		@Param('tenantId') tenantId: string,
+		@Param('type') type: ChecklistType,
+		@Param('index', ParseIntPipe) index: number,
+		@Body('completed') completed: boolean,
+		@CurrentUser() user: JwtPayload,
+	) {
+		return this.tenantsService.updateChecklistItem(tenantId, type, index, completed, user.sub);
 	}
 }

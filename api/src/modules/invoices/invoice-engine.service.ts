@@ -1,5 +1,6 @@
 import { AuditAction } from '@/common/enums/audit-action.enum';
 import { AuditTargetType } from '@/common/enums/audit-target-type.enum';
+import { orgAsyncStorage } from '@/common/services/org-async-context';
 import { Tenant, TenantStatus } from '@/modules/tenants/entities/tenant.entity';
 import { Receipt } from '@/modules/receipts/entities/receipt.entity';
 import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
@@ -89,86 +90,94 @@ export class InvoiceEngineService {
 		};
 
 		for (const tenant of activeTenants) {
-			try {
-				// Check if an invoice already exists for this tenant and billing month
-				const existingInvoice = await this.invoicesRepository.findOne({
-					where: {
-						tenantId: tenant.tenantId,
-						billingMonth: billing,
-					},
-				});
-
-				if (existingInvoice) {
-					this.logger.warn(
-						`Invoice already exists for tenant ${tenant.tenantId} ` +
-						`for billing month ${billing.toISOString()}, skipping`,
-					);
-					continue;
-				}
-
-				const { status: settlementResult, invoice: settledInvoice, settledOlderInvoices } = await this.generateAndSettleInvoice(
-					tenant,
-					billing,
-					dueDate,
-					systemUserId,
-					recurringTotal,
-					recurringDesc,
-				);
-
-				// Send notifications based on settlement result (fire-and-forget)
-				if (settledInvoice) {
-					settledInvoice.tenant = tenant;
-
-					if (settlementResult === InvoiceStatus.PAID) {
-						const receipt = await this.dataSource.getRepository(Receipt).findOne({
-							where: { invoiceId: settledInvoice.invoiceId },
+			// Wrap each tenant's processing in ALS context so that
+			// OrgScopeSubscriber can auto-inject organizationId on entities
+			// created via queryRunner.manager.create() inside the transaction.
+			await orgAsyncStorage.run(
+				{ organizationId: tenant.organizationId, isSuperAdmin: false, impersonatedBy: null },
+				async () => {
+					try {
+						// Check if an invoice already exists for this tenant and billing month
+						const existingInvoice = await this.invoicesRepository.findOne({
+							where: {
+								tenantId: tenant.tenantId,
+								billingMonth: billing,
+							},
 						});
-						if (receipt) {
-							this.invoicesService.sendReceiptNotification(receipt.receiptId).catch((err) =>
-								this.logger.error(`Failed to send receipt notification for ${receipt.receiptNumber}: ${err.message}`),
+
+						if (existingInvoice) {
+							this.logger.warn(
+								`Invoice already exists for tenant ${tenant.tenantId} ` +
+								`for billing month ${billing.toISOString()}, skipping`,
 							);
+							return;
 						}
-					} else if (settlementResult === InvoiceStatus.PARTIALLY_PAID) {
-						this.invoicesService.sendInvoiceNotification(settledInvoice).catch((err) =>
-							this.logger.error(`Failed to send notification for invoice ${settledInvoice.invoiceNumber}: ${err.message}`),
+
+						const { status: settlementResult, invoice: settledInvoice, settledOlderInvoices } = await this.generateAndSettleInvoice(
+							tenant,
+							billing,
+							dueDate,
+							systemUserId,
+							recurringTotal,
+							recurringDesc,
 						);
-						const receipt = await this.dataSource.getRepository(Receipt).findOne({
-							where: { invoiceId: settledInvoice.invoiceId },
-						});
-						if (receipt) {
-							this.invoicesService.sendReceiptNotification(receipt.receiptId).catch((err) =>
-								this.logger.error(`Failed to send receipt notification for ${receipt.receiptNumber}: ${err.message}`),
+
+						// Send notifications based on settlement result (fire-and-forget)
+						if (settledInvoice) {
+							settledInvoice.tenant = tenant;
+
+							if (settlementResult === InvoiceStatus.PAID) {
+								const receipt = await this.dataSource.getRepository(Receipt).findOne({
+									where: { invoiceId: settledInvoice.invoiceId },
+								});
+								if (receipt) {
+									this.invoicesService.sendReceiptNotification(receipt.receiptId).catch((err) =>
+										this.logger.error(`Failed to send receipt notification for ${receipt.receiptNumber}: ${err.message}`),
+									);
+								}
+							} else if (settlementResult === InvoiceStatus.PARTIALLY_PAID) {
+								this.invoicesService.sendInvoiceNotification(settledInvoice).catch((err) =>
+									this.logger.error(`Failed to send notification for invoice ${settledInvoice.invoiceNumber}: ${err.message}`),
+								);
+								const receipt = await this.dataSource.getRepository(Receipt).findOne({
+									where: { invoiceId: settledInvoice.invoiceId },
+								});
+								if (receipt) {
+									this.invoicesService.sendReceiptNotification(receipt.receiptId).catch((err) =>
+										this.logger.error(`Failed to send receipt notification for ${receipt.receiptNumber}: ${err.message}`),
+									);
+								}
+							} else {
+								this.invoicesService.sendInvoiceNotification(settledInvoice).catch((err) =>
+									this.logger.error(`Failed to send notification for invoice ${settledInvoice.invoiceNumber}: ${err.message}`),
+								);
+							}
+						}
+
+						// Send receipt notifications for older invoices that were also settled
+						if (settledOlderInvoices.length > 0) {
+							this.sendOlderInvoiceNotifications(settledOlderInvoices).catch((err) =>
+								this.logger.error(`Failed to send notifications for older invoices: ${err.message}`),
 							);
 						}
-					} else {
-						this.invoicesService.sendInvoiceNotification(settledInvoice).catch((err) =>
-							this.logger.error(`Failed to send notification for invoice ${settledInvoice.invoiceNumber}: ${err.message}`),
+
+						result.generated++;
+
+						if (settlementResult === InvoiceStatus.PAID) {
+							result.settled++;
+						} else if (settlementResult === InvoiceStatus.PARTIALLY_PAID) {
+							result.partial++;
+						} else {
+							result.unpaid++;
+						}
+					} catch (error) {
+						this.logger.error(
+							`Failed to generate invoice for tenant ${tenant.tenantId}: ${error.message}`,
+							error.stack,
 						);
 					}
-				}
-
-				// Send receipt notifications for older invoices that were also settled
-				if (settledOlderInvoices.length > 0) {
-					this.sendOlderInvoiceNotifications(settledOlderInvoices).catch((err) =>
-						this.logger.error(`Failed to send notifications for older invoices: ${err.message}`),
-					);
-				}
-
-				result.generated++;
-
-				if (settlementResult === InvoiceStatus.PAID) {
-					result.settled++;
-				} else if (settlementResult === InvoiceStatus.PARTIALLY_PAID) {
-					result.partial++;
-				} else {
-					result.unpaid++;
-				}
-			} catch (error) {
-				this.logger.error(
-					`Failed to generate invoice for tenant ${tenant.tenantId}: ${error.message}`,
-					error.stack,
-				);
-			}
+				},
+			);
 		}
 
 		this.logger.log(

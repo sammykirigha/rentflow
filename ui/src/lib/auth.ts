@@ -34,6 +34,7 @@ export const authOptions: NextAuthOptions = {
           const data = await response.json();
 
           if (data.data && data.data.user && data.data.accessToken) {
+            const roleName = data.data.user.userRole?.name || "";
             return {
               id: data.data.user.userId,
               userId: data.data.user.userId,
@@ -41,7 +42,10 @@ export const authOptions: NextAuthOptions = {
               isAdminUser: data.data.user.userRole?.isAdminRole || false,
               name: `${data.data.user.firstName || ''} ${data.data.user.lastName || ''}`.trim(),
               roleId: data.data.user.roleId || "",
-              roleName: data.data.user.userRole?.name || "",
+              roleName,
+              organizationId: data.data.user.organizationId || "",
+              isSuperAdmin: roleName === "SUPER_ADMIN",
+              mustChangePassword: data.data.user.mustChangePassword || false,
               accessToken: data.data.accessToken,
               refreshToken: data.data.refreshToken,
             };
@@ -71,6 +75,9 @@ export const authOptions: NextAuthOptions = {
         token.roleName = customUser.roleName;
         token.userId = customUser.userId;
         token.isAdminUser = customUser.isAdminUser;
+        token.organizationId = customUser.organizationId;
+        token.isSuperAdmin = customUser.isSuperAdmin;
+        token.mustChangePassword = customUser.mustChangePassword;
       }
       return token;
     },
@@ -85,6 +92,9 @@ export const authOptions: NextAuthOptions = {
           roleName: token.roleName || "",
           userId: token.userId || token.sub || "",
           isAdminUser: token.isAdminUser || false,
+          organizationId: token.organizationId || "",
+          isSuperAdmin: token.isSuperAdmin || false,
+          mustChangePassword: token.mustChangePassword || false,
         }
       };
       return extendedSession;

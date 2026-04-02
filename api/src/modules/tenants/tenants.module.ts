@@ -9,13 +9,14 @@ import { UnitsModule } from '../units/units.module';
 import { SmsModule } from '../sms/sms.module';
 import { MailModule } from '../mail/mail.module';
 import { Tenant } from './entities/tenant.entity';
+import { TenantChecklist } from './entities/tenant-checklist.entity';
 import { TenantsController } from './tenants.controller';
 import { TenantsRepository } from './tenants.repository';
 import { TenantsService } from './tenants.service';
 
 @Module({
 	imports: [
-		TypeOrmModule.forFeature([Tenant, Unit, Role, Notification]),
+		TypeOrmModule.forFeature([Tenant, TenantChecklist, Unit, Role, Notification]),
 		AuditModule,
 		forwardRef(() => UsersModule),
 		forwardRef(() => UnitsModule),

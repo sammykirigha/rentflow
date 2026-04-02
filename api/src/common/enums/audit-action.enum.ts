@@ -84,6 +84,50 @@ export enum AuditAction {
 	// Receipt actions
 	RECEIPT_GENERATED = 'receipt_generated',
 
+	// Organization actions
+	ORGANIZATION_CREATED = 'organization_created',
+	ORGANIZATION_UPDATED = 'organization_updated',
+	ORGANIZATION_SUSPENDED = 'organization_suspended',
+	ORGANIZATION_REACTIVATED = 'organization_reactivated',
+
+	// Subscription actions
+	SUBSCRIPTION_CREATED = 'subscription_created',
+	SUBSCRIPTION_UPDATED = 'subscription_updated',
+	SUBSCRIPTION_CANCELLED = 'subscription_cancelled',
+
+	// Platform actions
+	PLATFORM_CONFIG_UPDATED = 'platform_config_updated',
+	IMPERSONATION_STARTED = 'impersonation_started',
+	IMPERSONATION_ENDED = 'impersonation_ended',
+
+	// Lease Lifecycle actions
+	LEASE_EXPIRY_REMINDER = 'lease_expiry_reminder',
+	LEASE_AUTO_NOTICE_PERIOD = 'lease_auto_notice_period',
+	LEASE_AUTO_VACATED = 'lease_auto_vacated',
+	VACANCY_ALERT_SENT = 'vacancy_alert_sent',
+
+	// Escalation actions
+	LANDLORD_ESCALATION = 'landlord_escalation',
+
+	// Checklist actions
+	CHECKLIST_ITEM_COMPLETED = 'checklist_item_completed',
+
+	// Deposit deduction actions
+	DEPOSIT_DEDUCTION_ADDED = 'deposit_deduction_added',
+
+	// Meter reading actions
+	METER_READING_CREATED = 'meter_reading_created',
+	METER_READING_UPDATED = 'meter_reading_updated',
+
+	// Rent escalation actions
+	RENT_ESCALATION_CREATED = 'rent_escalation_created',
+	RENT_ESCALATION_APPLIED = 'rent_escalation_applied',
+	RENT_ESCALATION_CANCELLED = 'rent_escalation_cancelled',
+
+	// Report/Statement actions
+	OWNER_REPORT_GENERATED = 'owner_report_generated',
+	STATEMENT_GENERATED = 'statement_generated',
+
 	// Generic CRUD actions
 	CREATED = 'created',
 	UPDATED = 'updated',

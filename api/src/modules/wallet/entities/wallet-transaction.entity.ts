@@ -1,4 +1,4 @@
-import { AbstractEntity } from '@/database/abstract.entity';
+import { OrgScopedEntity } from '@/database/org-scoped.entity';
 import { Tenant } from '@/modules/tenants/entities/tenant.entity';
 import {
 	Column,
@@ -19,7 +19,8 @@ export enum WalletTxnType {
 
 @Entity('wallet_transactions')
 @Index(['tenantId'])
-export class WalletTransaction extends AbstractEntity<WalletTransaction> {
+@Index(['organizationId', 'tenantId'])
+export class WalletTransaction extends OrgScopedEntity<WalletTransaction> {
 	@PrimaryGeneratedColumn('uuid', { name: 'wallet_transaction_id' })
 	walletTransactionId: string;
 

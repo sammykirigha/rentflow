@@ -2,6 +2,7 @@ import { AuditAction } from '@/common/enums/audit-action.enum';
 import { AuditTargetType } from '@/common/enums/audit-target-type.enum';
 import { AuditService } from '@/modules/audit/audit.service';
 import { WalletSettlementService } from '@/modules/invoices/wallet-settlement.service';
+import { OrganizationsService } from '@/modules/organizations/organizations.service';
 import { Payment, PaymentMethod, PaymentStatus } from '@/modules/payments/entities/payment.entity';
 import { PaymentsRepository } from '@/modules/payments/payments.repository';
 import { Tenant, TenantStatus } from '@/modules/tenants/entities/tenant.entity';
@@ -27,20 +28,36 @@ import {
 	StkPushResponse,
 } from './interfaces/daraja.interfaces';
 
+interface MpesaCredentials {
+	consumerKey: string;
+	consumerSecret: string;
+	passkey: string;
+	shortcode: string;
+	environment: string;
+	callbackBaseUrl: string;
+	baseUrl: string;
+}
+
+interface CachedToken {
+	token: string;
+	expiry: number;
+}
+
 @Injectable()
 export class MpesaService implements OnModuleInit {
 	private readonly logger = new Logger(MpesaService.name);
 
-	private accessToken: string | null = null;
-	private tokenExpiry: number = 0;
+	/** Per-shortcode access token cache (different orgs have different API keys) */
+	private readonly tokenCache = new Map<string, CachedToken>();
 
-	private readonly baseUrl: string;
-	private readonly consumerKey: string;
-	private readonly consumerSecret: string;
-	private readonly passkey: string;
-	private readonly shortcode: string;
-	private readonly callbackBaseUrl: string;
-	private readonly environment: string;
+	/** Default .env credentials (backward compatibility) */
+	private readonly defaultEnvironment: string;
+	private readonly defaultBaseUrl: string;
+	private readonly defaultConsumerKey: string;
+	private readonly defaultConsumerSecret: string;
+	private readonly defaultPasskey: string;
+	private readonly defaultShortcode: string;
+	private readonly defaultCallbackBaseUrl: string;
 
 	constructor(
 		private readonly configService: ConfigService,
@@ -50,41 +67,230 @@ export class MpesaService implements OnModuleInit {
 		@Inject(forwardRef(() => WalletSettlementService))
 		private readonly walletSettlementService: WalletSettlementService,
 		private readonly auditService: AuditService,
+		private readonly organizationsService: OrganizationsService,
 		@InjectRepository(Tenant)
 		private readonly tenantRepository: Repository<Tenant>,
 		@InjectRepository(Unit)
 		private readonly unitRepository: Repository<Unit>,
 	) {
-		this.environment = this.configService.get<string>('MPESA_ENVIRONMENT', 'sandbox');
-		this.baseUrl =
-			this.environment === 'production'
+		this.defaultEnvironment = this.configService.get<string>('MPESA_ENVIRONMENT', 'sandbox');
+		this.defaultBaseUrl =
+			this.defaultEnvironment === 'production'
 				? 'https://api.safaricom.co.ke'
 				: 'https://sandbox.safaricom.co.ke';
-		this.consumerKey = this.configService.get<string>('MPESA_CONSUMER_KEY', '');
-		this.consumerSecret = this.configService.get<string>('MPESA_CONSUMER_SECRET', '');
-		this.passkey = this.configService.get<string>('MPESA_PASSKEY', '');
-		this.shortcode = this.configService.get<string>('MPESA_SHORTCODE', '');
-		this.callbackBaseUrl = this.configService.get<string>('MPESA_CALLBACK_BASE_URL', '');
+		this.defaultConsumerKey = this.configService.get<string>('MPESA_CONSUMER_KEY', '');
+		this.defaultConsumerSecret = this.configService.get<string>('MPESA_CONSUMER_SECRET', '');
+		this.defaultPasskey = this.configService.get<string>('MPESA_PASSKEY', '');
+		this.defaultShortcode = this.configService.get<string>('MPESA_SHORTCODE', '');
+		this.defaultCallbackBaseUrl = this.configService.get<string>('MPESA_CALLBACK_BASE_URL', '');
 	}
 
 	async onModuleInit(): Promise<void> {
-		if (!this.consumerKey || !this.consumerSecret || !this.callbackBaseUrl || !this.shortcode) {
-			this.logger.warn(
-				'M-Pesa credentials or callback URL not fully configured, skipping C2B URL registration',
-			);
-			return;
-		}
-
-		// Retry C2B registration with exponential backoff (Safaricom sandbox can be flaky)
-		this.registerC2bUrlsWithRetry(3, 5000).catch(() => {
-			// Already logged inside the method — nothing more to do
+		// Register C2B URLs for all organizations with configured M-Pesa credentials
+		this.registerC2bUrlsForAllOrgs().catch(() => {
+			// Already logged inside the method
 		});
 	}
 
-	private async registerC2bUrlsWithRetry(maxAttempts: number, initialDelay: number): Promise<void> {
+	/**
+	 * Registers C2B callback URLs for every organization that has
+	 * M-Pesa credentials configured, plus the .env default if set.
+	 * Runs on startup and is fire-and-forget (logs errors, doesn't throw).
+	 */
+	private async registerC2bUrlsForAllOrgs(): Promise<void> {
+		const registered = new Set<string>();
+
+		// 1. Register for .env default credentials (backward compatibility)
+		if (this.defaultConsumerKey && this.defaultConsumerSecret && this.defaultShortcode && this.defaultCallbackBaseUrl) {
+			try {
+				await this.registerC2bUrlsWithRetry(3, 5000);
+				registered.add(this.defaultShortcode);
+				this.logger.log(`C2B URLs registered for .env default shortcode ${this.defaultShortcode}`);
+			} catch {
+				// Already logged in registerC2bUrlsWithRetry
+			}
+		} else {
+			this.logger.log('M-Pesa .env credentials not fully configured, skipping .env C2B registration');
+		}
+
+		// 2. Register for each organization with configured M-Pesa credentials
+		try {
+			const orgs = await this.organizationsService.findAllWithMpesaConfigured();
+
+			if (orgs.length === 0) {
+				this.logger.log('No organizations with M-Pesa credentials found, skipping org C2B registration');
+				return;
+			}
+
+			for (const org of orgs) {
+				// Skip if already registered via .env default (same shortcode)
+				if (registered.has(org.mpesaShortcode!)) {
+					this.logger.log(
+						`Skipping C2B registration for org "${org.name}" — shortcode ${org.mpesaShortcode} already registered via .env`,
+					);
+					continue;
+				}
+
+				try {
+					await this.registerC2bUrlsWithRetry(2, 3000, org.organizationId);
+					registered.add(org.mpesaShortcode!);
+					this.logger.log(
+						`C2B URLs registered for org "${org.name}" (shortcode ${org.mpesaShortcode})`,
+					);
+				} catch {
+					this.logger.warn(
+						`C2B URL registration failed for org "${org.name}" (shortcode ${org.mpesaShortcode}). ` +
+							`Use POST /payments/mobile/register-c2b to retry.`,
+					);
+				}
+			}
+		} catch (error) {
+			this.logger.error(`Failed to query organizations for C2B registration: ${error.message}`);
+		}
+	}
+
+	// ── Credential Resolution ──────────────────────────────
+
+	/**
+	 * Resolves M-Pesa credentials for a given organization.
+	 * Tries org-level credentials first, falls back to .env defaults.
+	 * Callback URL always uses the server's .env MPESA_CALLBACK_BASE_URL
+	 * because all Daraja callbacks hit this single API server — routing
+	 * to the correct org is done via BusinessShortCode in the payload.
+	 */
+	private async resolveCredentials(organizationId?: string): Promise<MpesaCredentials> {
+		if (organizationId) {
+			try {
+				const orgCreds =
+					await this.organizationsService.getDecryptedMpesaCredentials(organizationId);
+
+				if (orgCreds && orgCreds.consumerKey && orgCreds.consumerSecret && orgCreds.shortcode) {
+					const environment = orgCreds.environment || this.defaultEnvironment;
+					return {
+						consumerKey: orgCreds.consumerKey,
+						consumerSecret: orgCreds.consumerSecret,
+						passkey: orgCreds.passkey,
+						shortcode: orgCreds.shortcode,
+						environment,
+						callbackBaseUrl: this.defaultCallbackBaseUrl,
+						baseUrl:
+							environment === 'production'
+								? 'https://api.safaricom.co.ke'
+								: 'https://sandbox.safaricom.co.ke',
+					};
+				}
+			} catch (error) {
+				this.logger.warn(
+					`Failed to resolve org credentials for ${organizationId}, falling back to .env: ${error.message}`,
+				);
+			}
+		}
+
+		// Fall back to .env defaults
+		return {
+			consumerKey: this.defaultConsumerKey,
+			consumerSecret: this.defaultConsumerSecret,
+			passkey: this.defaultPasskey,
+			shortcode: this.defaultShortcode,
+			environment: this.defaultEnvironment,
+			callbackBaseUrl: this.defaultCallbackBaseUrl,
+			baseUrl: this.defaultBaseUrl,
+		};
+	}
+
+	// ── OAuth Token ─────────────────────────────────────────
+
+	async getAccessToken(credentials: MpesaCredentials): Promise<string> {
+		const cacheKey = credentials.shortcode;
+		const cached = this.tokenCache.get(cacheKey);
+
+		if (cached && cached.expiry > Date.now()) {
+			return cached.token;
+		}
+
+		const auth = Buffer.from(
+			`${credentials.consumerKey}:${credentials.consumerSecret}`,
+		).toString('base64');
+
+		const { data } = await axios.get<DarajaOAuthResponse>(
+			`${credentials.baseUrl}/oauth/v2/generate?grant_type=client_credentials`,
+			{
+				headers: { Authorization: `Basic ${auth}` },
+				timeout: 15_000,
+			},
+		);
+
+		// 55-minute cache (5-min buffer before Daraja's 1-hour expiry)
+		this.tokenCache.set(cacheKey, {
+			token: data.access_token,
+			expiry: Date.now() + 55 * 60 * 1000,
+		});
+
+		return data.access_token;
+	}
+
+	// ── C2B URL Registration ────────────────────────────────
+
+	async registerC2bUrls(organizationId?: string): Promise<void> {
+		const credentials = await this.resolveCredentials(organizationId);
+
+		if (!credentials.consumerKey || !credentials.shortcode || !credentials.callbackBaseUrl) {
+			throw new Error(
+				'M-Pesa credentials not fully configured' +
+					(organizationId ? ` for organization ${organizationId}` : ''),
+			);
+		}
+
+		const token = await this.getAccessToken(credentials);
+
+		try {
+			await axios.post(
+				`${credentials.baseUrl}/mpesa/c2b/v2/registerurl`,
+				{
+					ShortCode: credentials.shortcode,
+					ResponseType: 'Completed',
+					ConfirmationURL: `${credentials.callbackBaseUrl}/payments/mobile/callback/confirmation`,
+					ValidationURL: `${credentials.callbackBaseUrl}/payments/mobile/callback/validation`,
+				},
+				{
+					headers: { Authorization: `Bearer ${token}` },
+					timeout: 15_000,
+				},
+			);
+		} catch (error) {
+			const errorMessage = error?.response?.data?.errorMessage || '';
+			if (errorMessage.includes('already registered')) {
+				this.logger.log('C2B URLs already registered with Safaricom');
+				// Fall through to audit log below
+			} else {
+				this.invalidateTokenOnAuthError(error, credentials.shortcode);
+				throw error;
+			}
+		}
+
+		await this.auditService.createLog({
+			action: AuditAction.C2B_URLS_REGISTERED,
+			performedBy: undefined,
+			targetType: AuditTargetType.PAYMENT,
+			targetId: credentials.shortcode,
+			details: `C2B URLs registered for shortcode ${credentials.shortcode}`,
+			metadata: {
+				shortcode: credentials.shortcode,
+				organizationId,
+				confirmationUrl: `${credentials.callbackBaseUrl}/payments/mobile/callback/confirmation`,
+				validationUrl: `${credentials.callbackBaseUrl}/payments/mobile/callback/validation`,
+			},
+		});
+	}
+
+	private async registerC2bUrlsWithRetry(
+		maxAttempts: number,
+		initialDelay: number,
+		organizationId?: string,
+	): Promise<void> {
 		for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 			try {
-				await this.registerC2bUrls();
+				await this.registerC2bUrls(organizationId);
 				this.logger.log(`M-Pesa C2B URLs registered successfully (attempt ${attempt}/${maxAttempts})`);
 				return;
 			} catch (error) {
@@ -101,79 +307,11 @@ export class MpesaService implements OnModuleInit {
 				} else {
 					this.logger.error(
 						`C2B URL registration failed after ${maxAttempts} attempts: ${detail}. ` +
-						`Use POST /api/v2/payments/mobile/register-c2b to retry manually.`,
+							`Use POST /payments/mobile/register-c2b to retry manually.`,
 					);
 				}
 			}
 		}
-	}
-
-	// ── OAuth Token ─────────────────────────────────────────
-
-	async getAccessToken(): Promise<string> {
-		if (this.accessToken && this.tokenExpiry > Date.now()) {
-			return this.accessToken;
-		}
-
-		const auth = Buffer.from(`${this.consumerKey}:${this.consumerSecret}`).toString('base64');
-
-		const { data } = await axios.get<DarajaOAuthResponse>(
-			`${this.baseUrl}/oauth/v2/generate?grant_type=client_credentials`,
-			{
-				headers: { Authorization: `Basic ${auth}` },
-				timeout: 15_000,
-			},
-		);
-
-		this.accessToken = data.access_token;
-		// 55-minute cache (5-min buffer before Daraja's 1-hour expiry)
-		this.tokenExpiry = Date.now() + 55 * 60 * 1000;
-
-		return this.accessToken;
-	}
-
-	// ── C2B URL Registration ────────────────────────────────
-
-	async registerC2bUrls(): Promise<void> {
-		const token = await this.getAccessToken();
-
-		try {
-			await axios.post(
-				`${this.baseUrl}/mpesa/c2b/v2/registerurl`,
-				{
-					ShortCode: this.shortcode,
-					ResponseType: 'Completed',
-					ConfirmationURL: `${this.callbackBaseUrl}/payments/mobile/callback/confirmation`,
-					ValidationURL: `${this.callbackBaseUrl}/payments/mobile/callback/validation`,
-				},
-				{
-					headers: { Authorization: `Bearer ${token}` },
-					timeout: 15_000,
-				},
-			);
-		} catch (error) {
-			const errorMessage = error?.response?.data?.errorMessage || '';
-			if (errorMessage.includes('already registered')) {
-				this.logger.log('C2B URLs already registered with Safaricom');
-				// Fall through to audit log below
-			} else {
-				this.invalidateTokenOnAuthError(error);
-				throw error;
-			}
-		}
-
-		await this.auditService.createLog({
-			action: AuditAction.C2B_URLS_REGISTERED,
-			performedBy: undefined,
-			targetType: AuditTargetType.PAYMENT,
-			targetId: this.shortcode,
-			details: `C2B URLs registered for shortcode ${this.shortcode}`,
-			metadata: {
-				shortcode: this.shortcode,
-				confirmationUrl: `${this.callbackBaseUrl}/payments/mobile/callback/confirmation`,
-				validationUrl: `${this.callbackBaseUrl}/payments/mobile/callback/validation`,
-			},
-		});
 	}
 
 	// ── STK Push ────────────────────────────────────────────
@@ -192,6 +330,9 @@ export class MpesaService implements OnModuleInit {
 			throw new NotFoundException('Tenant not found');
 		}
 
+		// Resolve per-org credentials using tenant's organizationId
+		const credentials = await this.resolveCredentials(tenant.organizationId);
+
 		const phoneNumber = this.formatPhoneNumber(phone || tenant.user.phone);
 		const accountRef = tenant.unit?.unitNumber || tenantId;
 
@@ -206,26 +347,26 @@ export class MpesaService implements OnModuleInit {
 		});
 
 		try {
-			const token = await this.getAccessToken();
+			const token = await this.getAccessToken(credentials);
 			const timestamp = this.generateTimestamp();
-			const password = Buffer.from(`${this.shortcode}${this.passkey}${timestamp}`).toString(
-				'base64',
-			);
+			const password = Buffer.from(
+				`${credentials.shortcode}${credentials.passkey}${timestamp}`,
+			).toString('base64');
 
 			let data: StkPushResponse;
 			try {
 				const response = await axios.post<StkPushResponse>(
-					`${this.baseUrl}/mpesa/stkpush/v1/processrequest`,
+					`${credentials.baseUrl}/mpesa/stkpush/v1/processrequest`,
 					{
-						BusinessShortCode: this.shortcode,
+						BusinessShortCode: credentials.shortcode,
 						Password: password,
 						Timestamp: timestamp,
 						TransactionType: 'CustomerPayBillOnline',
 						Amount: Math.round(amount),
 						PartyA: phoneNumber,
-						PartyB: this.shortcode,
+						PartyB: credentials.shortcode,
 						PhoneNumber: phoneNumber,
-						CallBackURL: `${this.callbackBaseUrl}/payments/mobile/callback/stk`,
+						CallBackURL: `${credentials.callbackBaseUrl}/payments/mobile/callback/stk`,
 						AccountReference: accountRef,
 						TransactionDesc: `Rent payment for ${accountRef}`,
 					},
@@ -236,7 +377,7 @@ export class MpesaService implements OnModuleInit {
 				);
 				data = response.data;
 			} catch (stkError) {
-				this.invalidateTokenOnAuthError(stkError);
+				this.invalidateTokenOnAuthError(stkError, credentials.shortcode);
 				throw stkError;
 			}
 
@@ -258,6 +399,7 @@ export class MpesaService implements OnModuleInit {
 					amount,
 					phoneNumber,
 					checkoutRequestId: data.CheckoutRequestID,
+					organizationId: tenant.organizationId,
 				},
 			});
 
@@ -430,8 +572,11 @@ export class MpesaService implements OnModuleInit {
 				`Account=${BillRefNumber}, Amount=${TransAmount}`,
 		);
 
-		// Validate shortcode matches configured shortcode
-		if (BusinessShortCode !== this.shortcode) {
+		// Look up organization by shortcode (supports per-org paybills)
+		const org = await this.organizationsService.findByShortcode(BusinessShortCode);
+		const isDefaultShortcode = BusinessShortCode === this.defaultShortcode && this.defaultShortcode;
+
+		if (!org && !isDefaultShortcode) {
 			this.logger.warn(`C2B Validation rejected: unknown shortcode ${BusinessShortCode}`);
 			return { ResultCode: 1, ResultDesc: 'Rejected: Unknown business number' };
 		}
@@ -477,10 +622,25 @@ export class MpesaService implements OnModuleInit {
 			return { ResultCode: 0, ResultDesc: 'Already processed' };
 		}
 
-		// Try to match tenant by unit number
-		const unit = await this.unitRepository.findOne({
-			where: { unitNumber: ILike(normalizedAccount) },
-		});
+		// Resolve organization by shortcode for org-scoped unit lookup
+		const org = await this.organizationsService.findByShortcode(paybill);
+		const resolvedOrgId = org?.organizationId;
+
+		// Try to match tenant by unit number, scoped to the resolved organization
+		let unit: Unit | null = null;
+		if (resolvedOrgId) {
+			unit = await this.unitRepository.findOne({
+				where: {
+					unitNumber: ILike(normalizedAccount),
+					organizationId: resolvedOrgId,
+				},
+			});
+		} else {
+			// Fallback: no org scoping (backward compat with .env shortcode)
+			unit = await this.unitRepository.findOne({
+				where: { unitNumber: ILike(normalizedAccount) },
+			});
+		}
 
 		let tenant: Tenant | null = null;
 		if (unit) {
@@ -519,6 +679,7 @@ export class MpesaService implements OnModuleInit {
 					phone,
 					accountRef: normalizedAccount,
 					paybill,
+					organizationId: resolvedOrgId,
 				},
 			});
 
@@ -572,6 +733,7 @@ export class MpesaService implements OnModuleInit {
 					phone,
 					accountRef: normalizedAccount,
 					paybill,
+					organizationId: resolvedOrgId,
 				},
 			});
 
@@ -641,11 +803,14 @@ export class MpesaService implements OnModuleInit {
 		return cleaned;
 	}
 
-	private invalidateTokenOnAuthError(error: any): void {
+	private invalidateTokenOnAuthError(error: any, shortcode?: string): void {
 		if (error?.response?.status === 401 || error?.response?.data?.errorCode?.startsWith('401')) {
 			this.logger.warn('Daraja returned 401, invalidating cached access token');
-			this.accessToken = null;
-			this.tokenExpiry = 0;
+			if (shortcode) {
+				this.tokenCache.delete(shortcode);
+			} else {
+				this.tokenCache.clear();
+			}
 		}
 	}
 

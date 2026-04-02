@@ -17,6 +17,9 @@ export class PermissionsGuard implements CanActivate {
 	constructor(private reflector: Reflector) {}
 
 	canActivate(context: ExecutionContext): boolean {
+		const request = context.switchToHttp().getRequest();
+		const user = request.user;
+
 		const requiredPermissions = this.reflector.getAllAndOverride<Array<{
 			resource: PermissionResource; action: PermissionAction;
 		}>>(PERMISSIONS_KEY, [context.getHandler(), context.getClass()]);
@@ -25,15 +28,17 @@ export class PermissionsGuard implements CanActivate {
 			return true;
 		}
 
-		const request = context.switchToHttp().getRequest();
-		const user = request.user;
-
 		if (!user) {
 			throw new ForbiddenException('User not authenticated');
 		}
 
-		// Landlord bypasses all permission checks
-		if (user.roleName === UserRole.LANDLORD) {
+		// Super admin bypasses all permission checks
+		if (user.isSuperAdmin) {
+			return true;
+		}
+
+		// Org owner bypasses org-level permission checks (was LANDLORD)
+		if (user.roleName === UserRole.ORG_OWNER || user.roleName === UserRole.LANDLORD) {
 			return true;
 		}
 

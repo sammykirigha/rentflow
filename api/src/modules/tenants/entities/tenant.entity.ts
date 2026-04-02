@@ -1,4 +1,4 @@
-import { AbstractEntity } from '@/database/abstract.entity';
+import { OrgScopedEntity } from '@/database/org-scoped.entity';
 import { User } from '@/modules/users/entities/user.entity';
 import { Unit } from '@/modules/units/entities/unit.entity';
 import { Column, Entity, Index, JoinColumn, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
@@ -18,7 +18,8 @@ export enum DepositStatus {
 
 @Entity('tenants')
 @Index(['status'])
-export class Tenant extends AbstractEntity<Tenant> {
+@Index(['organizationId', 'status'])
+export class Tenant extends OrgScopedEntity<Tenant> {
 	@PrimaryGeneratedColumn('uuid', { name: 'tenant_id' })
 	tenantId: string;
 

@@ -1,9 +1,10 @@
-import { AbstractEntity } from '@/database/abstract.entity';
+import { OrgScopedEntity } from '@/database/org-scoped.entity';
 import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('properties')
 @Index(['name'])
-export class Property extends AbstractEntity<Property> {
+@Index(['organizationId', 'isActive'])
+export class Property extends OrgScopedEntity<Property> {
 	@PrimaryGeneratedColumn('uuid', { name: 'property_id' })
 	propertyId: string;
 

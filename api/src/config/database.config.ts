@@ -14,6 +14,12 @@ import { Expense } from '@/modules/expenses/entities/expense.entity';
 import { Vendor } from '@/modules/vendors/entities/vendor.entity';
 import { MaintenanceRequest } from '@/modules/maintenance/entities/maintenance-request.entity';
 import { Notification } from '@/modules/notifications/entities/notification.entity';
+import { Organization } from '@/modules/organizations/entities/organization.entity';
+import { Subscription } from '@/modules/subscriptions/entities/subscription.entity';
+import { PlatformConfig } from '@/modules/platform/entities/platform-config.entity';
+import { MeterReading } from '@/modules/meter-readings/entities/meter-reading.entity';
+import { RentEscalation } from '@/modules/rent-escalations/entities/rent-escalation.entity';
+import { TenantChecklist } from '@/modules/tenants/entities/tenant-checklist.entity';
 import { ConfigService } from '@nestjs/config';
 import { config } from 'dotenv';
 import { DataSource } from 'typeorm';
@@ -39,6 +45,12 @@ export const entities = [
   Vendor,
   MaintenanceRequest,
   Notification,
+  Organization,
+  Subscription,
+  PlatformConfig,
+  MeterReading,
+  RentEscalation,
+  TenantChecklist,
 ];
 
 export default new DataSource({

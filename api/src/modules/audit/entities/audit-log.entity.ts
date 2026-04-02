@@ -1,11 +1,20 @@
 import { AuditAction } from '@/common/enums/audit-action.enum';
 import { AuditTargetType } from '@/common/enums/audit-target-type.enum';
 import { AbstractEntity } from '@/database/abstract.entity';
+import { Organization } from '@/modules/organizations/entities/organization.entity';
 import { User } from '@/modules/users/entities/user.entity';
-import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('audit_logs')
+@Index(['organizationId', 'createdAt'])
 export class AuditLog extends AbstractEntity<AuditLog> {
+	@Column({ name: 'organization_id', type: 'uuid', nullable: true })
+	@Index()
+	organizationId: string;
+
+	@ManyToOne(() => Organization, { eager: false, nullable: true })
+	@JoinColumn({ name: 'organization_id' })
+	organization: Organization;
 	@PrimaryGeneratedColumn('uuid', { name: 'audit_id' })
 	auditId: string;
 

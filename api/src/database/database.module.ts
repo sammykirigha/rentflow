@@ -2,6 +2,7 @@ import { entities } from '@/config/database.config';
 import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { OrgScopeSubscriber } from './org-scope.subscriber';
 
 import { InitialSchema1771270000000 } from './migrations/1771270000000-InitialSchema';
 import { MakeMaintenanceTenantOptionalAddProperty1771280000000 } from './migrations/1771280000000-MakeMaintenanceTenantOptionalAddProperty';
@@ -22,6 +23,15 @@ import { AddWalletSettlementIntervalToSystemSettings1772030000000 } from './migr
 import { AddInvoiceTypeAndRecipientName1772040000000 } from './migrations/1772040000000-AddInvoiceTypeAndRecipientName';
 import { AddTenantIdDocumentFields1772050000000 } from './migrations/1772050000000-AddTenantIdDocumentFields';
 import { AddShopUnitType1772060000000 } from './migrations/1772060000000-AddShopUnitType';
+import { MultiTenantFoundation1772100000000 } from './migrations/1772100000000-MultiTenantFoundation';
+import { AddMustChangePassword1772110000000 } from './migrations/1772110000000-AddMustChangePassword';
+import { AddTaglineToOrganizations1772120000000 } from './migrations/1772120000000-AddTaglineToOrganizations';
+import { AddMeterReadingsRentEscalationsTenantChecklists1772130000000 } from './migrations/1772130000000-AddMeterReadingsRentEscalationsTenantChecklists';
+import { MakeUserEmailOptional1772140000000 } from './migrations/1772140000000-MakeUserEmailOptional';
+import { AddMissingAuditEnumValues1772150000000 } from './migrations/1772150000000-AddMissingAuditEnumValues';
+import { AddMissingNotificationTypeEnumValues1772155000000 } from './migrations/1772155000000-AddMissingNotificationTypeEnumValues';
+import { MakeAuditLogOrgIdNullable1772160000000 } from './migrations/1772160000000-MakeAuditLogOrgIdNullable';
+import { AddReadAtToNotifications1772170000000 } from './migrations/1772170000000-AddReadAtToNotifications';
 
 const migrations = [
 	InitialSchema1771270000000,
@@ -43,6 +53,15 @@ const migrations = [
 	AddInvoiceTypeAndRecipientName1772040000000,
 	AddTenantIdDocumentFields1772050000000,
 	AddShopUnitType1772060000000,
+	MultiTenantFoundation1772100000000,
+	AddMustChangePassword1772110000000,
+	AddTaglineToOrganizations1772120000000,
+	AddMeterReadingsRentEscalationsTenantChecklists1772130000000,
+	MakeUserEmailOptional1772140000000,
+	AddMissingAuditEnumValues1772150000000,
+	AddMissingNotificationTypeEnumValues1772155000000,
+	MakeAuditLogOrgIdNullable1772160000000,
+	AddReadAtToNotifications1772170000000,
 ];
 
 @Global()
@@ -57,6 +76,7 @@ const migrations = [
 				username: configService.getOrThrow('DATABASE_USERNAME'),
 				password: configService.getOrThrow('DATABASE_PASSWORD'),
 				entities,
+				subscribers: [OrgScopeSubscriber],
 				migrations,
 				migrationsTableName: 'migrations',
 				migrationsRun: true,

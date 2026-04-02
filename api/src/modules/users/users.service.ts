@@ -149,6 +149,13 @@ export class UsersService {
 		);
 	}
 
+	async clearMustChangePassword(userId: string): Promise<void> {
+		await this.usersRepository.update(
+			{ userId },
+			{ mustChangePassword: false }
+		);
+	}
+
 	async updateUserStatus(
 		userId: string,
 		updateUserStatusDto: UpdateUserStatusDto,

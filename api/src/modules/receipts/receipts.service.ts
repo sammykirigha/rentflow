@@ -1,4 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Organization } from '@/modules/organizations/entities/organization.entity';
 import { PdfService } from '../pdf/pdf.service';
 import { SettingsService } from '../settings/settings.service';
 import { ReceiptsRepository } from './receipts.repository';
@@ -12,6 +15,8 @@ export class ReceiptsService {
 		private readonly receiptsRepository: ReceiptsRepository,
 		private readonly pdfService: PdfService,
 		private readonly settingsService: SettingsService,
+		@InjectRepository(Organization)
+		private readonly organizationRepository: Repository<Organization>,
 	) {}
 
 	async findAll({ page = 1, limit = 10 }: { page: number; limit: number }): Promise<{
@@ -98,12 +103,32 @@ export class ReceiptsService {
 
 		const tenantName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Tenant';
 
+		let branding: { name?: string; supportEmail?: string; supportPhone?: string; logoUrl?: string; primaryColor?: string; tagline?: string } = {};
+		try {
+			const orgId = (invoice as any).organizationId;
+			if (orgId) {
+				const org = await this.organizationRepository.findOne({ where: { organizationId: orgId } as any });
+				if (org) {
+					branding = {
+						name: org.name || undefined,
+						supportEmail: org.supportEmail || undefined,
+						supportPhone: org.supportPhone || undefined,
+						logoUrl: org.logoUrl || undefined,
+						primaryColor: org.primaryColor || undefined,
+						tagline: org.tagline || undefined,
+					};
+				}
+			}
+		} catch { /* ignore */ }
+
 		const buffer = await this.pdfService.generateReceiptPdf({
-			companyName: settings.platformName || 'RentFlow',
-			companyEmail: settings.supportEmail || 'support@rentflow.co.ke',
-			companyPhone: settings.contactPhone || undefined,
+			companyName: branding.name || settings.platformName || 'RentFlow',
+			companyEmail: branding.supportEmail || settings.supportEmail || 'support@rentflow.co.ke',
+			companyPhone: branding.supportPhone || settings.contactPhone || undefined,
 			companyAddress: settings.contactAddress || undefined,
-			companyLogoUrl: settings.appLogo || undefined,
+			companyLogoUrl: branding.logoUrl || settings.appLogo || undefined,
+			primaryColor: branding.primaryColor,
+			tagline: branding.tagline,
 
 			receiptNumber: receipt.receiptNumber,
 			receiptDate: new Date(receipt.createdAt).toLocaleDateString('en-KE'),

@@ -9,6 +9,11 @@ declare module "next-auth/jwt" {
     accessToken?: string;
     refreshToken?: string;
     roleId?: string;
+    roleName?: string;
+    organizationId?: string;
+    isSuperAdmin?: boolean;
+    isAdminUser?: boolean;
+    mustChangePassword?: boolean;
   }
 }
 
@@ -22,7 +27,11 @@ declare module "next-auth" {
       email?: string | null;
       image?: string | null;
       role?: string;
+      roleName?: string;
       isAdminUser?: boolean;
+      organizationId?: string;
+      isSuperAdmin?: boolean;
+      mustChangePassword?: boolean;
     };
   }
 }

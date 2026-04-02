@@ -2,14 +2,21 @@ import { UserStatus } from '@/common/enums/user-status.enum';
 import authConfig from '@/config/auth.config';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
+import { InjectRepository } from '@nestjs/typeorm';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import { Repository } from 'typeorm';
 import { JwtPayload } from '../../../common/interfaces/jwt-payload.interface';
-import { UsersService } from '../../users/users.service';
+import { User } from '../../users/entities/user.entity';
 
+/**
+ * JwtRefreshStrategy must remain a singleton (Passport requirement).
+ * Uses raw TypeORM Repository<User> to avoid REQUEST-scoped dependency chain.
+ */
 @Injectable()
 export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
   constructor(
-    private readonly usersService: UsersService,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -19,7 +26,9 @@ export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh'
   }
 
   async validate(payload: JwtPayload): Promise<JwtPayload> {
-    const user = await this.usersService.findOne(payload.sub);
+    const user = await this.userRepository.findOne({
+      where: { userId: payload.sub },
+    });
 
     if (!user || user.status !== UserStatus.ACTIVE) {
       throw new UnauthorizedException('User not found or inactive');

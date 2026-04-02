@@ -1,3 +1,4 @@
+import { orgAsyncStorage } from '@/common/services/org-async-context';
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -111,18 +112,23 @@ export class PenaltyEngineService {
 		let totalPenalty = 0;
 
 		for (const invoice of overdueInvoices) {
-			try {
-				const penaltyAmount = await this.applyPenaltyToInvoice(invoice, now, systemUserId);
-				if (penaltyAmount > 0) {
-					penalized++;
-					totalPenalty += penaltyAmount;
-				}
-			} catch (error) {
-				this.logger.error(
-					`Failed to apply penalty to invoice ${invoice.invoiceNumber}: ${error.message}`,
-					error.stack,
-				);
-			}
+			await orgAsyncStorage.run(
+				{ organizationId: invoice.organizationId, isSuperAdmin: false, impersonatedBy: null },
+				async () => {
+					try {
+						const penaltyAmount = await this.applyPenaltyToInvoice(invoice, now, systemUserId);
+						if (penaltyAmount > 0) {
+							penalized++;
+							totalPenalty += penaltyAmount;
+						}
+					} catch (error) {
+						this.logger.error(
+							`Failed to apply penalty to invoice ${invoice.invoiceNumber}: ${error.message}`,
+							error.stack,
+						);
+					}
+				},
+			);
 		}
 
 		this.logger.log(

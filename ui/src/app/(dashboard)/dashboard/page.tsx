@@ -1,20 +1,23 @@
 "use client";
 
-import { Card, Col, Row, Statistic, Typography, Table, Tag, Progress, Grid } from 'antd';
+import { Card, Col, Row, Statistic, Typography, Table, Tag, Grid } from 'antd';
 import {
   HomeOutlined,
   TeamOutlined,
-  FileTextOutlined,
-  DollarOutlined,
   WarningOutlined,
   AlertOutlined,
+  DollarOutlined,
+  ToolOutlined,
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { dashboardApi, type DashboardStats } from '@/lib/api/dashboard.api';
 import { formatKES } from '@/lib/format-kes';
+import RevenueCharts from './components/revenue-charts';
+import LeaseExpiringTable from './components/lease-expiring-table';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
+import Link from 'next/link';
 
 const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
@@ -67,11 +70,8 @@ export default function DashboardPage() {
     },
     {
       title: 'Tenant',
-      key: 'tenant',
-      render: (_: unknown, record) => {
-        const name = `${record.tenant?.user?.firstName || ''} ${record.tenant?.user?.lastName || ''}`.trim();
-        return name || '-';
-      },
+      dataIndex: 'tenantName',
+      key: 'tenantName',
     },
     {
       title: 'Amount',
@@ -154,11 +154,8 @@ export default function DashboardPage() {
   const paymentColumns: ColumnsType<NonNullable<DashboardStats['recentPayments']>[0]> = [
     {
       title: 'Tenant',
-      key: 'tenant',
-      render: (_: unknown, record) => {
-        const name = `${record.tenant?.user?.firstName || ''} ${record.tenant?.user?.lastName || ''}`.trim();
-        return name || '-';
-      },
+      dataIndex: 'tenantName',
+      key: 'tenantName',
     },
     {
       title: 'Amount',
@@ -182,7 +179,7 @@ export default function DashboardPage() {
   ];
 
   const renderMobileInvoiceCard = (inv: NonNullable<DashboardStats['recentInvoices']>[0]) => {
-    const tenantName = `${inv.tenant?.user?.firstName || ''} ${inv.tenant?.user?.lastName || ''}`.trim() || '-';
+    const tenantName = inv.tenantName || '-';
     return (
       <div key={inv.invoiceId} style={{ padding: '10px 0', borderBottom: '1px solid #f5f5f5' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -205,7 +202,7 @@ export default function DashboardPage() {
   };
 
   const renderMobilePaymentCard = (p: NonNullable<DashboardStats['recentPayments']>[0]) => {
-    const tenantName = `${p.tenant?.user?.firstName || ''} ${p.tenant?.user?.lastName || ''}`.trim() || '-';
+    const tenantName = p.tenantName || '-';
     return (
       <div key={p.paymentId} style={{ padding: '10px 0', borderBottom: '1px solid #f5f5f5' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -250,6 +247,9 @@ export default function DashboardPage() {
 
   const gutter: [number, number] = isMobile ? [8, 8] : [16, 16];
 
+  const occupancyRate = Math.round(stats?.occupancyRate ?? 0);
+  const collectionRate = Math.round(stats?.collectionRate ?? 0);
+
   return (
     <div>
       <div style={{ marginBottom: isMobile ? 12 : 24 }}>
@@ -257,38 +257,8 @@ export default function DashboardPage() {
         <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>Welcome to RentFlow property management</Text>
       </div>
 
-      {/* KPI Cards */}
+      {/* Row 1: 4 Primary KPIs */}
       <Row gutter={gutter}>
-        <Col xs={12} sm={12} lg={6}>
-          <Card loading={isLoading} size={isMobile ? 'small' : 'default'} styles={isMobile ? { body: { padding: 12 } } : undefined}>
-            <Statistic
-              title={<Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>Properties</Text>}
-              value={stats?.totalProperties ?? 0}
-              prefix={<HomeOutlined />}
-              valueStyle={{ fontSize: isMobile ? 18 : 24 }}
-              suffix={
-                <Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>
-                  ({stats?.occupiedUnits ?? 0}/{stats?.totalUnits ?? 0})
-                </Text>
-              }
-            />
-          </Card>
-        </Col>
-        <Col xs={12} sm={12} lg={6}>
-          <Card loading={isLoading} size={isMobile ? 'small' : 'default'} styles={isMobile ? { body: { padding: 12 } } : undefined}>
-            <Statistic
-              title={<Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>Active Tenants</Text>}
-              value={stats?.activeTenants ?? 0}
-              prefix={<TeamOutlined />}
-              valueStyle={{ fontSize: isMobile ? 18 : 24 }}
-              suffix={
-                <Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>
-                  of {stats?.totalTenants ?? 0}
-                </Text>
-              }
-            />
-          </Card>
-        </Col>
         <Col xs={12} sm={12} lg={6}>
           <Card loading={isLoading} size={isMobile ? 'small' : 'default'} styles={isMobile ? { body: { padding: 12 } } : undefined}>
             <Statistic
@@ -311,95 +281,119 @@ export default function DashboardPage() {
             />
           </Card>
         </Col>
-      </Row>
-
-      {/* Occupancy & Collection Rates */}
-      <Row gutter={gutter} style={{ marginTop: isMobile ? 8 : 16 }}>
         <Col xs={12} sm={12} lg={6}>
           <Card loading={isLoading} size={isMobile ? 'small' : 'default'} styles={isMobile ? { body: { padding: 12 } } : undefined}>
-            <div style={{ textAlign: 'center' }}>
-              <Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>Occupancy Rate</Text>
-              <Progress
-                type="circle"
-                percent={Math.round(stats?.occupancyRate ?? 0)}
-                size={isMobile ? 60 : 80}
-                strokeColor="#1890ff"
-                style={{ marginTop: 8 }}
-              />
+            <Statistic
+              title={<Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>Occupancy</Text>}
+              value={occupancyRate}
+              suffix="%"
+              valueStyle={{
+                fontSize: isMobile ? 18 : 24,
+                color: occupancyRate >= 80 ? '#3f8600' : occupancyRate >= 50 ? '#fa8c16' : '#cf1322',
+              }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={12} lg={6}>
+          <Card loading={isLoading} size={isMobile ? 'small' : 'default'} styles={isMobile ? { body: { padding: 12 } } : undefined}>
+            <Statistic
+              title={<Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>Collection Rate</Text>}
+              value={collectionRate}
+              suffix="%"
+              valueStyle={{
+                fontSize: isMobile ? 18 : 24,
+                color: collectionRate >= 80 ? '#3f8600' : collectionRate >= 50 ? '#fa8c16' : '#cf1322',
+              }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Row 2: Quick Stats Bar */}
+      <Row gutter={gutter} style={{ marginTop: isMobile ? 8 : 16 }}>
+        <Col xs={24}>
+          <Card loading={isLoading} size={isMobile ? 'small' : 'default'} styles={{ body: { padding: isMobile ? '8px 12px' : '12px 24px' } }}>
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: isMobile ? 12 : 24,
+              justifyContent: 'space-between',
+            }}>
+              <div style={{ minWidth: isMobile ? '45%' : 'auto' }}>
+                <HomeOutlined style={{ marginRight: 6, color: '#1890ff' }} />
+                <Text type="secondary" style={{ fontSize: isMobile ? 11 : 13 }}>Properties: </Text>
+                <Text strong style={{ fontSize: isMobile ? 12 : 14 }}>
+                  {stats?.totalProperties ?? 0}
+                </Text>
+                <Text type="secondary" style={{ fontSize: isMobile ? 10 : 12, marginLeft: 4 }}>
+                  ({stats?.occupiedUnits ?? 0}/{stats?.totalUnits ?? 0} units)
+                </Text>
+              </div>
+              <div style={{ minWidth: isMobile ? '45%' : 'auto' }}>
+                <TeamOutlined style={{ marginRight: 6, color: '#1890ff' }} />
+                <Text type="secondary" style={{ fontSize: isMobile ? 11 : 13 }}>Active Tenants: </Text>
+                <Text strong style={{ fontSize: isMobile ? 12 : 14 }}>
+                  {stats?.activeTenants ?? 0}
+                </Text>
+                <Text type="secondary" style={{ fontSize: isMobile ? 10 : 12, marginLeft: 4 }}>
+                  of {stats?.totalTenants ?? 0}
+                </Text>
+              </div>
+              <div style={{ minWidth: isMobile ? '45%' : 'auto' }}>
+                <WarningOutlined style={{ marginRight: 6, color: (stats?.overdueInvoices ?? 0) > 0 ? '#cf1322' : '#52c41a' }} />
+                <Text type="secondary" style={{ fontSize: isMobile ? 11 : 13 }}>Overdue: </Text>
+                <Text strong style={{
+                  fontSize: isMobile ? 12 : 14,
+                  color: (stats?.overdueInvoices ?? 0) > 0 ? '#cf1322' : undefined,
+                }}>
+                  {stats?.overdueInvoices ?? 0}
+                </Text>
+              </div>
+              <div style={{ minWidth: isMobile ? '45%' : 'auto' }}>
+                <DollarOutlined style={{ marginRight: 6, color: '#fa8c16' }} />
+                <Text type="secondary" style={{ fontSize: isMobile ? 11 : 13 }}>Expenses: </Text>
+                <Text strong style={{ fontSize: isMobile ? 12 : 14 }}>
+                  {formatKES(stats?.totalExpenses ?? 0)}
+                </Text>
+              </div>
+              <div style={{ minWidth: isMobile ? '45%' : 'auto' }}>
+                <ToolOutlined style={{ marginRight: 6, color: (stats?.pendingMaintenance ?? 0) > 0 ? '#fa8c16' : '#52c41a' }} />
+                <Text type="secondary" style={{ fontSize: isMobile ? 11 : 13 }}>Pending Maint.: </Text>
+                <Text strong style={{ fontSize: isMobile ? 12 : 14 }}>
+                  {stats?.pendingMaintenance ?? 0}
+                </Text>
+              </div>
+              <div style={{ minWidth: isMobile ? '45%' : 'auto' }}>
+                <AlertOutlined style={{ marginRight: 6, color: (stats?.urgentMaintenance ?? 0) > 0 ? '#cf1322' : '#52c41a' }} />
+                <Text type="secondary" style={{ fontSize: isMobile ? 11 : 13 }}>Urgent Maint.: </Text>
+                <Text strong style={{
+                  fontSize: isMobile ? 12 : 14,
+                  color: (stats?.urgentMaintenance ?? 0) > 0 ? '#cf1322' : undefined,
+                }}>
+                  {stats?.urgentMaintenance ?? 0}
+                </Text>
+              </div>
             </div>
           </Card>
         </Col>
-        <Col xs={12} sm={12} lg={6}>
-          <Card loading={isLoading} size={isMobile ? 'small' : 'default'} styles={isMobile ? { body: { padding: 12 } } : undefined}>
-            <div style={{ textAlign: 'center' }}>
-              <Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>Collection Rate</Text>
-              <Progress
-                type="circle"
-                percent={Math.round(stats?.collectionRate ?? 0)}
-                size={isMobile ? 60 : 80}
-                strokeColor={
-                  (stats?.collectionRate ?? 0) >= 80 ? '#52c41a' :
-                  (stats?.collectionRate ?? 0) >= 50 ? '#faad14' : '#ff4d4f'
-                }
-                style={{ marginTop: 8 }}
-              />
-            </div>
-          </Card>
-        </Col>
-        <Col xs={12} sm={12} lg={6}>
-          <Card loading={isLoading} size={isMobile ? 'small' : 'default'} styles={isMobile ? { body: { padding: 12 } } : undefined}>
-            <Statistic
-              title={<Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>Total Expenses</Text>}
-              value={stats?.totalExpenses ?? 0}
-              formatter={(value) => formatKES(Number(value))}
-              valueStyle={{ fontSize: isMobile ? 16 : 24 }}
-            />
-          </Card>
-        </Col>
-        <Col xs={12} sm={12} lg={6}>
-          <Card loading={isLoading} size={isMobile ? 'small' : 'default'} styles={isMobile ? { body: { padding: 12 } } : undefined}>
-            <Statistic
-              title={<Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>Overdue Invoices</Text>}
-              value={stats?.overdueInvoices ?? 0}
-              prefix={<WarningOutlined />}
-              valueStyle={{ fontSize: isMobile ? 18 : 24, color: (stats?.overdueInvoices ?? 0) > 0 ? '#cf1322' : '#3f8600' }}
-            />
-          </Card>
+      </Row>
+
+      {/* Row 3: Revenue Charts (moved up) */}
+      <Row gutter={gutter} style={{ marginTop: isMobile ? 12 : 24 }}>
+        <Col xs={24}>
+          <RevenueCharts />
         </Col>
       </Row>
 
-      {/* Maintenance KPI */}
-      <Row gutter={gutter} style={{ marginTop: isMobile ? 8 : 16 }}>
-        <Col xs={12} sm={12} lg={6}>
-          <Card loading={isLoading} size={isMobile ? 'small' : 'default'} styles={isMobile ? { body: { padding: 12 } } : undefined}>
-            <Statistic
-              title={<Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>Pending Maint.</Text>}
-              value={stats?.pendingMaintenance ?? 0}
-              prefix={<AlertOutlined />}
-              valueStyle={{ fontSize: isMobile ? 18 : 24, color: (stats?.pendingMaintenance ?? 0) > 0 ? '#fa8c16' : '#3f8600' }}
-            />
-          </Card>
-        </Col>
-        <Col xs={12} sm={12} lg={6}>
-          <Card loading={isLoading} size={isMobile ? 'small' : 'default'} styles={isMobile ? { body: { padding: 12 } } : undefined}>
-            <Statistic
-              title={<Text type="secondary" style={{ fontSize: isMobile ? 11 : 14 }}>Urgent Maint.</Text>}
-              value={stats?.urgentMaintenance ?? 0}
-              prefix={<WarningOutlined />}
-              valueStyle={{ fontSize: isMobile ? 18 : 24, color: (stats?.urgentMaintenance ?? 0) > 0 ? '#cf1322' : '#3f8600' }}
-            />
-          </Card>
-        </Col>
-      </Row>
-
-      {/* Recent Activity */}
+      {/* Row 4: Recent Activity */}
       <Row gutter={gutter} style={{ marginTop: isMobile ? 12 : 24 }}>
         <Col xs={24} lg={12}>
           <Card
             title={<Text strong style={{ fontSize: isMobile ? 14 : 16 }}>Recent Invoices</Text>}
+            extra={<Link href="/dashboard/invoices"><Text type="secondary" style={{ fontSize: isMobile ? 11 : 13 }}>View All</Text></Link>}
             loading={isLoading}
             size={isMobile ? 'small' : 'default'}
-            style={{ marginBottom: isMobile ? 8 : 0 }}
+            style={{ marginBottom: isMobile ? 8 : 16 }}
           >
             {(stats?.recentInvoices?.length ?? 0) > 0 ? (
               isMobile ? (
@@ -421,8 +415,10 @@ export default function DashboardPage() {
         <Col xs={24} lg={12}>
           <Card
             title={<Text strong style={{ fontSize: isMobile ? 14 : 16 }}>Recent Payments</Text>}
+            extra={<Link href="/dashboard/payments"><Text type="secondary" style={{ fontSize: isMobile ? 11 : 13 }}>View All</Text></Link>}
             loading={isLoading}
             size={isMobile ? 'small' : 'default'}
+            style={{ marginBottom: isMobile ? 8 : 16 }}
           >
             {(stats?.recentPayments?.length ?? 0) > 0 ? (
               isMobile ? (
@@ -443,13 +439,14 @@ export default function DashboardPage() {
         </Col>
       </Row>
 
-      {/* Recent Maintenance */}
-      <Row gutter={gutter} style={{ marginTop: isMobile ? 8 : 16 }}>
-        <Col xs={24}>
+      <Row gutter={gutter}>
+        <Col xs={24} lg={12}>
           <Card
             title={<Text strong style={{ fontSize: isMobile ? 14 : 16 }}>Recent Maintenance</Text>}
+            extra={<Link href="/dashboard/maintenance"><Text type="secondary" style={{ fontSize: isMobile ? 11 : 13 }}>View All</Text></Link>}
             loading={isLoading}
             size={isMobile ? 'small' : 'default'}
+            style={{ marginBottom: isMobile ? 8 : 16 }}
           >
             {(stats?.recentMaintenance?.length ?? 0) > 0 ? (
               isMobile ? (
@@ -467,6 +464,9 @@ export default function DashboardPage() {
               <Text type="secondary">No maintenance requests yet.</Text>
             )}
           </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <LeaseExpiringTable />
         </Col>
       </Row>
     </div>

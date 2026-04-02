@@ -1,3 +1,4 @@
+import { Organization } from '@/modules/organizations/entities/organization.entity';
 import { SystemSetting } from '@/modules/settings/entities/system-setting.entity';
 import { DataSource } from 'typeorm';
 
@@ -5,12 +6,23 @@ export class SystemSettingsSeed {
   public async run(dataSource: DataSource): Promise<void> {
     console.log('Seeding RentFlow system settings...');
 
+    const orgRepository = dataSource.getRepository(Organization);
+    const defaultOrg = await orgRepository.findOne({ where: { slug: 'default' } });
+
+    if (!defaultOrg) {
+      console.error('  Default organization not found. Run initial users seed first.');
+      return;
+    }
+
     const systemSettingsRepository = dataSource.getRepository(SystemSetting);
 
-    const existingSettings = await systemSettingsRepository.findOne({ where: {} });
+    const existingSettings = await systemSettingsRepository.findOne({
+      where: { organizationId: defaultOrg.organizationId },
+    });
 
     if (!existingSettings) {
       const defaultSettings = systemSettingsRepository.create({
+        organizationId: defaultOrg.organizationId,
         platformName: 'RentFlow',
         supportEmail: 'support@rentflow.co.ke',
         emailNotifications: true,

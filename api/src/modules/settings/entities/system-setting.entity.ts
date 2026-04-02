@@ -1,4 +1,4 @@
-import { AbstractEntity } from '@/database/abstract.entity';
+import { OrgScopedEntity } from '@/database/org-scoped.entity';
 import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
 export interface RecurringCharge {
@@ -8,7 +8,7 @@ export interface RecurringCharge {
 }
 
 @Entity('system_settings')
-export class SystemSetting extends AbstractEntity<SystemSetting> {
+export class SystemSetting extends OrgScopedEntity<SystemSetting> {
   @PrimaryGeneratedColumn('uuid', { name: 'system_setting_id' })
   systemSettingId: string;
 

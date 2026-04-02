@@ -11,6 +11,7 @@ import { SettingsService } from '../settings/settings.service';
 import { Tenant, DepositStatus } from '@/modules/tenants/entities/tenant.entity';
 import { Receipt } from '@/modules/receipts/entities/receipt.entity';
 import { Notification, NotificationChannel, NotificationStatus, NotificationType } from '@/modules/notifications/entities/notification.entity';
+import { Organization } from '@/modules/organizations/entities/organization.entity';
 import { InvoicePdfData } from '../pdf/interfaces/pdf-data.interface';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
@@ -37,7 +38,28 @@ export class InvoicesService {
 		private readonly receiptRepository: Repository<Receipt>,
 		@InjectRepository(Notification)
 		private readonly notificationRepository: Repository<Notification>,
+		@InjectRepository(Organization)
+		private readonly organizationRepository: Repository<Organization>,
 	) {}
+
+	private async getOrgBranding(orgId?: string): Promise<{
+		name?: string; supportEmail?: string; supportPhone?: string;
+		logoUrl?: string; primaryColor?: string; tagline?: string;
+	}> {
+		if (!orgId) return {};
+		try {
+			const org = await this.organizationRepository.findOne({ where: { organizationId: orgId } as any });
+			if (!org) return {};
+			return {
+				name: org.name || undefined,
+				supportEmail: org.supportEmail || undefined,
+				supportPhone: org.supportPhone || undefined,
+				logoUrl: org.logoUrl || undefined,
+				primaryColor: org.primaryColor || undefined,
+				tagline: org.tagline || undefined,
+			};
+		} catch { return {}; }
+	}
 
 	async create(dto: CreateInvoiceDto, userId: string): Promise<Invoice> {
 		const isRent = dto.invoiceType === InvoiceType.RENT;
@@ -185,6 +207,7 @@ export class InvoicesService {
 		const user = tenant?.user;
 		const unit = tenant?.unit;
 		const property = unit?.property;
+		const branding = await this.getOrgBranding((invoice as any).organizationId);
 
 		// For non-rent invoices without a tenant, use recipientName
 		const resolvedName = user
@@ -192,11 +215,13 @@ export class InvoicesService {
 			: (invoice.recipientName || 'Recipient');
 
 		const pdfData: InvoicePdfData = {
-			companyName: settings.platformName || 'RentFlow',
-			companyEmail: settings.supportEmail || 'support@rentflow.co.ke',
-			companyPhone: settings.contactPhone || undefined,
+			companyName: branding.name || settings.platformName || 'RentFlow',
+			companyEmail: branding.supportEmail || settings.supportEmail || 'support@rentflow.co.ke',
+			companyPhone: branding.supportPhone || settings.contactPhone || undefined,
 			companyAddress: settings.contactAddress || undefined,
-			companyLogoUrl: settings.appLogo || undefined,
+			companyLogoUrl: branding.logoUrl || settings.appLogo || undefined,
+			primaryColor: branding.primaryColor,
+			tagline: branding.tagline,
 
 			invoiceNumber: invoice.invoiceNumber,
 			invoiceDate: new Date(invoice.createdAt).toLocaleDateString('en-KE'),
@@ -423,12 +448,15 @@ export class InvoicesService {
 		let pdfBuffer: Buffer | null = null;
 		try {
 			const settings = await this.settingsService.getSettings();
+			const receiptBranding = await this.getOrgBranding((invoice as any).organizationId);
 			pdfBuffer = await this.pdfService.generateReceiptPdf({
-				companyName: settings.platformName || 'RentFlow',
-				companyEmail: settings.supportEmail || 'support@rentflow.co.ke',
-				companyPhone: settings.contactPhone || undefined,
+				companyName: receiptBranding.name || settings.platformName || 'RentFlow',
+				companyEmail: receiptBranding.supportEmail || settings.supportEmail || 'support@rentflow.co.ke',
+				companyPhone: receiptBranding.supportPhone || settings.contactPhone || undefined,
 				companyAddress: settings.contactAddress || undefined,
-				companyLogoUrl: settings.appLogo || undefined,
+				companyLogoUrl: receiptBranding.logoUrl || settings.appLogo || undefined,
+				primaryColor: receiptBranding.primaryColor,
+				tagline: receiptBranding.tagline,
 
 				receiptNumber: receipt.receiptNumber,
 				receiptDate: new Date(receipt.createdAt).toLocaleDateString('en-KE'),

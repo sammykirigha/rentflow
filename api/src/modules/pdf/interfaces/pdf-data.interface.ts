@@ -5,6 +5,8 @@ export interface InvoicePdfData {
 	companyPhone?: string;
 	companyAddress?: string;
 	companyLogoUrl?: string;
+	primaryColor?: string;
+	tagline?: string;
 
 	// Invoice info
 	invoiceNumber: string;
@@ -43,6 +45,8 @@ export interface StatementPdfData {
 	companyPhone?: string;
 	companyAddress?: string;
 	companyLogoUrl?: string;
+	primaryColor?: string;
+	tagline?: string;
 
 	// Tenant info
 	tenantName: string;
@@ -73,6 +77,56 @@ export interface StatementPdfData {
 	}>;
 }
 
+export interface OwnerReportPdfData {
+	// Company info
+	companyName: string;
+	companyEmail: string;
+	companyPhone?: string;
+	companyAddress?: string;
+	companyLogoUrl?: string;
+	primaryColor?: string;
+	tagline?: string;
+
+	// Report period
+	reportMonth: string; // e.g. "February 2026"
+	generatedAt: string;
+
+	// Financial summary
+	totalRevenue: number;
+	totalExpenses: number;
+	netIncome: number;
+	collectionRate: number; // percentage
+
+	// Occupancy
+	totalUnits: number;
+	occupiedUnits: number;
+	vacantUnits: number;
+	occupancyRate: number;
+
+	// Per-property breakdown
+	properties: Array<{
+		name: string;
+		units: number;
+		occupied: number;
+		revenue: number;
+		expenses: number;
+		netIncome: number;
+	}>;
+
+	// Top debtors
+	topDebtors: Array<{
+		tenantName: string;
+		unitNumber: string;
+		propertyName: string;
+		totalOwed: number;
+	}>;
+
+	// Maintenance summary
+	maintenanceOpen: number;
+	maintenanceResolved: number;
+	maintenanceUrgent: number;
+}
+
 export interface ReceiptPdfData {
 	// Company info
 	companyName: string;
@@ -80,6 +134,8 @@ export interface ReceiptPdfData {
 	companyPhone?: string;
 	companyAddress?: string;
 	companyLogoUrl?: string;
+	primaryColor?: string;
+	tagline?: string;
 
 	// Receipt info
 	receiptNumber: string;

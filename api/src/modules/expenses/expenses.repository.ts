@@ -1,19 +1,17 @@
-import { AbstractRepository } from '@/database/abstract.repository';
+import { OrgScopedRepository } from '@/database/org-scoped.repository';
+import { OrgContextService } from '@/common/services/org-context.service';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Expense } from './entities/expense.entity';
 
 @Injectable()
-export class ExpensesRepository extends AbstractRepository<Expense> {
+export class ExpensesRepository extends OrgScopedRepository<Expense> {
 	constructor(
 		@InjectRepository(Expense)
 		private readonly expenseRepository: Repository<Expense>,
+		orgContext: OrgContextService,
 	) {
-		super(expenseRepository);
-	}
-
-	createQueryBuilder(alias: string) {
-		return this.expenseRepository.createQueryBuilder(alias);
+		super(expenseRepository, orgContext);
 	}
 }

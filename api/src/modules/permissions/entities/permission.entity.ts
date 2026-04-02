@@ -16,6 +16,9 @@ export enum PermissionResource {
 	COMMUNICATIONS = 'communications',
 	REPORTS = 'reports',
 	SETTINGS = 'settings',
+	ORGANIZATIONS = 'organizations',
+	SUBSCRIPTIONS = 'subscriptions',
+	PLATFORM_CONFIG = 'platform_config',
 }
 
 export enum PermissionAction {

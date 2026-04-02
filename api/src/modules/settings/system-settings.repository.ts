@@ -1,43 +1,43 @@
-import { AbstractRepository } from '@/database/abstract.repository';
+import { OrgScopedRepository } from '@/database/org-scoped.repository';
+import { OrgContextService } from '@/common/services/org-context.service';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SystemSetting } from './entities/system-setting.entity';
 
 @Injectable()
-export class SystemSettingsRepository extends AbstractRepository<SystemSetting> {
+export class SystemSettingsRepository extends OrgScopedRepository<SystemSetting> {
   constructor(
     @InjectRepository(SystemSetting)
     systemSettingsRepository: Repository<SystemSetting>,
+    orgContext: OrgContextService,
   ) {
-    super(systemSettingsRepository);
+    super(systemSettingsRepository, orgContext);
   }
 
   /**
-   * Get the system settings (there should only be one record)
+   * Get the system settings for the current org
    */
   async getSettings(): Promise<SystemSetting | null> {
-    const settings = await this.repository.find({ take: 1 });
+    const settings = await this.findAll({ take: 1 });
     return settings[0] || null;
   }
 
   /**
-   * Get or create default system settings
+   * Get or create default system settings for the current org
    */
   async getOrCreateSettings(): Promise<SystemSetting> {
     let settings = await this.getSettings();
 
     if (!settings) {
-      // Create default settings
-      settings = this.repository.create({
+      settings = await this.create({
         platformName: 'RentFlow',
         supportEmail: 'support@rentflow.co.ke',
         emailNotifications: true,
         smsNotifications: true,
         adminAlerts: true,
         requireVerification: false,
-      });
-      settings = await this.repository.save(settings);
+      } as any);
     }
 
     return settings;
@@ -47,7 +47,6 @@ export class SystemSettingsRepository extends AbstractRepository<SystemSetting> 
    * Update system settings
    */
   async updateSettings(id: string, updateData: Partial<SystemSetting>): Promise<SystemSetting | null> {
-    await this.repository.update(id, updateData);
-    return this.findOne({ where: { systemSettingId: id } });
+    return this.update({ systemSettingId: id } as any, updateData as any);
   }
 }

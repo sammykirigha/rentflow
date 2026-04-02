@@ -1,4 +1,4 @@
-import { AbstractEntity } from '@/database/abstract.entity';
+import { OrgScopedEntity } from '@/database/org-scoped.entity';
 import { Tenant } from '@/modules/tenants/entities/tenant.entity';
 import {
 	Column,
@@ -31,7 +31,10 @@ export enum InvoiceType {
 @Index(['status'])
 @Index(['dueDate'])
 @Index(['invoiceType'])
-export class Invoice extends AbstractEntity<Invoice> {
+@Index(['organizationId', 'status'])
+@Index(['organizationId', 'billingMonth'])
+@Index(['organizationId', 'tenantId'])
+export class Invoice extends OrgScopedEntity<Invoice> {
 	@PrimaryGeneratedColumn('uuid', { name: 'invoice_id' })
 	invoiceId: string;
 

@@ -13,6 +13,7 @@ import {
   ToolOutlined,
   AlertOutlined,
   MailOutlined,
+  BarChartOutlined,
   SettingOutlined,
   UserOutlined,
   LogoutOutlined,
@@ -20,6 +21,8 @@ import {
   CloseOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  DashboardFilled,
+  RiseOutlined,
 } from "@ant-design/icons";
 import { Layout, Menu, Avatar, Button, Typography, Drawer, Grid } from "antd";
 import Link from "next/link";
@@ -38,8 +41,11 @@ const menuItems = [
   { key: "/dashboard/payments", icon: <DollarOutlined />, label: <Link href="/dashboard/payments">Payments</Link>, shortLabel: "Payments" },
   { key: "/dashboard/wallet", icon: <WalletOutlined />, label: <Link href="/dashboard/wallet">Wallet Ledger</Link>, shortLabel: "Wallet" },
   { key: "/dashboard/expenses", icon: <ToolOutlined />, label: <Link href="/dashboard/expenses">Expenses</Link>, shortLabel: "Expenses" },
+  { key: "/dashboard/meter-readings", icon: <DashboardFilled />, label: <Link href="/dashboard/meter-readings">Meter Readings</Link>, shortLabel: "Meters" },
+  { key: "/dashboard/rent-escalations", icon: <RiseOutlined />, label: <Link href="/dashboard/rent-escalations">Rent Escalations</Link>, shortLabel: "Escalate" },
   { key: "/dashboard/maintenance", icon: <AlertOutlined />, label: <Link href="/dashboard/maintenance">Maintenance</Link>, shortLabel: "Maint." },
   { key: "/dashboard/communications", icon: <MailOutlined />, label: <Link href="/dashboard/communications">Communications</Link>, shortLabel: "Comms" },
+  { key: "/dashboard/reports", icon: <BarChartOutlined />, label: <Link href="/dashboard/reports">Reports</Link>, shortLabel: "Reports" },
   { key: "/dashboard/settings", icon: <SettingOutlined />, label: <Link href="/dashboard/settings">Settings</Link>, shortLabel: "Settings" },
   { key: "/dashboard/profile", icon: <UserOutlined />, label: <Link href="/dashboard/profile">Profile</Link>, shortLabel: "Profile" },
 ];

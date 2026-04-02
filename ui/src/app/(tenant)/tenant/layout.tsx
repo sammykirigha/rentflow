@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserStore } from "@/stores/user.store";
+import { useSession } from "next-auth/react";
 import { communicationsApi } from "@/lib/api/communications.api";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
@@ -9,6 +10,7 @@ import {
   DollarOutlined,
   ToolOutlined,
   FileProtectOutlined,
+  BarChartOutlined,
   WalletOutlined,
   LogoutOutlined,
   UserOutlined,
@@ -64,6 +66,12 @@ const menuItems = [
     shortLabel: "Receipts",
   },
   {
+    key: "/tenant/statements",
+    icon: <BarChartOutlined />,
+    label: <Link href="/tenant/statements">Statements</Link>,
+    shortLabel: "Statements",
+  },
+  {
     key: "/tenant/notifications",
     icon: <BellOutlined />,
     label: <Link href="/tenant/notifications">Notifications</Link>,
@@ -91,14 +99,18 @@ export default function TenantInnerLayout({ children }: { children: React.ReactN
   const [unreadCount, setUnreadCount] = useState(0);
   const pathname = usePathname();
   const { logout } = useAuth();
+  const { data: session } = useSession();
   const user = useUserStore((state) => state.user);
   const screens = useBreakpoint();
   const isMobile = !screens.lg;
 
+  const mustChangePassword = (session?.user as unknown as Record<string, unknown>)?.mustChangePassword === true;
+
   const fetchUnreadCount = useCallback(async () => {
+    if (mustChangePassword) return; // Skip polling when password change is pending
     const count = await communicationsApi.getMyUnreadCount();
     setUnreadCount(count);
-  }, []);
+  }, [mustChangePassword]);
 
   useEffect(() => {
     fetchUnreadCount();

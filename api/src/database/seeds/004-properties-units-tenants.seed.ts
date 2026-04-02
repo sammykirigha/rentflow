@@ -1,5 +1,6 @@
 import { UserRole } from "@/common/enums/user-role.enum";
 import { UserStatus } from "@/common/enums/user-status.enum";
+import { Organization } from "@/modules/organizations/entities/organization.entity";
 import { Role } from "@/modules/permissions/entities/role.entity";
 import { Property } from "@/modules/properties/entities/property.entity";
 import { Tenant, TenantStatus } from "@/modules/tenants/entities/tenant.entity";
@@ -78,6 +79,13 @@ export class PropertiesUnitsTenantsSeed {
 
     console.log("Seeding properties, units, and tenants...");
 
+    const orgRepo = dataSource.getRepository(Organization);
+    const defaultOrg = await orgRepo.findOne({ where: { slug: "default" } });
+    if (!defaultOrg) {
+      console.error("  Default organization not found. Run initial users seed first.");
+      return;
+    }
+
     const tenantRole = await roleRepo.findOne({ where: { name: UserRole.TENANT } });
     if (!tenantRole) {
       console.error("  TENANT role not found. Run permissions seed first.");
@@ -94,6 +102,7 @@ export class PropertiesUnitsTenantsSeed {
 
       if (!property) {
         property = propertyRepo.create({
+          organizationId: defaultOrg.organizationId,
           name: propData.name,
           location: propData.location,
           address: propData.address,
@@ -117,6 +126,7 @@ export class PropertiesUnitsTenantsSeed {
 
         if (!unit) {
           unit = unitRepo.create({
+            organizationId: defaultOrg.organizationId,
             unitNumber: unitData.unitNumber,
             propertyId: property.propertyId,
             rentAmount: unitData.rentAmount,
@@ -164,6 +174,7 @@ export class PropertiesUnitsTenantsSeed {
 
       // Create tenant record
       const tenant = tenantRepo.create({
+        organizationId: defaultOrg.organizationId,
         userId: savedUser.userId,
         unitId: unit.unitId,
         walletBalance: Math.floor(Math.random() * 15000), // Random wallet balance 0-15000

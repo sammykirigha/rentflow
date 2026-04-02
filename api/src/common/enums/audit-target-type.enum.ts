@@ -14,4 +14,12 @@ export enum AuditTargetType {
 	SETTINGS = 'settings',
 	ROLE = 'role',
 	PERMISSION = 'permission',
+	ORGANIZATION = 'organization',
+	SUBSCRIPTION = 'subscription',
+	PLATFORM_CONFIG = 'platform_config',
+	CHECKLIST = 'checklist',
+	METER_READING = 'meter_reading',
+	RENT_ESCALATION = 'rent_escalation',
+	REPORT = 'report',
+	STATEMENT = 'statement',
 }

@@ -10,9 +10,9 @@ import { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
 import { MailService } from '../mail/mail.service';
 import { UsersService } from '../users/users.service';
 import { AuthResponseDto } from './dto/auth-response.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Injectable()
@@ -45,11 +45,16 @@ export class AuthService {
 			throw new UnauthorizedException('Account is not active. Please contact support.');
 		}
 
+		const isSuperAdmin = user.userRole?.name === UserRole.SUPER_ADMIN;
+
 		const payload: JwtPayload = {
 			sub: user.userId,
 			email: user.email,
 			role: user.roleId,
-			isAdminUser: user.userRole?.isAdminRole
+			isAdminUser: user.userRole?.isAdminRole,
+			organizationId: user.organizationId,
+			isSuperAdmin,
+			mustChangePassword: user.mustChangePassword || false,
 		};
 
 		const accessToken = this.generateAccessToken(payload);
@@ -64,28 +69,51 @@ export class AuthService {
 		};
 	}
 
-	async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
-		const userData = {
-			...registerDto,
-			role: UserRole.TENANT,
-		};
+	async changePassword(userId: string, dto: ChangePasswordDto): Promise<{ message: string; accessToken?: string; refreshToken?: string }> {
+		const user = await this.usersService.findOneWithTenant(userId);
+		if (!user) {
+			throw new BadRequestException('User not found');
+		}
 
-		const user = await this.usersService.create(userData);
+		// When mustChangePassword is true, the user already proved identity at login
+		// — skip current password check (avoids issues with temp password copy-paste/resends)
+		if (!user.mustChangePassword) {
+			if (!dto.currentPassword) {
+				throw new BadRequestException('Current password is required');
+			}
 
+			if (!user.password) {
+				throw new BadRequestException('No password set for this account.');
+			}
+
+			const isCurrentValid = await this.validatePassword(dto.currentPassword, user.password);
+			if (!isCurrentValid) {
+				throw new BadRequestException('Current password is incorrect');
+			}
+		}
+
+		await this.usersService.updatePassword(user.userId, dto.newPassword);
+
+		// Clear the mustChangePassword flag
+		await this.usersService.clearMustChangePassword(user.userId);
+
+		// Issue fresh tokens with mustChangePassword: false so the UI
+		// can update the session without requiring a full logout/login cycle
+		const isSuperAdmin = user.userRole?.name === 'SUPER_ADMIN';
 		const payload: JwtPayload = {
 			sub: user.userId,
 			email: user.email,
 			role: user.roleId,
-			isAdminUser: user.userRole?.isAdminRole
+			isAdminUser: user.userRole?.isAdminRole,
+			organizationId: user.organizationId,
+			isSuperAdmin,
+			mustChangePassword: false,
 		};
 
-		const accessToken = this.generateAccessToken(payload);
-		const refreshToken = this.generateRefreshToken(payload);
-
 		return {
-			user,
-			accessToken,
-			refreshToken,
+			message: 'Password changed successfully',
+			accessToken: this.generateAccessToken(payload),
+			refreshToken: this.generateRefreshToken(payload),
 		};
 	}
 
@@ -94,6 +122,8 @@ export class AuthService {
 			sub: user.sub,
 			email: user.email,
 			role: user.role,
+			organizationId: user.organizationId,
+			isSuperAdmin: user.isSuperAdmin,
 		};
 
 		const accessToken = this.generateAccessToken(payload);

@@ -7,10 +7,10 @@ export class CreateTenantDto {
 	@IsNotEmpty()
 	name: string;
 
-	@ApiProperty({ description: "Tenant's email address", example: 'john.doe@example.com' })
+	@ApiProperty({ description: "Tenant's email address", example: 'john.doe@example.com', required: false })
 	@IsEmail()
-	@IsNotEmpty()
-	email: string;
+	@IsOptional()
+	email?: string;
 
 	@ApiProperty({ description: "Tenant's phone number (Kenyan format)", example: '0712345678' })
 	@IsString()

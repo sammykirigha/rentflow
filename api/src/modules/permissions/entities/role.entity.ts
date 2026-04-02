@@ -1,6 +1,7 @@
 import { AbstractEntity } from '@/database/abstract.entity';
+import { Organization } from '@/modules/organizations/entities/organization.entity';
 import { User } from '@/modules/users/entities/user.entity';
-import { Column, Entity, Index, JoinTable, ManyToMany, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, JoinTable, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { Permission } from './permission.entity';
 
 @Entity('roles')
@@ -8,6 +9,13 @@ import { Permission } from './permission.entity';
 export class Role extends AbstractEntity<Role> {
 	@PrimaryGeneratedColumn('uuid', { name: 'role_id' })
 	roleId: string;
+
+	@Column({ name: 'organization_id', type: 'uuid', nullable: true })
+	organizationId?: string;
+
+	@ManyToOne(() => Organization, { eager: false, nullable: true })
+	@JoinColumn({ name: 'organization_id' })
+	organization?: Organization;
 
 	@Column({ unique: true })
 	name: string;

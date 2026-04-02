@@ -4,6 +4,7 @@ import { Tenant } from '@/modules/tenants/entities/tenant.entity';
 import { WalletTransaction } from '@/modules/wallet/entities/wallet-transaction.entity';
 import { Receipt } from '@/modules/receipts/entities/receipt.entity';
 import { Notification } from '@/modules/notifications/entities/notification.entity';
+import { Organization } from '@/modules/organizations/entities/organization.entity';
 import { AuditModule } from '../audit/audit.module';
 import { SmsModule } from '../sms/sms.module';
 import { MailModule } from '../mail/mail.module';
@@ -22,7 +23,7 @@ import { WalletSettlementService } from './wallet-settlement.service';
 
 @Module({
 	imports: [
-		TypeOrmModule.forFeature([Invoice, Tenant, WalletTransaction, Receipt, Notification]),
+		TypeOrmModule.forFeature([Invoice, Tenant, WalletTransaction, Receipt, Notification, Organization]),
 		AuditModule,
 		SmsModule,
 		MailModule,

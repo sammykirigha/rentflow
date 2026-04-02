@@ -1,4 +1,4 @@
-import { AbstractEntity } from '@/database/abstract.entity';
+import { OrgScopedEntity } from '@/database/org-scoped.entity';
 import { Invoice } from '@/modules/invoices/entities/invoice.entity';
 import {
 	Column,
@@ -9,7 +9,7 @@ import {
 } from 'typeorm';
 
 @Entity('receipts')
-export class Receipt extends AbstractEntity<Receipt> {
+export class Receipt extends OrgScopedEntity<Receipt> {
 	@PrimaryGeneratedColumn('uuid', { name: 'receipt_id' })
 	receiptId: string;
 

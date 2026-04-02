@@ -1,10 +1,10 @@
-import { AbstractEntity } from '@/database/abstract.entity';
+import { OrgScopedEntity } from '@/database/org-scoped.entity';
 import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('vendors')
 @Index(['name'])
 @Index(['specialty'])
-export class Vendor extends AbstractEntity<Vendor> {
+export class Vendor extends OrgScopedEntity<Vendor> {
 	@PrimaryGeneratedColumn('uuid', { name: 'vendor_id' })
 	vendorId: string;
 

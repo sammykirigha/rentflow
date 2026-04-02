@@ -1,4 +1,4 @@
-import { AbstractEntity } from '@/database/abstract.entity';
+import { OrgScopedEntity } from '@/database/org-scoped.entity';
 import { Property } from '@/modules/properties/entities/property.entity';
 import { Vendor } from '@/modules/vendors/entities/vendor.entity';
 import {
@@ -40,7 +40,8 @@ export enum ExpensePriority {
 @Index(['propertyId'])
 @Index(['category'])
 @Index(['status'])
-export class Expense extends AbstractEntity<Expense> {
+@Index(['organizationId', 'propertyId'])
+export class Expense extends OrgScopedEntity<Expense> {
 	@PrimaryGeneratedColumn('uuid', { name: 'expense_id' })
 	expenseId: string;
 

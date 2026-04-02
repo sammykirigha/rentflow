@@ -1,5 +1,6 @@
 import { UserStatus } from '@/common/enums/user-status.enum';
 import { AbstractEntity } from '@/database/abstract.entity';
+import { Organization } from '@/modules/organizations/entities/organization.entity';
 import { Role } from '@/modules/permissions/entities/role.entity';
 import { Tenant } from '@/modules/tenants/entities/tenant.entity';
 import { Exclude } from 'class-transformer';
@@ -7,15 +8,23 @@ import { Column, Entity, Index, JoinColumn, ManyToOne, OneToOne, PrimaryGenerate
 
 @Entity('users')
 @Index(['email'], { unique: true })
+@Index(['organizationId', 'email'])
 export class User extends AbstractEntity<User> {
 	@PrimaryGeneratedColumn('uuid', { name: 'user_id' })
 	userId: string;
 
+	@Column({ name: 'organization_id', type: 'uuid', nullable: true })
+	organizationId?: string;
+
+	@ManyToOne(() => Organization, { eager: false, nullable: true })
+	@JoinColumn({ name: 'organization_id' })
+	organization?: Organization;
+
 	@Column({ name: 'role_id', nullable: true })
 	roleId: string;
 
-	@Column({ unique: true })
-	email: string;
+	@Column({ unique: true, nullable: true })
+	email?: string;
 
 	@Column({ nullable: true })
 	@Exclude()
@@ -54,6 +63,9 @@ export class User extends AbstractEntity<User> {
 
 	@Column({ name: 'suspension_reason', nullable: true, type: 'text' })
 	suspensionReason?: string;
+
+	@Column({ name: 'must_change_password', default: false })
+	mustChangePassword: boolean;
 
 	@Column({ name: 'last_login_at', nullable: true })
 	lastLoginAt?: Date;

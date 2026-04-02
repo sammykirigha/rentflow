@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { Organization } from '@/modules/organizations/entities/organization.entity';
 import { PdfModule } from '../pdf/pdf.module';
 import { SettingsModule } from '../settings/settings.module';
 import { WalletModule } from '../wallet/wallet.module';
@@ -10,7 +11,7 @@ import { ReceiptsService } from './receipts.service';
 
 @Module({
 	imports: [
-		TypeOrmModule.forFeature([Receipt]),
+		TypeOrmModule.forFeature([Receipt, Organization]),
 		PdfModule,
 		SettingsModule,
 		WalletModule,

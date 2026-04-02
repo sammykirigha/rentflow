@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import puppeteer, { Browser } from 'puppeteer';
-import { InvoicePdfData, ReceiptPdfData, StatementPdfData } from './interfaces/pdf-data.interface';
+import { InvoicePdfData, OwnerReportPdfData, ReceiptPdfData, StatementPdfData } from './interfaces/pdf-data.interface';
 import { S3Service } from '../storage/s3.service';
 
 @Injectable()
@@ -57,12 +57,13 @@ export class PdfService implements OnModuleDestroy {
 		}
 	}
 
-	private buildLogoHeader(logoDataUrl: string | null, companyHtml: string, titleHtml: string): string {
+	private buildLogoHeader(logoDataUrl: string | null, companyHtml: string, titleHtml: string, tagline?: string): string {
 		return `<div class="header">
 		<div style="display:flex;align-items:center;gap:12px;">
 			${logoDataUrl ? `<img src="${logoDataUrl}" style="max-height:50px;max-width:120px;object-fit:contain;" />` : ''}
 			<div>
 				${companyHtml}
+				${tagline ? `<div class="company-tagline">${this.esc(tagline)}</div>` : ''}
 			</div>
 		</div>
 		<div>
@@ -74,6 +75,7 @@ export class PdfService implements OnModuleDestroy {
 	async generateInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
 		const chargesRows = this.buildChargesRows(data);
 		const logoDataUrl = await this.getLogoBase64(data.companyLogoUrl);
+		const accent = data.primaryColor || '#1a1a1a';
 
 		const statusColor =
 			data.status === 'paid' ? '#52c41a' : data.status === 'overdue' ? '#ff4d4f' : '#333';
@@ -86,7 +88,7 @@ export class PdfService implements OnModuleDestroy {
 		const titleHtml = `<div class="invoice-title">INVOICE</div>
 			<div class="invoice-number">${this.esc(data.invoiceNumber)}</div>`;
 
-		const headerHtml = this.buildLogoHeader(logoDataUrl, companyHtml, titleHtml);
+		const headerHtml = this.buildLogoHeader(logoDataUrl, companyHtml, titleHtml, data.tagline);
 
 		const html = `<!DOCTYPE html>
 <html>
@@ -95,18 +97,19 @@ export class PdfService implements OnModuleDestroy {
 	* { margin: 0; padding: 0; box-sizing: border-box; }
 	body { font-family: 'Segoe UI', Arial, sans-serif; color: #333; font-size: 13px; line-height: 1.5; }
 	.header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
-	.company-name { font-size: 20px; font-weight: 700; color: #1a1a1a; }
+	.company-name { font-size: 20px; font-weight: 700; color: ${accent}; }
 	.company-info { font-size: 11px; color: #666; }
-	.invoice-title { font-size: 28px; font-weight: 700; color: #1a1a1a; text-align: right; }
+	.company-tagline { font-size: 10px; color: #888; font-style: italic; margin-top: 2px; }
+	.invoice-title { font-size: 28px; font-weight: 700; color: ${accent}; text-align: right; }
 	.invoice-number { font-size: 12px; color: #666; text-align: right; margin-top: 4px; }
-	.divider { border: none; border-top: 1px solid #ccc; margin: 12px 0; }
+	.divider { border: none; border-top: 2px solid ${accent}; margin: 12px 0; }
 	.meta-section { display: flex; justify-content: space-between; margin: 16px 0; }
-	.section-header { font-size: 11px; font-weight: 700; color: #333; text-transform: uppercase; margin-bottom: 6px; }
+	.section-header { font-size: 11px; font-weight: 700; color: ${accent}; text-transform: uppercase; margin-bottom: 6px; }
 	.bill-to-name { font-size: 14px; font-weight: 600; color: #333; margin-bottom: 2px; }
 	.meta-right { text-align: right; font-size: 12px; color: #333; }
 	.meta-right div { margin-bottom: 3px; }
 	table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-	th { font-size: 11px; font-weight: 700; color: #333; text-align: left; padding: 8px; border-bottom: 2px solid #333; }
+	th { font-size: 11px; font-weight: 700; color: #fff; background: ${accent}; text-align: left; padding: 8px; }
 	th.right { text-align: right; }
 	td { font-size: 12px; padding: 8px; border-bottom: 1px solid #eee; }
 	td.right { text-align: right; }
@@ -114,7 +117,7 @@ export class PdfService implements OnModuleDestroy {
 	.totals { margin-top: 12px; display: flex; justify-content: flex-end; }
 	.totals-table { width: 260px; }
 	.totals-table td { border: none; padding: 4px 8px; }
-	.totals-table .total-row td { font-weight: 700; font-size: 13px; border-top: 1px solid #333; }
+	.totals-table .total-row td { font-weight: 700; font-size: 13px; border-top: 2px solid ${accent}; }
 	.totals-table .paid td { color: #52c41a; }
 	.totals-table .due td { color: #ff4d4f; font-weight: 700; font-size: 13px; }
 	.payment-section { margin-top: 28px; }
@@ -122,7 +125,7 @@ export class PdfService implements OnModuleDestroy {
 	.payment-table td:first-child { font-weight: 700; padding-right: 12px; }
 	.terms { margin-top: 20px; }
 	.terms p { font-size: 10px; color: #999; font-style: italic; margin-top: 4px; }
-	.footer { text-align: center; font-size: 9px; color: #ccc; margin-top: 30px; }
+	.footer { text-align: center; font-size: 9px; color: ${accent}; margin-top: 30px; border-top: 1px solid ${accent}; padding-top: 8px; }
 </style>
 </head>
 <body>
@@ -186,6 +189,7 @@ export class PdfService implements OnModuleDestroy {
 	async generateReceiptPdf(data: ReceiptPdfData): Promise<Buffer> {
 		const chargesRows = this.buildReceiptChargesRows(data);
 		const logoDataUrl = await this.getLogoBase64(data.companyLogoUrl);
+		const accent = data.primaryColor || '#1a1a1a';
 
 		const companyHtml = `<div class="company-name">${this.esc(data.companyName)}</div>
 			${data.companyAddress ? `<div class="company-info">${this.esc(data.companyAddress)}</div>` : ''}
@@ -195,7 +199,7 @@ export class PdfService implements OnModuleDestroy {
 		const titleHtml = `<div class="receipt-title">RECEIPT</div>
 			<div class="receipt-number">${this.esc(data.receiptNumber)}</div>`;
 
-		const headerHtml = this.buildLogoHeader(logoDataUrl, companyHtml, titleHtml);
+		const headerHtml = this.buildLogoHeader(logoDataUrl, companyHtml, titleHtml, data.tagline);
 
 		const html = `<!DOCTYPE html>
 <html>
@@ -204,28 +208,29 @@ export class PdfService implements OnModuleDestroy {
 	* { margin: 0; padding: 0; box-sizing: border-box; }
 	body { font-family: 'Segoe UI', Arial, sans-serif; color: #333; font-size: 13px; line-height: 1.5; }
 	.header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
-	.company-name { font-size: 20px; font-weight: 700; color: #1a1a1a; }
+	.company-name { font-size: 20px; font-weight: 700; color: ${accent}; }
 	.company-info { font-size: 11px; color: #666; }
+	.company-tagline { font-size: 10px; color: #888; font-style: italic; margin-top: 2px; }
 	.receipt-title { font-size: 28px; font-weight: 700; color: #52c41a; text-align: right; }
 	.receipt-number { font-size: 12px; color: #666; text-align: right; margin-top: 4px; }
-	.divider { border: none; border-top: 1px solid #ccc; margin: 12px 0; }
+	.divider { border: none; border-top: 2px solid ${accent}; margin: 12px 0; }
 	.paid-badge { text-align: center; font-size: 16px; font-weight: 700; color: #52c41a; border: 2px solid #52c41a; padding: 10px; margin: 16px 0; }
 	.meta-section { display: flex; justify-content: space-between; margin: 16px 0; }
-	.section-header { font-size: 11px; font-weight: 700; color: #333; text-transform: uppercase; margin-bottom: 6px; }
+	.section-header { font-size: 11px; font-weight: 700; color: ${accent}; text-transform: uppercase; margin-bottom: 6px; }
 	.bill-to-name { font-size: 14px; font-weight: 600; color: #333; margin-bottom: 2px; }
 	.meta-right { text-align: right; font-size: 12px; color: #333; }
 	.meta-right div { margin-bottom: 3px; }
 	table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-	th { font-size: 11px; font-weight: 700; color: #333; text-align: left; padding: 8px; border-bottom: 2px solid #333; }
+	th { font-size: 11px; font-weight: 700; color: #fff; background: ${accent}; text-align: left; padding: 8px; }
 	th.right { text-align: right; }
 	td { font-size: 12px; padding: 8px; border-bottom: 1px solid #eee; }
 	td.right { text-align: right; }
 	.totals { margin-top: 12px; display: flex; justify-content: flex-end; }
 	.totals-table { width: 260px; }
 	.totals-table td { border: none; padding: 4px 8px; }
-	.totals-table .total-row td { font-weight: 700; font-size: 13px; color: #52c41a; border-top: 1px solid #333; }
-	.thank-you { text-align: center; font-size: 14px; color: #333; font-style: italic; margin-top: 30px; }
-	.footer { text-align: center; font-size: 9px; color: #ccc; margin-top: 30px; }
+	.totals-table .total-row td { font-weight: 700; font-size: 13px; color: #52c41a; border-top: 2px solid ${accent}; }
+	.thank-you { text-align: center; font-size: 14px; color: ${accent}; font-style: italic; margin-top: 30px; }
+	.footer { text-align: center; font-size: 9px; color: ${accent}; margin-top: 30px; border-top: 1px solid ${accent}; padding-top: 8px; }
 </style>
 </head>
 <body>
@@ -274,6 +279,7 @@ export class PdfService implements OnModuleDestroy {
 
 	async generateStatementPdf(data: StatementPdfData): Promise<Buffer> {
 		const logoDataUrl = await this.getLogoBase64(data.companyLogoUrl);
+		const accent = data.primaryColor || '#1a1a1a';
 		const transactionRows = data.transactions
 			.map(
 				(txn) => `
@@ -297,7 +303,7 @@ export class PdfService implements OnModuleDestroy {
 		const titleHtml = `<div class="statement-title">STATEMENT</div>
 			<div class="statement-period">${this.esc(data.startDate)} — ${this.esc(data.endDate)}</div>`;
 
-		const headerHtml = this.buildLogoHeader(logoDataUrl, companyHtml, titleHtml);
+		const headerHtml = this.buildLogoHeader(logoDataUrl, companyHtml, titleHtml, data.tagline);
 
 		const html = `<!DOCTYPE html>
 <html>
@@ -306,13 +312,14 @@ export class PdfService implements OnModuleDestroy {
 	* { margin: 0; padding: 0; box-sizing: border-box; }
 	body { font-family: 'Segoe UI', Arial, sans-serif; color: #333; font-size: 12px; line-height: 1.5; }
 	.header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
-	.company-name { font-size: 20px; font-weight: 700; color: #1a1a1a; }
+	.company-name { font-size: 20px; font-weight: 700; color: ${accent}; }
 	.company-info { font-size: 11px; color: #666; }
-	.statement-title { font-size: 28px; font-weight: 700; color: #1a1a1a; text-align: right; }
+	.company-tagline { font-size: 10px; color: #888; font-style: italic; margin-top: 2px; }
+	.statement-title { font-size: 28px; font-weight: 700; color: ${accent}; text-align: right; }
 	.statement-period { font-size: 11px; color: #666; text-align: right; margin-top: 4px; }
-	.divider { border: none; border-top: 1px solid #ccc; margin: 12px 0; }
+	.divider { border: none; border-top: 2px solid ${accent}; margin: 12px 0; }
 	.meta-section { display: flex; justify-content: space-between; margin: 16px 0; }
-	.section-header { font-size: 11px; font-weight: 700; color: #333; text-transform: uppercase; margin-bottom: 6px; }
+	.section-header { font-size: 11px; font-weight: 700; color: ${accent}; text-transform: uppercase; margin-bottom: 6px; }
 	.tenant-name { font-size: 14px; font-weight: 600; color: #333; margin-bottom: 2px; }
 	.summary-box { display: flex; gap: 16px; margin: 16px 0; }
 	.summary-item { flex: 1; background: #f7f7f7; border-radius: 4px; padding: 10px 14px; }
@@ -321,11 +328,11 @@ export class PdfService implements OnModuleDestroy {
 	.summary-value.credit { color: #52c41a; }
 	.summary-value.debit { color: #ff4d4f; }
 	table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-	th { font-size: 10px; font-weight: 700; color: #333; text-align: left; padding: 6px 8px; border-bottom: 2px solid #333; }
+	th { font-size: 10px; font-weight: 700; color: #fff; background: ${accent}; text-align: left; padding: 6px 8px; }
 	th.right { text-align: right; }
 	td { font-size: 11px; padding: 5px 8px; border-bottom: 1px solid #eee; }
 	td.right { text-align: right; }
-	.footer { text-align: center; font-size: 9px; color: #ccc; margin-top: 30px; }
+	.footer { text-align: center; font-size: 9px; color: ${accent}; margin-top: 30px; border-top: 1px solid ${accent}; padding-top: 8px; }
 </style>
 </head>
 <body>
@@ -378,6 +385,178 @@ export class PdfService implements OnModuleDestroy {
 		<tbody>${transactionRows}</tbody>
 	</table>
 
+	<div class="footer">Generated by ${this.esc(data.companyName)}</div>
+</body>
+</html>`;
+
+		return this.htmlToPdf(html);
+	}
+
+	async generateOwnerReportPdf(data: OwnerReportPdfData): Promise<Buffer> {
+		const logoDataUrl = await this.getLogoBase64(data.companyLogoUrl);
+		const accent = data.primaryColor || '#1a1a1a';
+
+		const companyHtml = `<div class="company-name">${this.esc(data.companyName)}</div>
+			${data.companyAddress ? `<div class="company-info">${this.esc(data.companyAddress)}</div>` : ''}
+			${data.companyPhone ? `<div class="company-info">Tel: ${this.esc(data.companyPhone)}</div>` : ''}
+			<div class="company-info">${this.esc(data.companyEmail)}</div>`;
+
+		const titleHtml = `<div class="report-title">OWNER REPORT</div>
+			<div class="report-period">${this.esc(data.reportMonth)}</div>`;
+
+		const headerHtml = this.buildLogoHeader(logoDataUrl, companyHtml, titleHtml, data.tagline);
+
+		const propertyRows = data.properties
+			.map(
+				(p) => `<tr>
+					<td>${this.esc(p.name)}</td>
+					<td class="right">${p.units}</td>
+					<td class="right">${p.occupied}</td>
+					<td class="right">${this.formatKES(p.revenue)}</td>
+					<td class="right">${this.formatKES(p.expenses)}</td>
+					<td class="right" style="font-weight:700;color:${p.netIncome >= 0 ? '#52c41a' : '#ff4d4f'}">${this.formatKES(p.netIncome)}</td>
+				</tr>`,
+			)
+			.join('');
+
+		const debtorRows = data.topDebtors
+			.map(
+				(d) => `<tr>
+					<td>${this.esc(d.tenantName)}</td>
+					<td>${this.esc(d.unitNumber)} — ${this.esc(d.propertyName)}</td>
+					<td class="right" style="color:#ff4d4f;font-weight:600">${this.formatKES(d.totalOwed)}</td>
+				</tr>`,
+			)
+			.join('');
+
+		const html = `<!DOCTYPE html>
+<html>
+<head>
+<style>
+	* { margin: 0; padding: 0; box-sizing: border-box; }
+	body { font-family: 'Segoe UI', Arial, sans-serif; color: #333; font-size: 12px; line-height: 1.5; }
+	.header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+	.company-name { font-size: 20px; font-weight: 700; color: ${accent}; }
+	.company-info { font-size: 11px; color: #666; }
+	.company-tagline { font-size: 10px; color: #888; font-style: italic; margin-top: 2px; }
+	.report-title { font-size: 28px; font-weight: 700; color: ${accent}; text-align: right; }
+	.report-period { font-size: 12px; color: #666; text-align: right; margin-top: 4px; }
+	.divider { border: none; border-top: 2px solid ${accent}; margin: 12px 0; }
+	.summary-box { display: flex; gap: 12px; margin: 16px 0; flex-wrap: wrap; }
+	.summary-item { flex: 1; min-width: 120px; background: #f7f7f7; border-radius: 6px; padding: 12px 14px; border-left: 3px solid ${accent}; }
+	.summary-label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+	.summary-value { font-size: 18px; font-weight: 700; color: #333; margin-top: 4px; }
+	.summary-value.green { color: #52c41a; }
+	.summary-value.red { color: #ff4d4f; }
+	.summary-value.blue { color: #1677ff; }
+	.section-header { font-size: 13px; font-weight: 700; color: ${accent}; text-transform: uppercase; margin: 20px 0 8px 0; border-bottom: 1px solid ${accent}; padding-bottom: 4px; }
+	table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+	th { font-size: 10px; font-weight: 700; color: #fff; background: ${accent}; text-align: left; padding: 6px 8px; }
+	th.right { text-align: right; }
+	td { font-size: 11px; padding: 5px 8px; border-bottom: 1px solid #eee; }
+	td.right { text-align: right; }
+	.maint-box { display: flex; gap: 16px; margin: 8px 0; }
+	.maint-item { text-align: center; padding: 8px 16px; background: #f7f7f7; border-radius: 4px; }
+	.maint-num { font-size: 20px; font-weight: 700; }
+	.maint-label { font-size: 10px; color: #666; text-transform: uppercase; }
+	.footer { text-align: center; font-size: 9px; color: ${accent}; margin-top: 30px; border-top: 1px solid ${accent}; padding-top: 8px; }
+	.generated { font-size: 9px; color: #999; text-align: right; margin-top: 4px; }
+</style>
+</head>
+<body>
+	${headerHtml}
+	<hr class="divider" />
+
+	<div class="summary-box">
+		<div class="summary-item">
+			<div class="summary-label">Total Revenue</div>
+			<div class="summary-value green">${this.formatKES(data.totalRevenue)}</div>
+		</div>
+		<div class="summary-item">
+			<div class="summary-label">Total Expenses</div>
+			<div class="summary-value red">${this.formatKES(data.totalExpenses)}</div>
+		</div>
+		<div class="summary-item">
+			<div class="summary-label">Net Income</div>
+			<div class="summary-value ${data.netIncome >= 0 ? 'green' : 'red'}">${this.formatKES(data.netIncome)}</div>
+		</div>
+		<div class="summary-item">
+			<div class="summary-label">Collection Rate</div>
+			<div class="summary-value blue">${data.collectionRate.toFixed(1)}%</div>
+		</div>
+	</div>
+
+	<div class="summary-box">
+		<div class="summary-item">
+			<div class="summary-label">Total Units</div>
+			<div class="summary-value">${data.totalUnits}</div>
+		</div>
+		<div class="summary-item">
+			<div class="summary-label">Occupied</div>
+			<div class="summary-value green">${data.occupiedUnits}</div>
+		</div>
+		<div class="summary-item">
+			<div class="summary-label">Vacant</div>
+			<div class="summary-value ${data.vacantUnits > 0 ? 'red' : ''}">${data.vacantUnits}</div>
+		</div>
+		<div class="summary-item">
+			<div class="summary-label">Occupancy Rate</div>
+			<div class="summary-value blue">${data.occupancyRate.toFixed(1)}%</div>
+		</div>
+	</div>
+
+	<div class="section-header">Property Breakdown</div>
+	<table>
+		<thead>
+			<tr>
+				<th>Property</th>
+				<th class="right">Units</th>
+				<th class="right">Occupied</th>
+				<th class="right">Revenue (KES)</th>
+				<th class="right">Expenses (KES)</th>
+				<th class="right">Net Income (KES)</th>
+			</tr>
+		</thead>
+		<tbody>
+			${propertyRows}
+			<tr style="font-weight:700;border-top:2px solid ${accent};">
+				<td>TOTAL</td>
+				<td class="right">${data.totalUnits}</td>
+				<td class="right">${data.occupiedUnits}</td>
+				<td class="right" style="color:#52c41a">${this.formatKES(data.totalRevenue)}</td>
+				<td class="right" style="color:#ff4d4f">${this.formatKES(data.totalExpenses)}</td>
+				<td class="right" style="color:${data.netIncome >= 0 ? '#52c41a' : '#ff4d4f'}">${this.formatKES(data.netIncome)}</td>
+			</tr>
+		</tbody>
+	</table>
+
+	${data.topDebtors.length > 0 ? `
+	<div class="section-header">Top Outstanding Balances</div>
+	<table>
+		<thead>
+			<tr><th>Tenant</th><th>Unit / Property</th><th class="right">Amount Owed (KES)</th></tr>
+		</thead>
+		<tbody>${debtorRows}</tbody>
+	</table>
+	` : ''}
+
+	<div class="section-header">Maintenance Summary</div>
+	<div class="maint-box">
+		<div class="maint-item">
+			<div class="maint-num" style="color:#faad14">${data.maintenanceOpen}</div>
+			<div class="maint-label">Open Requests</div>
+		</div>
+		<div class="maint-item">
+			<div class="maint-num" style="color:#52c41a">${data.maintenanceResolved}</div>
+			<div class="maint-label">Resolved</div>
+		</div>
+		<div class="maint-item">
+			<div class="maint-num" style="color:#ff4d4f">${data.maintenanceUrgent}</div>
+			<div class="maint-label">Urgent</div>
+		</div>
+	</div>
+
+	<div class="generated">Generated on ${this.esc(data.generatedAt)}</div>
 	<div class="footer">Generated by ${this.esc(data.companyName)}</div>
 </body>
 </html>`;

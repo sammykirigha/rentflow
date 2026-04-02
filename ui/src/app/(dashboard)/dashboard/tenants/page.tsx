@@ -483,11 +483,10 @@ export default function TenantsPage() {
               name="email"
               label="Email"
               rules={[
-                { required: true, message: 'Please enter the email address' },
                 { type: 'email', message: 'Please enter a valid email' },
               ]}
             >
-              <Input placeholder="e.g. jane@example.com" />
+              <Input placeholder="e.g. jane@example.com (optional)" />
             </Form.Item>
 
             <Form.Item
@@ -505,7 +504,7 @@ export default function TenantsPage() {
             </Form.Item>
 
             <Alert
-              message="A login password will be auto-generated and sent to the tenant via SMS and email."
+              message="A login password will be auto-generated and sent to the tenant via SMS (and email if provided)."
               type="info"
               showIcon
             />

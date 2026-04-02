@@ -1,4 +1,4 @@
-import { AbstractEntity } from '@/database/abstract.entity';
+import { OrgScopedEntity } from '@/database/org-scoped.entity';
 import { Property } from '@/modules/properties/entities/property.entity';
 import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique } from 'typeorm';
 
@@ -14,7 +14,8 @@ export enum UnitType {
 @Entity('units')
 @Unique(['propertyId', 'unitNumber'])
 @Index(['propertyId'])
-export class Unit extends AbstractEntity<Unit> {
+@Index(['organizationId', 'propertyId'])
+export class Unit extends OrgScopedEntity<Unit> {
 	@PrimaryGeneratedColumn('uuid', { name: 'unit_id' })
 	unitId: string;
 

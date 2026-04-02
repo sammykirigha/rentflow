@@ -1,4 +1,4 @@
-import { AbstractEntity } from '@/database/abstract.entity';
+import { OrgScopedEntity } from '@/database/org-scoped.entity';
 import { Invoice } from '@/modules/invoices/entities/invoice.entity';
 import { Tenant } from '@/modules/tenants/entities/tenant.entity';
 import {
@@ -25,6 +25,19 @@ export enum NotificationType {
 	LEASE_RENEWAL = 'lease_renewal',
 	GENERAL = 'general',
 	WELCOME_CREDENTIALS = 'welcome_credentials',
+	// Smart Reminder types
+	FRIENDLY_REMINDER = 'friendly_reminder',
+	DUE_TODAY_WARNING = 'due_today_warning',
+	LANDLORD_ESCALATION = 'landlord_escalation',
+	// Lease Lifecycle types
+	LEASE_EXPIRY_90 = 'lease_expiry_90',
+	LEASE_EXPIRY_60 = 'lease_expiry_60',
+	LEASE_EXPIRY_30 = 'lease_expiry_30',
+	VACANCY_ALERT = 'vacancy_alert',
+	// Statement
+	STATEMENT_SENT = 'statement_sent',
+	// Owner Report
+	OWNER_REPORT = 'owner_report',
 }
 
 export enum NotificationStatus {
@@ -37,7 +50,8 @@ export enum NotificationStatus {
 @Index(['tenantId'])
 @Index(['type'])
 @Index(['sentAt'])
-export class Notification extends AbstractEntity<Notification> {
+@Index(['organizationId', 'tenantId'])
+export class Notification extends OrgScopedEntity<Notification> {
 	@PrimaryGeneratedColumn('uuid', { name: 'notification_id' })
 	notificationId: string;
 
@@ -73,6 +87,9 @@ export class Notification extends AbstractEntity<Notification> {
 
 	@Column({ name: 'retry_count', type: 'int', default: 0 })
 	retryCount: number;
+
+	@Column({ name: 'read_at', type: 'timestamp', nullable: true })
+	readAt?: Date;
 
 	// Relations
 	@ManyToOne(() => Tenant, { eager: false })

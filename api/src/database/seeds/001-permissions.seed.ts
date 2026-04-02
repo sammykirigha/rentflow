@@ -99,6 +99,27 @@ export class PermissionsSeed {
 				console.log(`  Created role: ${UserRole.TENANT}`);
 			}
 
+			// Create Super Admin role with all permissions
+			let superAdminRole = await roleRepository.findOne({
+				where: { name: UserRole.SUPER_ADMIN },
+				relations: ['permissions'],
+			});
+
+			if (!superAdminRole) {
+				superAdminRole = await roleRepository.save({
+					name: UserRole.SUPER_ADMIN,
+					description: 'Platform super administrator - full access across all organizations',
+					isSystemRole: true,
+					isAdminRole: true,
+					permissions: allPermissions,
+				});
+				console.log(`  Created role: ${UserRole.SUPER_ADMIN} with ${allPermissions.length} permissions`);
+			} else {
+				superAdminRole.permissions = allPermissions;
+				await roleRepository.save(superAdminRole);
+				console.log(`  Updated role: ${UserRole.SUPER_ADMIN}`);
+			}
+
 			console.log('Permissions and roles seeding complete!');
 		} catch (error) {
 			console.error('Error during permissions and roles seeding:', error.message);

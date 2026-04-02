@@ -41,13 +41,11 @@ api.interceptors.response.use(
     if (typeof window === 'undefined') return Promise.reject(error);
 
     if (error.response?.status === 401) {
-      const token = sessionStorage.getItem('access_token');
-      if (token) {
-        // Token exists but server rejected it (expired or invalid) — clear it
-        sessionStorage.removeItem('access_token');
-        window.location.href = '/login';
-      }
-      // If no token, the request was made during logout — suppress the error
+      // Clear stale token so in-flight requests stop using it.
+      // Redirect is handled by AuthContext → ProtectedRoute chain, NOT here.
+      // A window.location.href redirect here races with signOut() and causes
+      // an infinite reload loop (NextAuth cookie survives the reload).
+      sessionStorage.removeItem('access_token');
     }
 
     return Promise.reject(error);

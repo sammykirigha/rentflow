@@ -18,6 +18,7 @@ import {
 	UseInterceptors,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger';
+import { MarkNotificationsReadDto } from './dto/mark-notifications-read.dto';
 import { SendBulkMessageDto } from './dto/send-bulk-message.dto';
 import { SendBulkReminderDto } from './dto/send-bulk-reminder.dto';
 import { SendNotificationDto } from './dto/send-notification.dto';
@@ -48,6 +49,36 @@ export class NotificationsController {
 		// Resolve tenant from JWT user
 		const tenant = await this.notificationsService.findTenantByUserId(user.sub);
 		return this.notificationsService.findByTenant({ tenantId: tenant.tenantId, page, limit, type });
+	}
+
+	@Get('my/unread-count')
+	@ApiOperation({ summary: 'Get unread notification count (tenant self-service)' })
+	@ApiResponse({ status: 200, description: 'Unread count retrieved' })
+	async getMyUnreadCount(@CurrentUser() user: JwtPayload) {
+		const tenant = await this.notificationsService.findTenantByUserId(user.sub);
+		const count = await this.notificationsService.getUnreadCount(tenant.tenantId);
+		return { count };
+	}
+
+	@Post('my/mark-read')
+	@ApiOperation({ summary: 'Mark specific notifications as read (tenant self-service)' })
+	@ApiResponse({ status: 200, description: 'Notifications marked as read' })
+	async markAsRead(
+		@CurrentUser() user: JwtPayload,
+		@Body() dto: MarkNotificationsReadDto,
+	) {
+		const tenant = await this.notificationsService.findTenantByUserId(user.sub);
+		await this.notificationsService.markAsRead(tenant.tenantId, dto.notificationIds);
+		return { message: 'Notifications marked as read' };
+	}
+
+	@Post('my/mark-all-read')
+	@ApiOperation({ summary: 'Mark all notifications as read (tenant self-service)' })
+	@ApiResponse({ status: 200, description: 'All notifications marked as read' })
+	async markAllAsRead(@CurrentUser() user: JwtPayload) {
+		const tenant = await this.notificationsService.findTenantByUserId(user.sub);
+		await this.notificationsService.markAllAsRead(tenant.tenantId);
+		return { message: 'All notifications marked as read' };
 	}
 
 	@Get()

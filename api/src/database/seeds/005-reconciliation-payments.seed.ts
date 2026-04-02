@@ -1,3 +1,4 @@
+import { Organization } from '@/modules/organizations/entities/organization.entity';
 import { Payment, PaymentMethod, PaymentStatus } from '@/modules/payments/entities/payment.entity';
 import { DataSource } from 'typeorm';
 
@@ -48,6 +49,14 @@ const RECONCILIATION_PAYMENTS = [
 
 export class ReconciliationPaymentsSeed {
 	public async run(dataSource: DataSource): Promise<void> {
+		const orgRepo = dataSource.getRepository(Organization);
+		const defaultOrg = await orgRepo.findOne({ where: { slug: 'default' } });
+
+		if (!defaultOrg) {
+			console.error('  Default organization not found. Run initial users seed first.');
+			return;
+		}
+
 		const paymentRepo = dataSource.getRepository(Payment);
 
 		console.log('Seeding reconciliation payments...');
@@ -81,6 +90,7 @@ export class ReconciliationPaymentsSeed {
 			}
 
 			const payment = paymentRepo.create({
+				organizationId: defaultOrg.organizationId,
 				tenantId: undefined,
 				invoiceId: undefined,
 				amount: data.amount,

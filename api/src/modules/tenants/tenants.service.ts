@@ -27,6 +27,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcryptjs';
 import { DataSource, Repository } from 'typeorm';
 import { User } from '@/modules/users/entities/user.entity';
+import { OrgContextService } from '@/common/services/org-context.service';
 import authConfig from '@/config/auth.config';
 import { generateTenantPassword } from '@/utils/generate-password';
 import { AuditService } from '../audit/audit.service';
@@ -38,6 +39,7 @@ import { CreateTenantDto } from './dto/create-tenant.dto';
 import { RefundDepositDto } from './dto/refund-deposit.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { Tenant, TenantStatus, DepositStatus } from './entities/tenant.entity';
+import { TenantChecklist, ChecklistType, ChecklistItem } from './entities/tenant-checklist.entity';
 import { TenantsRepository } from './tenants.repository';
 
 @Injectable()
@@ -61,6 +63,9 @@ export class TenantsService {
 		@InjectRepository(Notification)
 		private readonly notificationRepository: Repository<Notification>,
 		private readonly configService: ConfigService,
+		private readonly orgContext: OrgContextService,
+		@InjectRepository(TenantChecklist)
+		private readonly checklistRepository: Repository<TenantChecklist>,
 	) {}
 
 	async create(dto: CreateTenantDto, adminUserId: string): Promise<Tenant> {
@@ -84,13 +89,15 @@ export class TenantsService {
 			throw new ConflictException('This unit is already assigned to a tenant');
 		}
 
-		// 3. Check email is not already in use
-		const existingUserByEmail = await this.usersService['usersRepository'].findOne({
-			where: { email: dto.email },
-		});
+		// 3. Check email is not already in use (only if email provided)
+		if (dto.email) {
+			const existingUserByEmail = await this.usersService['usersRepository'].findOne({
+				where: { email: dto.email },
+			});
 
-		if (existingUserByEmail) {
-			throw new ConflictException('A user with this email already exists');
+			if (existingUserByEmail) {
+				throw new ConflictException('A user with this email already exists');
+			}
 		}
 
 		// 4. Check phone is not already in use
@@ -131,12 +138,14 @@ export class TenantsService {
 		try {
 			user = await queryRunner.manager.save(
 				queryRunner.manager.create(User, {
-					email: dto.email,
+					email: dto.email || null,
 					password: hashedPassword,
 					firstName,
 					lastName,
 					phone: dto.phone,
 					roleId: tenantRole.roleId,
+					organizationId: this.orgContext.organizationId,
+					mustChangePassword: true,
 				}),
 			);
 
@@ -152,6 +161,7 @@ export class TenantsService {
 					idNumber: dto.idNumber,
 					idCopyKey: dto.idCopyKey,
 					kraCertificateKey: dto.kraCertificateKey,
+					organizationId: this.orgContext.organizationId,
 				}),
 			);
 
@@ -191,13 +201,14 @@ export class TenantsService {
 			performedBy: adminUserId,
 			targetType: AuditTargetType.TENANT,
 			targetId: tenant.tenantId,
-			details: `Created tenant "${dto.name}" (${dto.email}) for unit ${unit.unitNumber}`,
+			details: `Created tenant "${dto.name}" (${dto.email || dto.phone}) for unit ${unit.unitNumber}`,
 			metadata: {
 				tenantId: tenant.tenantId,
 				userId: user.userId,
 				unitId: dto.unitId,
 				unitNumber: unit.unitNumber,
-				email: dto.email,
+				email: dto.email || null,
+				phone: dto.phone,
 				depositAmount: dto.depositAmount || 0,
 			},
 		});
@@ -211,7 +222,7 @@ export class TenantsService {
 			password: plainPassword,
 			unitNumber: unit.unitNumber,
 		}).catch((err) => {
-			this.logger.error(`Failed to send welcome credentials to ${dto.email}: ${err.message}`);
+			this.logger.error(`Failed to send welcome credentials to ${dto.email || dto.phone}: ${err.message}`);
 		});
 
 		// 13. Return tenant with relations loaded
@@ -224,19 +235,20 @@ export class TenantsService {
 	private async sendWelcomeCredentials(params: {
 		tenantId: string;
 		name: string;
-		email: string;
+		email?: string;
 		phone: string;
 		password: string;
 		unitNumber: string;
 	}): Promise<void> {
 		const { tenantId, name, email, phone, password, unitNumber } = params;
 		const loginUrl = `${this.configService.get('FRONTEND_URL', 'http://localhost:3001')}/login`;
+		const loginIdentifier = email || phone;
 
 		// SMS
 		const smsMessage =
 			`Welcome to RentFlow, ${name}! ` +
 			`Your unit: ${unitNumber}. ` +
-			`Login: ${email} | Password: ${password}. ` +
+			`Login: ${loginIdentifier} | Password: ${password}. ` +
 			`Login here: ${loginUrl} ` +
 			`Please change your password after first login.`;
 
@@ -254,45 +266,47 @@ export class TenantsService {
 			}),
 		);
 
-		// Email
-		const emailHtml = `
-			<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-				<h2 style="color: #1890ff;">Welcome to RentFlow</h2>
-				<p>Hello <strong>${name}</strong>,</p>
-				<p>Your tenant account has been created. Here are your login credentials:</p>
-				<div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 16px 0;">
-					<p style="margin: 4px 0;"><strong>Unit:</strong> ${unitNumber}</p>
-					<p style="margin: 4px 0;"><strong>Email:</strong> ${email}</p>
-					<p style="margin: 4px 0;"><strong>Password:</strong> ${password}</p>
+		// Email (only if email provided)
+		if (email) {
+			const emailHtml = `
+				<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+					<h2 style="color: #1890ff;">Welcome to RentFlow</h2>
+					<p>Hello <strong>${name}</strong>,</p>
+					<p>Your tenant account has been created. Here are your login credentials:</p>
+					<div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 16px 0;">
+						<p style="margin: 4px 0;"><strong>Unit:</strong> ${unitNumber}</p>
+						<p style="margin: 4px 0;"><strong>Email:</strong> ${email}</p>
+						<p style="margin: 4px 0;"><strong>Password:</strong> ${password}</p>
+					</div>
+					<div style="text-align: center; margin: 24px 0;">
+						<a href="${loginUrl}" style="background: #1890ff; color: #ffffff; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Login to RentFlow</a>
+					</div>
+					<p style="color: #ff4d4f;"><strong>Please change your password after your first login.</strong></p>
+					<hr style="border: none; border-top: 1px solid #e8e8e8; margin: 24px 0;" />
+					<p style="color: #888; font-size: 12px;">This is an automated message from RentFlow.</p>
 				</div>
-				<div style="text-align: center; margin: 24px 0;">
-					<a href="${loginUrl}" style="background: #1890ff; color: #ffffff; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Login to RentFlow</a>
-				</div>
-				<p style="color: #ff4d4f;"><strong>Please change your password after your first login.</strong></p>
-				<hr style="border: none; border-top: 1px solid #e8e8e8; margin: 24px 0;" />
-				<p style="color: #888; font-size: 12px;">This is an automated message from RentFlow.</p>
-			</div>
-		`;
+			`;
 
-		const emailResult = await this.mailService.sendEmail({
-			to: email,
-			subject: 'Welcome to RentFlow — Your Login Credentials',
-			html: emailHtml,
-		});
-
-		await this.notificationRepository.save(
-			this.notificationRepository.create({
-				tenantId,
-				type: NotificationType.WELCOME_CREDENTIALS,
-				channel: NotificationChannel.EMAIL,
+			const emailResult = await this.mailService.sendEmail({
+				to: email,
 				subject: 'Welcome to RentFlow — Your Login Credentials',
-				message: emailHtml,
-				sentAt: emailResult ? new Date() : undefined,
-				failReason: emailResult ? undefined : 'Email delivery failed',
-			}),
-		);
+				html: emailHtml,
+			});
 
-		this.logger.log(`Welcome credentials sent to ${name} (${email}) via SMS and Email`);
+			await this.notificationRepository.save(
+				this.notificationRepository.create({
+					tenantId,
+					type: NotificationType.WELCOME_CREDENTIALS,
+					channel: NotificationChannel.EMAIL,
+					subject: 'Welcome to RentFlow — Your Login Credentials',
+					message: emailHtml,
+					sentAt: emailResult ? new Date() : undefined,
+					failReason: emailResult ? undefined : 'Email delivery failed',
+				}),
+			);
+		}
+
+		this.logger.log(`Welcome credentials sent to ${name} (${loginIdentifier}) via SMS${email ? ' and Email' : ''}`);
 	}
 
 	/**
@@ -804,5 +818,80 @@ export class TenantsService {
 				deletedInvoices: invoiceIds.length,
 			},
 		});
+	}
+
+	// ── Checklist Methods ──────────────────────────────
+
+	async getChecklist(tenantId: string, type: ChecklistType): Promise<TenantChecklist | null> {
+		return this.checklistRepository.findOne({
+			where: { tenantId, type },
+		});
+	}
+
+	async createChecklist(tenantId: string, type: ChecklistType): Promise<TenantChecklist> {
+		const defaultItems: ChecklistItem[] = type === ChecklistType.ONBOARDING
+			? [
+				{ label: 'ID verified', completed: false },
+				{ label: 'Lease agreement signed', completed: false },
+				{ label: 'Security deposit paid', completed: false },
+				{ label: 'Keys handed over', completed: false },
+				{ label: 'Meter reading taken', completed: false },
+				{ label: 'Welcome SMS sent', completed: false },
+			]
+			: [
+				{ label: 'Notice confirmed', completed: false },
+				{ label: 'Unit inspection done', completed: false },
+				{ label: 'Damages assessed', completed: false },
+				{ label: 'Deposit deductions calculated', completed: false },
+				{ label: 'Keys returned', completed: false },
+				{ label: 'Final meter reading taken', completed: false },
+				{ label: 'Deposit refunded', completed: false },
+			];
+
+		const entity = this.checklistRepository.create({
+			tenantId,
+			type,
+			items: defaultItems,
+			organizationId: this.orgContext.organizationId,
+		} as any);
+		return this.checklistRepository.save(entity) as unknown as Promise<TenantChecklist>;
+	}
+
+	async updateChecklistItem(
+		tenantId: string,
+		type: ChecklistType,
+		itemIndex: number,
+		completed: boolean,
+		userId: string,
+	): Promise<TenantChecklist> {
+		let checklist = await this.getChecklist(tenantId, type);
+		if (!checklist) {
+			checklist = await this.createChecklist(tenantId, type);
+		}
+
+		if (itemIndex < 0 || itemIndex >= checklist.items.length) {
+			throw new BadRequestException('Invalid checklist item index');
+		}
+
+		checklist.items[itemIndex].completed = completed;
+		if (completed) {
+			checklist.items[itemIndex].completedAt = new Date().toISOString();
+			checklist.items[itemIndex].completedBy = userId;
+		} else {
+			checklist.items[itemIndex].completedAt = undefined;
+			checklist.items[itemIndex].completedBy = undefined;
+		}
+
+		// Check if all items are completed
+		const allComplete = checklist.items.every((item) => item.completed);
+		checklist.completedAt = allComplete ? new Date() : undefined;
+
+		return this.checklistRepository.save(checklist);
+	}
+
+	async getOrCreateChecklist(tenantId: string, type: ChecklistType): Promise<TenantChecklist> {
+		const existing = await this.getChecklist(tenantId, type);
+		if (existing) return existing;
+		return this.createChecklist(tenantId, type);
 	}
 }

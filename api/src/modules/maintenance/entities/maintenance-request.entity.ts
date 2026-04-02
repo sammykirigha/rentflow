@@ -1,4 +1,4 @@
-import { AbstractEntity } from '@/database/abstract.entity';
+import { OrgScopedEntity } from '@/database/org-scoped.entity';
 import {
 	ExpenseCategory,
 	ExpensePriority,
@@ -19,7 +19,7 @@ import {
 @Index(['tenantId'])
 @Index(['status'])
 @Index(['propertyId'])
-export class MaintenanceRequest extends AbstractEntity<MaintenanceRequest> {
+export class MaintenanceRequest extends OrgScopedEntity<MaintenanceRequest> {
 	@PrimaryGeneratedColumn('uuid', { name: 'maintenance_request_id' })
 	maintenanceRequestId: string;
 

@@ -17,6 +17,7 @@ import {
   Space,
   Descriptions,
   Grid,
+  Alert,
 } from 'antd';
 import {
   PlusOutlined,
@@ -119,7 +120,7 @@ export default function ExpensesPage() {
   const screens = useBreakpoint();
   const isMobile = !screens.md;
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['expenses', statusFilter, categoryFilter, propertyFilter, page, pageSize],
     queryFn: () => expensesApi.getAll({
       status: statusFilter,
@@ -382,6 +383,17 @@ export default function ExpensesPage() {
           />
         </Space>
       </div>
+
+      {isError && (
+        <Alert
+          type="error"
+          showIcon
+          closable
+          style={{ marginBottom: 16 }}
+          message="Failed to load expenses"
+          description={parseError(error, 'An error occurred while fetching expenses. Check the browser console for details.')}
+        />
+      )}
 
       {isMobile ? (
         <div>

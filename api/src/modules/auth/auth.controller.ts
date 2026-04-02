@@ -11,9 +11,9 @@ import { AuthGuard } from '@nestjs/passport';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
 import { AuthService } from './auth.service';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Controller('auth')
@@ -26,11 +26,6 @@ export class AuthController {
     return this.authService.login(loginDto);
   }
 
-  @Post('register')
-  async register(@Body() registerDto: RegisterDto) {
-    return this.authService.register(registerDto);
-  }
-
   @Post('refresh')
   @UseGuards(AuthGuard('jwt-refresh'))
   async refresh(@CurrentUser() user: JwtPayload) {
@@ -41,6 +36,15 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   async getCurrentUser(@CurrentUser() user: JwtPayload) {
     return this.authService.getCurrentUser(user.sub);
+  }
+
+  @Post('change-password')
+  @UseGuards(AuthGuard('jwt'))
+  async changePassword(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(user.sub, dto);
   }
 
   @Post('forgot-password')

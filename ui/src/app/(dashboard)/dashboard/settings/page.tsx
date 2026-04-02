@@ -1,41 +1,45 @@
 'use client';
 
 import {
-  SettingOutlined,
   PictureOutlined,
   TeamOutlined,
   BellOutlined,
   FileTextOutlined,
+  MobileOutlined,
+  BankOutlined,
 } from '@ant-design/icons';
 import { Card, Grid, Menu, Tabs, Typography } from 'antd';
 import { useState } from 'react';
-import GeneralSettingsTab from './components/general-settings-tab';
+import OrganizationTab from './components/organization-tab';
 import BrandingTab from './components/branding-tab';
 import TeamManagementTab from './components/team-management-tab';
 import NotificationSettingsTab from './components/notification-settings-tab';
 import InvoiceSettingsTab from './components/invoice-settings-tab';
+import MpesaSettingsTab from './components/mpesa-settings-tab';
 
 const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
 
 const menuItems = [
-  { key: 'general', icon: <SettingOutlined />, label: 'General' },
+  { key: 'organization', icon: <BankOutlined />, label: 'Organization' },
   { key: 'branding', icon: <PictureOutlined />, label: 'Branding' },
   { key: 'team', icon: <TeamOutlined />, label: 'Team' },
   { key: 'notifications', icon: <BellOutlined />, label: 'Notifications' },
   { key: 'invoices', icon: <FileTextOutlined />, label: 'Invoices' },
+  { key: 'mpesa', icon: <MobileOutlined />, label: 'M-Pesa' },
 ];
 
 const sectionContent: Record<string, React.ReactNode> = {
-  general: <GeneralSettingsTab />,
+  organization: <OrganizationTab />,
   branding: <BrandingTab />,
   team: <TeamManagementTab />,
   notifications: <NotificationSettingsTab />,
   invoices: <InvoiceSettingsTab />,
+  mpesa: <MpesaSettingsTab />,
 };
 
 export default function SettingsPage() {
-  const [selectedKey, setSelectedKey] = useState('general');
+  const [selectedKey, setSelectedKey] = useState('organization');
   const screens = useBreakpoint();
   const isMobile = !screens.md;
 
@@ -44,7 +48,7 @@ export default function SettingsPage() {
       <div style={{ marginBottom: isMobile ? 12 : 24 }}>
         <Title level={isMobile ? 5 : 4} style={{ marginBottom: 4 }}>Settings</Title>
         <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>
-          Manage your platform configuration, branding, team, and notifications.
+          Manage your organization settings, branding, team, and integrations.
         </Text>
       </div>
 

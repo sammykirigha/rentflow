@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditModule } from '../audit/audit.module';
 import { InvoicesModule } from '../invoices/invoices.module';
+import { OrganizationsModule } from '../organizations/organizations.module';
 import { WalletModule } from '../wallet/wallet.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { Tenant } from '../tenants/entities/tenant.entity';
@@ -15,6 +16,7 @@ import { MpesaIpGuard } from './guards/mpesa-ip.guard';
 	imports: [
 		TypeOrmModule.forFeature([Payment, Tenant, Unit]),
 		AuditModule,
+		OrganizationsModule,
 		WalletModule,
 		PaymentsModule,
 		forwardRef(() => InvoicesModule),

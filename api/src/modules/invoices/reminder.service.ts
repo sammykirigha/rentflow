@@ -1,3 +1,4 @@
+import { orgAsyncStorage } from '@/common/services/org-async-context';
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -63,6 +64,8 @@ function formatNairobiDate(date: Date): string {
 	return `${nairobi.day} ${months[nairobi.month - 1]} ${nairobi.year}`;
 }
 
+type ReminderType = 'friendly' | 'due_today' | 'overdue' | 'landlord_escalation';
+
 @Injectable()
 export class ReminderService {
 	private readonly logger = new Logger(ReminderService.name);
@@ -90,19 +93,46 @@ export class ReminderService {
 	}
 
 	/**
-	 * Send reminders for all unsettled invoices.
+	 * Determine the reminder type based on day of month.
 	 *
-	 * Day 1: No reminders (invoice generation day)
-	 * Days 2-5: Grace period - friendly payment reminders
-	 * Day 6+: Overdue notices with penalty info
+	 * Smart Reminder Sequence:
+	 * - Day 1: No reminders (invoice generation day)
+	 * - Day 3: Friendly reminder
+	 * - Day 5: Due-date warning
+	 * - Day 7+: Overdue notice (penalties being applied)
+	 * - Day 10: Landlord escalation (notify landlord, not tenant)
+	 */
+	private getReminderType(dayOfMonth: number): ReminderType | null {
+		if (dayOfMonth < 2) return null; // Day 1 = invoice generation
+		if (dayOfMonth <= 4) return 'friendly';
+		if (dayOfMonth <= 6) return 'due_today';
+		if (dayOfMonth === 10) return 'landlord_escalation';
+		if (dayOfMonth >= 7) return 'overdue';
+		return null;
+	}
+
+	/**
+	 * Map reminder type to notification type for idempotency checking.
+	 */
+	private getNotificationType(type: ReminderType): NotificationType {
+		switch (type) {
+			case 'friendly': return NotificationType.FRIENDLY_REMINDER;
+			case 'due_today': return NotificationType.DUE_TODAY_WARNING;
+			case 'overdue': return NotificationType.PAYMENT_REMINDER;
+			case 'landlord_escalation': return NotificationType.LANDLORD_ESCALATION;
+		}
+	}
+
+	/**
+	 * Send reminders for all unsettled invoices using the escalating sequence.
 	 */
 	async sendReminders(): Promise<{ sent: number; skipped: number }> {
 		const now = new Date();
 		const nairobi = toNairobiDate(now);
 		const dayOfMonth = nairobi.day;
 
-		// Day 1 is invoice generation day — no reminders
-		if (dayOfMonth < 2) {
+		const reminderType = this.getReminderType(dayOfMonth);
+		if (!reminderType) {
 			this.logger.log('Day 1 of month — skipping reminders (invoice generation day)');
 			return { sent: 0, skipped: 0 };
 		}
@@ -117,6 +147,12 @@ export class ReminderService {
 			: null;
 		const systemUserId = landlordUser?.userId;
 
+		// Day 10 landlord escalation: aggregate all unpaid invoices and notify landlord
+		if (reminderType === 'landlord_escalation') {
+			await this.sendLandlordEscalation(systemUserId, now);
+			return { sent: 1, skipped: 0 };
+		}
+
 		// Find all unsettled invoices with a positive balance
 		const unsettledInvoices = await this.invoicesRepository.findAll({
 			where: {
@@ -126,45 +162,61 @@ export class ReminderService {
 			relations: ['tenant', 'tenant.user'],
 		});
 
-		this.logger.log(`Found ${unsettledInvoices.length} unsettled invoice(s) to check for reminders`);
+		this.logger.log(`Found ${unsettledInvoices.length} unsettled invoice(s) for ${reminderType} reminders`);
 
 		let sent = 0;
 		let skipped = 0;
 
-		for (const invoice of unsettledInvoices) {
-			try {
-				const alreadySent = await this.hasReminderBeenSentToday(invoice.invoiceId, now);
-				if (alreadySent) {
-					skipped++;
-					continue;
-				}
+		const notificationType = this.getNotificationType(reminderType);
 
-				const isOverdue = dayOfMonth >= 6;
-				await this.sendReminderForInvoice(invoice, isOverdue, systemUserId);
-				sent++;
-			} catch (error) {
-				this.logger.error(
-					`Failed to send reminder for invoice ${invoice.invoiceNumber}: ${error.message}`,
-					error.stack,
-				);
-			}
+		for (const invoice of unsettledInvoices) {
+			await orgAsyncStorage.run(
+				{ organizationId: invoice.organizationId, isSuperAdmin: false, impersonatedBy: null },
+				async () => {
+					try {
+						const alreadySent = await this.hasReminderBeenSentToday(invoice.invoiceId, notificationType, now);
+						if (alreadySent) {
+							skipped++;
+							return;
+						}
+
+						switch (reminderType) {
+							case 'friendly':
+								await this.sendFriendlyReminder(invoice, now, systemUserId);
+								break;
+							case 'due_today':
+								await this.sendDueTodayWarning(invoice, now, systemUserId);
+								break;
+							case 'overdue':
+								await this.sendOverdueReminder(invoice, now, systemUserId);
+								break;
+						}
+						sent++;
+					} catch (error) {
+						this.logger.error(
+							`Failed to send ${reminderType} reminder for invoice ${invoice.invoiceNumber}: ${error.message}`,
+							error.stack,
+						);
+					}
+				},
+			);
 		}
 
-		this.logger.log(`Reminder run complete: ${sent} sent, ${skipped} skipped (already sent today)`);
+		this.logger.log(`Reminder run complete (${reminderType}): ${sent} sent, ${skipped} skipped`);
 		return { sent, skipped };
 	}
 
 	/**
-	 * Check if a PAYMENT_REMINDER notification was already sent today (Nairobi time)
+	 * Check if a specific notification type was already sent today (Nairobi time)
 	 * for the given invoice.
 	 */
-	private async hasReminderBeenSentToday(invoiceId: string, now: Date): Promise<boolean> {
+	private async hasReminderBeenSentToday(invoiceId: string, type: NotificationType, now: Date): Promise<boolean> {
 		const { start, end } = getNairobiDayBoundsUTC(now);
 
 		const count = await this.notificationRepository.count({
 			where: {
 				invoiceId,
-				type: NotificationType.PAYMENT_REMINDER,
+				type,
 				sentAt: Between(start, end),
 			},
 		});
@@ -173,76 +225,34 @@ export class ReminderService {
 	}
 
 	/**
-	 * Send SMS + email reminder for a single invoice.
+	 * Day 3: Friendly reminder — gentle nudge.
 	 */
-	private async sendReminderForInvoice(
+	private async sendFriendlyReminder(
 		invoice: Invoice,
-		isOverdue: boolean,
-		systemUserId?: string,
-	): Promise<void> {
-		if (!invoice.tenantId) {
-			this.logger.log(`Skipping reminder for non-tenant invoice ${invoice.invoiceNumber}`);
-			return;
-		}
-
-		// Load tenant with user if not already loaded
-		let tenant = invoice.tenant;
-		if (!tenant?.user) {
-			tenant = await this.tenantRepository.findOne({
-				where: { tenantId: invoice.tenantId },
-				relations: ['user'],
-			});
-		}
-
-		if (!tenant?.user) {
-			this.logger.warn(`No tenant/user found for invoice ${invoice.invoiceNumber}, skipping reminder`);
-			return;
-		}
-
-		const { user } = tenant;
-		const now = new Date();
-		const balanceDue = Number(invoice.balanceDue);
-		const dueDateStr = formatNairobiDate(invoice.dueDate);
-
-		// Determine the 6th of the current month for the penalty start warning
-		const nairobi = toNairobiDate(now);
-		const penaltyStartDate = `6 ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][nairobi.month - 1]} ${nairobi.year}`;
-
-		if (isOverdue) {
-			await this.sendOverdueReminder(invoice, tenant, user, balanceDue, now, systemUserId);
-		} else {
-			await this.sendGracePeriodReminder(invoice, tenant, user, balanceDue, dueDateStr, penaltyStartDate, now, systemUserId);
-		}
-	}
-
-	/**
-	 * Grace period reminder (days 2-5): friendly message with penalty warning.
-	 */
-	private async sendGracePeriodReminder(
-		invoice: Invoice,
-		tenant: Tenant,
-		user: User,
-		balanceDue: number,
-		dueDateStr: string,
-		penaltyStartDate: string,
 		now: Date,
 		systemUserId?: string,
 	): Promise<void> {
+		const tenant = await this.loadTenant(invoice);
+		if (!tenant?.user) return;
+
+		const { user } = tenant;
+		const balanceDue = Number(invoice.balanceDue);
+		const dueDateStr = formatNairobiDate(invoice.dueDate);
+
 		// SMS
 		const smsMessage =
-			`RentFlow: Reminder - Invoice ${invoice.invoiceNumber} for ${this.getBillingMonthLabel(invoice.billingMonth)}. ` +
-			`Balance: ${formatKES(balanceDue)}. Due by ${dueDateStr}. ` +
-			`Pay via Paybill to avoid daily penalties starting ${penaltyStartDate}.`;
+			`Hi ${user.firstName || 'there'}, just a gentle reminder that your rent invoice ` +
+			`${invoice.invoiceNumber} of ${formatKES(balanceDue)} is due by ${dueDateStr}. ` +
+			`Please pay at your earliest convenience. Thank you! — RentFlow`;
 
-		await this.sendSmsNotification(tenant, invoice, smsMessage, now);
+		await this.sendSmsNotification(tenant, invoice, smsMessage, now, NotificationType.FRIENDLY_REMINDER);
 
 		// Email
-		const emailSubject = `Payment Reminder - Invoice ${invoice.invoiceNumber}`;
 		const emailHtml = `
 			<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-				<h2 style="color: #2563eb;">Payment Reminder</h2>
-				<p>Dear ${user.firstName || 'Tenant'},</p>
-				<p>This is a friendly reminder that your invoice is pending payment.</p>
+				<h2 style="color: #1890ff;">Friendly Payment Reminder</h2>
+				<p>Hi ${user.firstName || 'there'},</p>
+				<p>Just a gentle reminder about your upcoming rent payment.</p>
 				<table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
 					<tr style="border-bottom: 1px solid #e5e7eb;">
 						<td style="padding: 8px; font-weight: bold;">Invoice</td>
@@ -252,6 +262,67 @@ export class ReminderService {
 						<td style="padding: 8px; font-weight: bold;">Billing Month</td>
 						<td style="padding: 8px; text-align: right;">${this.getBillingMonthLabel(invoice.billingMonth)}</td>
 					</tr>
+					<tr style="background-color: #eff6ff;">
+						<td style="padding: 8px; font-weight: bold;">Balance Due</td>
+						<td style="padding: 8px; text-align: right; font-weight: bold;">${formatKES(balanceDue)}</td>
+					</tr>
+				</table>
+				<p><strong>Due Date:</strong> ${dueDateStr}</p>
+				<p>Thank you for being a great tenant!</p>
+				<p>Warm regards,<br/>RentFlow</p>
+			</div>
+		`;
+
+		await this.sendEmailNotification(tenant, invoice, `Friendly Reminder - Invoice ${invoice.invoiceNumber}`, emailHtml, now, NotificationType.FRIENDLY_REMINDER);
+
+		if (systemUserId) {
+			await this.auditService.createLog({
+				action: AuditAction.REMINDER_SENT,
+				performedBy: systemUserId,
+				performerName: 'Reminder Service',
+				targetType: AuditTargetType.INVOICE,
+				targetId: invoice.invoiceId,
+				details: `Friendly reminder sent for invoice ${invoice.invoiceNumber}. Balance: ${formatKES(balanceDue)}`,
+				metadata: { invoiceNumber: invoice.invoiceNumber, tenantId: tenant.tenantId, balanceDue, period: 'friendly' },
+			});
+		}
+	}
+
+	/**
+	 * Day 5: Due-today warning — urgent tone with penalty warning.
+	 */
+	private async sendDueTodayWarning(
+		invoice: Invoice,
+		now: Date,
+		systemUserId?: string,
+	): Promise<void> {
+		const tenant = await this.loadTenant(invoice);
+		if (!tenant?.user) return;
+
+		const { user } = tenant;
+		const balanceDue = Number(invoice.balanceDue);
+		const nairobi = toNairobiDate(now);
+		const penaltyStartDate = `6 ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][nairobi.month - 1]} ${nairobi.year}`;
+
+		// SMS
+		const smsMessage =
+			`RentFlow: Your rent of ${formatKES(balanceDue)} is DUE TODAY. ` +
+			`Invoice ${invoice.invoiceNumber}. ` +
+			`A daily penalty of 5% will be applied starting tomorrow (${penaltyStartDate}). Pay now to avoid extra charges.`;
+
+		await this.sendSmsNotification(tenant, invoice, smsMessage, now, NotificationType.DUE_TODAY_WARNING);
+
+		// Email
+		const emailHtml = `
+			<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+				<h2 style="color: #d97706;">Payment Due Today</h2>
+				<p>Dear ${user.firstName || 'Tenant'},</p>
+				<p>Your rent payment is <strong>due today</strong>. Please make your payment to avoid penalties.</p>
+				<table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+					<tr style="border-bottom: 1px solid #e5e7eb;">
+						<td style="padding: 8px; font-weight: bold;">Invoice</td>
+						<td style="padding: 8px; text-align: right;">${invoice.invoiceNumber}</td>
+					</tr>
 					<tr style="border-bottom: 1px solid #e5e7eb;">
 						<td style="padding: 8px; font-weight: bold;">Total Amount</td>
 						<td style="padding: 8px; text-align: right;">${formatKES(Number(invoice.totalAmount))}</td>
@@ -260,20 +331,18 @@ export class ReminderService {
 						<td style="padding: 8px; font-weight: bold;">Amount Paid</td>
 						<td style="padding: 8px; text-align: right;">${formatKES(Number(invoice.amountPaid))}</td>
 					</tr>
-					<tr style="background-color: #eff6ff;">
+					<tr style="background-color: #fef3c7;">
 						<td style="padding: 8px; font-weight: bold;">Balance Due</td>
-						<td style="padding: 8px; text-align: right; font-weight: bold;">${formatKES(balanceDue)}</td>
+						<td style="padding: 8px; text-align: right; font-weight: bold; color: #d97706;">${formatKES(balanceDue)}</td>
 					</tr>
 				</table>
-				<p><strong>Due Date:</strong> ${dueDateStr}</p>
-				<p style="color: #d97706; font-weight: bold;">Please note: A daily penalty of 5% of your rent amount will be applied starting ${penaltyStartDate} for unpaid invoices.</p>
+				<p style="color: #d97706; font-weight: bold;">A daily penalty of 5% of your rent amount will be applied starting ${penaltyStartDate} if payment is not received.</p>
 				<p>Thank you,<br/>RentFlow</p>
 			</div>
 		`;
 
-		await this.sendEmailNotification(tenant, invoice, emailSubject, emailHtml, now);
+		await this.sendEmailNotification(tenant, invoice, `URGENT: Payment Due Today - Invoice ${invoice.invoiceNumber}`, emailHtml, now, NotificationType.DUE_TODAY_WARNING);
 
-		// Audit log
 		if (systemUserId) {
 			await this.auditService.createLog({
 				action: AuditAction.REMINDER_SENT,
@@ -281,28 +350,25 @@ export class ReminderService {
 				performerName: 'Reminder Service',
 				targetType: AuditTargetType.INVOICE,
 				targetId: invoice.invoiceId,
-				details: `Grace period reminder sent for invoice ${invoice.invoiceNumber}. Balance: ${formatKES(balanceDue)}`,
-				metadata: {
-					invoiceNumber: invoice.invoiceNumber,
-					tenantId: tenant.tenantId,
-					balanceDue,
-					period: 'grace',
-				},
+				details: `Due-today warning sent for invoice ${invoice.invoiceNumber}. Balance: ${formatKES(balanceDue)}`,
+				metadata: { invoiceNumber: invoice.invoiceNumber, tenantId: tenant.tenantId, balanceDue, period: 'due_today' },
 			});
 		}
 	}
 
 	/**
-	 * Overdue reminder (day 6+): urgent message with penalty breakdown.
+	 * Day 7+: Overdue reminder — urgent message with penalty breakdown.
 	 */
 	private async sendOverdueReminder(
 		invoice: Invoice,
-		tenant: Tenant,
-		user: User,
-		balanceDue: number,
 		now: Date,
 		systemUserId?: string,
 	): Promise<void> {
+		const tenant = await this.loadTenant(invoice);
+		if (!tenant?.user) return;
+
+		const { user } = tenant;
+		const balanceDue = Number(invoice.balanceDue);
 		const penaltyAmount = Number(invoice.penaltyAmount);
 
 		// SMS
@@ -311,11 +377,10 @@ export class ReminderService {
 			`Balance: ${formatKES(balanceDue)} (incl. penalties). ` +
 			`A daily penalty of 5% of rent is being applied. Pay now.`;
 
-		await this.sendSmsNotification(tenant, invoice, smsMessage, now);
+		await this.sendSmsNotification(tenant, invoice, smsMessage, now, NotificationType.PAYMENT_REMINDER);
 
 		// Email
 		const originalAmount = Number(invoice.subtotal);
-		const emailSubject = `OVERDUE - Invoice ${invoice.invoiceNumber}`;
 		const emailHtml = `
 			<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
 				<h2 style="color: #dc2626;">Overdue Invoice Notice</h2>
@@ -348,9 +413,8 @@ export class ReminderService {
 			</div>
 		`;
 
-		await this.sendEmailNotification(tenant, invoice, emailSubject, emailHtml, now);
+		await this.sendEmailNotification(tenant, invoice, `OVERDUE - Invoice ${invoice.invoiceNumber}`, emailHtml, now, NotificationType.PAYMENT_REMINDER);
 
-		// Audit log
 		if (systemUserId) {
 			await this.auditService.createLog({
 				action: AuditAction.REMINDER_SENT,
@@ -359,15 +423,160 @@ export class ReminderService {
 				targetType: AuditTargetType.INVOICE,
 				targetId: invoice.invoiceId,
 				details: `Overdue reminder sent for invoice ${invoice.invoiceNumber}. Balance: ${formatKES(balanceDue)} (incl. penalties: ${formatKES(penaltyAmount)})`,
+				metadata: { invoiceNumber: invoice.invoiceNumber, tenantId: tenant.tenantId, balanceDue, penaltyAmount, period: 'overdue' },
+			});
+		}
+	}
+
+	/**
+	 * Day 10: Landlord escalation — notify landlord of all unpaid tenants.
+	 */
+	private async sendLandlordEscalation(
+		systemUserId?: string,
+		now?: Date,
+	): Promise<void> {
+		now = now || new Date();
+
+		// Find the org owner / landlord
+		const ownerRole = await this.dataSource.getRepository(Role).findOne({
+			where: { name: In([UserRole.LANDLORD, UserRole.ORG_OWNER] as UserRole[]) },
+		});
+		const ownerUser = ownerRole
+			? await this.dataSource.getRepository(User).findOne({
+					where: { roleId: ownerRole.roleId },
+				})
+			: null;
+
+		if (!ownerUser) {
+			this.logger.warn('No landlord/owner found for escalation notification');
+			return;
+		}
+
+		// Get all unsettled invoices with tenant details
+		const unsettledInvoices = await this.invoicesRepository.findAll({
+			where: {
+				status: In([InvoiceStatus.UNPAID, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.OVERDUE]),
+				balanceDue: MoreThan(0),
+			},
+			relations: ['tenant', 'tenant.user', 'tenant.unit'],
+		});
+
+		if (unsettledInvoices.length === 0) {
+			this.logger.log('No unpaid invoices for landlord escalation');
+			return;
+		}
+
+		const totalOutstanding = unsettledInvoices.reduce((sum, inv) => sum + Number(inv.balanceDue), 0);
+
+		// SMS to landlord
+		const smsMessage =
+			`RentFlow ESCALATION: ${unsettledInvoices.length} invoice(s) still unpaid. ` +
+			`Total outstanding: ${formatKES(totalOutstanding)}. ` +
+			`Please log in to review and take action.`;
+
+		if (ownerUser.phone) {
+			try {
+				await this.smsService.sendSms(ownerUser.phone, smsMessage);
+			} catch (err) {
+				this.logger.error(`Failed to send escalation SMS to landlord: ${err.message}`);
+			}
+		}
+
+		// Email to landlord with details table
+		const tenantRows = unsettledInvoices
+			.map((inv) => {
+				const name = inv.tenant?.user
+					? `${inv.tenant.user.firstName || ''} ${inv.tenant.user.lastName || ''}`.trim()
+					: 'Unknown';
+				const unit = inv.tenant?.unit?.unitNumber || '-';
+				return `
+					<tr style="border-bottom: 1px solid #e5e7eb;">
+						<td style="padding: 6px 8px;">${name}</td>
+						<td style="padding: 6px 8px;">${unit}</td>
+						<td style="padding: 6px 8px;">${inv.invoiceNumber}</td>
+						<td style="padding: 6px 8px; text-align: right;">${formatKES(Number(inv.balanceDue))}</td>
+						<td style="padding: 6px 8px;">${inv.status.toUpperCase()}</td>
+					</tr>
+				`;
+			})
+			.join('');
+
+		const emailHtml = `
+			<div style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto;">
+				<h2 style="color: #dc2626;">Unpaid Invoices Escalation Report</h2>
+				<p>Dear ${ownerUser.firstName || 'Landlord'},</p>
+				<p>The following ${unsettledInvoices.length} invoice(s) remain unpaid as of Day 10. Total outstanding: <strong>${formatKES(totalOutstanding)}</strong>.</p>
+				<table style="width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px;">
+					<thead>
+						<tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;">
+							<th style="padding: 8px; text-align: left;">Tenant</th>
+							<th style="padding: 8px; text-align: left;">Unit</th>
+							<th style="padding: 8px; text-align: left;">Invoice</th>
+							<th style="padding: 8px; text-align: right;">Balance Due</th>
+							<th style="padding: 8px; text-align: left;">Status</th>
+						</tr>
+					</thead>
+					<tbody>${tenantRows}</tbody>
+				</table>
+				<p>Please log in to RentFlow to review and take appropriate action.</p>
+				<p>Regards,<br/>RentFlow System</p>
+			</div>
+		`;
+
+		if (ownerUser.email) {
+			try {
+				await this.mailService.sendEmail({
+					to: ownerUser.email,
+					subject: `ESCALATION: ${unsettledInvoices.length} Unpaid Invoices — ${formatKES(totalOutstanding)} Outstanding`,
+					html: emailHtml,
+				});
+			} catch (err) {
+				this.logger.error(`Failed to send escalation email to landlord: ${err.message}`);
+			}
+		}
+
+		// Audit log
+		if (systemUserId) {
+			await this.auditService.createLog({
+				action: AuditAction.LANDLORD_ESCALATION,
+				performedBy: systemUserId,
+				performerName: 'Reminder Service',
+				targetType: AuditTargetType.NOTIFICATION,
+				details: `Landlord escalation: ${unsettledInvoices.length} unpaid invoices totaling ${formatKES(totalOutstanding)}`,
 				metadata: {
-					invoiceNumber: invoice.invoiceNumber,
-					tenantId: tenant.tenantId,
-					balanceDue,
-					penaltyAmount,
-					period: 'overdue',
+					invoiceCount: unsettledInvoices.length,
+					totalOutstanding,
+					landlordEmail: ownerUser.email,
 				},
 			});
 		}
+
+		this.logger.log(`Landlord escalation sent: ${unsettledInvoices.length} invoices, ${formatKES(totalOutstanding)} outstanding`);
+	}
+
+	/**
+	 * Load tenant with user relation if not already loaded.
+	 */
+	private async loadTenant(invoice: Invoice): Promise<Tenant | null> {
+		if (!invoice.tenantId) {
+			this.logger.log(`Skipping reminder for non-tenant invoice ${invoice.invoiceNumber}`);
+			return null;
+		}
+
+		let tenant = invoice.tenant;
+		if (!tenant?.user) {
+			tenant = await this.tenantRepository.findOne({
+				where: { tenantId: invoice.tenantId },
+				relations: ['user'],
+			});
+		}
+
+		if (!tenant?.user) {
+			this.logger.warn(`No tenant/user found for invoice ${invoice.invoiceNumber}, skipping reminder`);
+			return null;
+		}
+
+		return tenant;
 	}
 
 	/**
@@ -378,6 +587,7 @@ export class ReminderService {
 		invoice: Invoice,
 		message: string,
 		now: Date,
+		type: NotificationType = NotificationType.PAYMENT_REMINDER,
 	): Promise<void> {
 		const phone = tenant.user?.phone;
 		if (!phone) {
@@ -392,7 +602,7 @@ export class ReminderService {
 				this.notificationRepository.create({
 					tenantId: tenant.tenantId,
 					invoiceId: invoice.invoiceId,
-					type: NotificationType.PAYMENT_REMINDER,
+					type,
 					channel: NotificationChannel.SMS,
 					message,
 					sentAt: now,
@@ -405,7 +615,7 @@ export class ReminderService {
 				this.notificationRepository.create({
 					tenantId: tenant.tenantId,
 					invoiceId: invoice.invoiceId,
-					type: NotificationType.PAYMENT_REMINDER,
+					type,
 					channel: NotificationChannel.SMS,
 					message,
 					status: NotificationStatus.FAILED,
@@ -424,6 +634,7 @@ export class ReminderService {
 		subject: string,
 		html: string,
 		now: Date,
+		type: NotificationType = NotificationType.PAYMENT_REMINDER,
 	): Promise<void> {
 		const email = tenant.user?.email;
 		if (!email) {
@@ -438,7 +649,7 @@ export class ReminderService {
 				this.notificationRepository.create({
 					tenantId: tenant.tenantId,
 					invoiceId: invoice.invoiceId,
-					type: NotificationType.PAYMENT_REMINDER,
+					type,
 					channel: NotificationChannel.EMAIL,
 					subject,
 					message: html,
@@ -452,7 +663,7 @@ export class ReminderService {
 				this.notificationRepository.create({
 					tenantId: tenant.tenantId,
 					invoiceId: invoice.invoiceId,
-					type: NotificationType.PAYMENT_REMINDER,
+					type,
 					channel: NotificationChannel.EMAIL,
 					subject,
 					message: html,

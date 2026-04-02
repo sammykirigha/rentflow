@@ -1,4 +1,4 @@
-import { AbstractEntity } from '@/database/abstract.entity';
+import { OrgScopedEntity } from '@/database/org-scoped.entity';
 import { Tenant } from '@/modules/tenants/entities/tenant.entity';
 import { Invoice } from '@/modules/invoices/entities/invoice.entity';
 import {
@@ -29,7 +29,9 @@ export enum PaymentStatus {
 @Index(['invoiceId'])
 @Index(['mpesaReceiptNumber'])
 @Index(['needsReconciliation'])
-export class Payment extends AbstractEntity<Payment> {
+@Index(['organizationId', 'status'])
+@Index(['organizationId', 'mpesaReceiptNumber'])
+export class Payment extends OrgScopedEntity<Payment> {
 	@PrimaryGeneratedColumn('uuid', { name: 'payment_id' })
 	paymentId: string;
 

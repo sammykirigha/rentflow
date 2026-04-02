@@ -469,6 +469,32 @@ export class NotificationsService {
 		return { count: notifications.length };
 	}
 
+	async getUnreadCount(tenantId: string): Promise<number> {
+		return this.notificationsRepository.createQueryBuilder('notification')
+			.where('notification.tenant_id = :tenantId', { tenantId })
+			.andWhere('notification.read_at IS NULL')
+			.getCount();
+	}
+
+	async markAsRead(tenantId: string, notificationIds: string[]): Promise<void> {
+		await this.notificationsRepository.createQueryBuilder('notification')
+			.update(Notification)
+			.set({ readAt: new Date() })
+			.where('notification_id IN (:...notificationIds)', { notificationIds })
+			.andWhere('tenant_id = :tenantId', { tenantId })
+			.andWhere('read_at IS NULL')
+			.execute();
+	}
+
+	async markAllAsRead(tenantId: string): Promise<void> {
+		await this.notificationsRepository.createQueryBuilder('notification')
+			.update(Notification)
+			.set({ readAt: new Date() })
+			.where('tenant_id = :tenantId', { tenantId })
+			.andWhere('read_at IS NULL')
+			.execute();
+	}
+
 	async resend(notificationId: string, userId: string): Promise<Notification> {
 		const notification = await this.notificationsRepository.findOne({
 			where: { notificationId },
