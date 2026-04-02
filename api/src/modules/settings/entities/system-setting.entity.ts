@@ -64,6 +64,10 @@ export class SystemSetting extends OrgScopedEntity<SystemSetting> {
   @Column({ name: 'wallet_settlement_interval_minutes', type: 'integer', default: 120 })
   walletSettlementIntervalMinutes: number;
 
+  // Invoice Generation Tracking
+  @Column({ name: 'last_invoice_generation_month', type: 'timestamp', nullable: true })
+  lastInvoiceGenerationMonth?: Date;
+
   // Helper methods
   getFileUploadSizeInMB(): string {
     return `${this.maxFileUploadSize} MB`;

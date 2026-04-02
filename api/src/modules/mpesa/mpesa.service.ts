@@ -20,6 +20,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import axios from 'axios';
 import { DataSource, ILike, Repository } from 'typeorm';
+import { orgAsyncStorage } from '@/common/services/org-async-context';
 import {
 	C2bBody,
 	DarajaOAuthResponse,
@@ -456,99 +457,109 @@ export class MpesaService implements OnModuleInit {
 				return { ResultCode: 0, ResultDesc: 'Already processed' };
 			}
 
-			if (ResultCode === 0) {
-				// Success — extract MpesaReceiptNumber from CallbackMetadata
-				let mpesaReceiptNumber: string | undefined;
-				let paidAmount: number | undefined;
+			// Establish org context from the existing payment so downstream
+			// entity creation (WalletTransaction, etc.) gets organizationId
+			const stkOrgContext = {
+				organizationId: payment.organizationId || null,
+				isSuperAdmin: false,
+				impersonatedBy: null,
+			};
 
-				if (callback.CallbackMetadata?.Item) {
-					for (const item of callback.CallbackMetadata.Item) {
-						if (item.Name === 'MpesaReceiptNumber') {
-							mpesaReceiptNumber = String(item.Value);
-						}
-						if (item.Name === 'Amount') {
-							paidAmount = Number(item.Value);
+			await orgAsyncStorage.run(stkOrgContext, async () => {
+				if (ResultCode === 0) {
+					// Success — extract MpesaReceiptNumber from CallbackMetadata
+					let mpesaReceiptNumber: string | undefined;
+					let paidAmount: number | undefined;
+
+					if (callback.CallbackMetadata?.Item) {
+						for (const item of callback.CallbackMetadata.Item) {
+							if (item.Name === 'MpesaReceiptNumber') {
+								mpesaReceiptNumber = String(item.Value);
+							}
+							if (item.Name === 'Amount') {
+								paidAmount = Number(item.Value);
+							}
 						}
 					}
-				}
 
-				const amount = paidAmount ?? Number(payment.amount);
+					const amount = paidAmount ?? Number(payment.amount);
 
-				// Update payment to COMPLETED
-				await queryRunner.manager.update(Payment, payment.paymentId, {
-					status: PaymentStatus.COMPLETED,
-					mpesaReceiptNumber,
-				});
+					// Update payment to COMPLETED
+					await queryRunner.manager.update(Payment, payment.paymentId, {
+						status: PaymentStatus.COMPLETED,
+						mpesaReceiptNumber,
+					});
 
-				await queryRunner.commitTransaction();
+					await queryRunner.commitTransaction();
 
-				// Post-commit: credit wallet and trigger settlement
-				try {
+					// Post-commit: credit wallet and trigger settlement
+					try {
+						// Resolve tenant userId for audit logging
+						const tenant = await this.tenantRepository.findOne({
+							where: { tenantId: payment.tenantId },
+						});
+						const tenantUserId = tenant?.userId;
+
+						await this.walletService.credit(
+							payment.tenantId,
+							amount,
+							mpesaReceiptNumber || `stk-${payment.paymentId}`,
+							`M-Pesa STK Push payment`,
+							tenantUserId,
+						);
+
+						await this.auditService.createLog({
+							action: AuditAction.STK_PUSH_CALLBACK_SUCCESS,
+							performedBy: tenantUserId,
+							targetType: AuditTargetType.PAYMENT,
+							targetId: payment.paymentId,
+							details: `STK Push successful: KES ${amount} (Ref: ${mpesaReceiptNumber})`,
+							metadata: {
+								paymentId: payment.paymentId,
+								tenantId: payment.tenantId,
+								amount,
+								mpesaReceiptNumber,
+								checkoutRequestId: CheckoutRequestID,
+							},
+						});
+
+						// Trigger invoice settlement
+						await this.walletSettlementService.settleTenantInvoices(payment.tenantId);
+					} catch (error) {
+						this.logger.error(
+							`Post-callback processing failed for payment ${payment.paymentId}: ${error.message}`,
+							error.stack,
+						);
+					}
+				} else {
+					// Failed
+					await queryRunner.manager.update(Payment, payment.paymentId, {
+						status: PaymentStatus.FAILED,
+					});
+
+					await queryRunner.commitTransaction();
+
 					// Resolve tenant userId for audit logging
-					const tenant = await this.tenantRepository.findOne({
+					const failedTenant = await this.tenantRepository.findOne({
 						where: { tenantId: payment.tenantId },
 					});
-					const tenantUserId = tenant?.userId;
-
-					await this.walletService.credit(
-						payment.tenantId,
-						amount,
-						mpesaReceiptNumber || `stk-${payment.paymentId}`,
-						`M-Pesa STK Push payment`,
-						tenantUserId,
-					);
 
 					await this.auditService.createLog({
-						action: AuditAction.STK_PUSH_CALLBACK_SUCCESS,
-						performedBy: tenantUserId,
+						action: AuditAction.STK_PUSH_CALLBACK_FAILED,
+						performedBy: failedTenant?.userId,
 						targetType: AuditTargetType.PAYMENT,
 						targetId: payment.paymentId,
-						details: `STK Push successful: KES ${amount} (Ref: ${mpesaReceiptNumber})`,
+						details: `STK Push failed: ${ResultDesc}`,
 						metadata: {
 							paymentId: payment.paymentId,
 							tenantId: payment.tenantId,
-							amount,
-							mpesaReceiptNumber,
+							resultCode: ResultCode,
+							resultDesc: ResultDesc,
 							checkoutRequestId: CheckoutRequestID,
 						},
 					});
-
-					// Trigger invoice settlement
-					await this.walletSettlementService.settleTenantInvoices(payment.tenantId);
-				} catch (error) {
-					this.logger.error(
-						`Post-callback processing failed for payment ${payment.paymentId}: ${error.message}`,
-						error.stack,
-					);
 				}
-			} else {
-				// Failed
-				await queryRunner.manager.update(Payment, payment.paymentId, {
-					status: PaymentStatus.FAILED,
-				});
-
-				await queryRunner.commitTransaction();
-
-				// Resolve tenant userId for audit logging
-				const failedTenant = await this.tenantRepository.findOne({
-					where: { tenantId: payment.tenantId },
-				});
-
-				await this.auditService.createLog({
-					action: AuditAction.STK_PUSH_CALLBACK_FAILED,
-					performedBy: failedTenant?.userId,
-					targetType: AuditTargetType.PAYMENT,
-					targetId: payment.paymentId,
-					details: `STK Push failed: ${ResultDesc}`,
-					metadata: {
-						paymentId: payment.paymentId,
-						tenantId: payment.tenantId,
-						resultCode: ResultCode,
-						resultDesc: ResultDesc,
-						checkoutRequestId: CheckoutRequestID,
-					},
-				});
-			}
+			});
 		} catch (error) {
 			await queryRunner.rollbackTransaction();
 			this.logger.error(
@@ -626,123 +637,134 @@ export class MpesaService implements OnModuleInit {
 		const org = await this.organizationsService.findByShortcode(paybill);
 		const resolvedOrgId = org?.organizationId;
 
-		// Try to match tenant by unit number, scoped to the resolved organization
-		let unit: Unit | null = null;
-		if (resolvedOrgId) {
-			unit = await this.unitRepository.findOne({
-				where: {
-					unitNumber: ILike(normalizedAccount),
-					organizationId: resolvedOrgId,
-				},
-			});
-		} else {
-			// Fallback: no org scoping (backward compat with .env shortcode)
-			unit = await this.unitRepository.findOne({
-				where: { unitNumber: ILike(normalizedAccount) },
-			});
-		}
+		// Establish org context for this public callback so that OrgScopedRepository
+		// and OrgScopeSubscriber can auto-inject organizationId on created entities
+		// (Payment, WalletTransaction, etc.)
+		const orgContext = {
+			organizationId: resolvedOrgId || null,
+			isSuperAdmin: false,
+			impersonatedBy: null,
+		};
 
-		let tenant: Tenant | null = null;
-		if (unit) {
-			tenant = await this.tenantRepository.findOne({
-				where: { unitId: unit.unitId, status: TenantStatus.ACTIVE },
-				relations: ['user'],
-			});
-		}
+		return orgAsyncStorage.run(orgContext, async () => {
+			// Try to match tenant by unit number, scoped to the resolved organization
+			let unit: Unit | null = null;
+			if (resolvedOrgId) {
+				unit = await this.unitRepository.findOne({
+					where: {
+						unitNumber: ILike(normalizedAccount),
+						organizationId: resolvedOrgId,
+					},
+				});
+			} else {
+				// Fallback: no org scoping (backward compat with .env shortcode)
+				unit = await this.unitRepository.findOne({
+					where: { unitNumber: ILike(normalizedAccount) },
+				});
+			}
 
-		if (tenant) {
-			// Matched payment — create payment and credit wallet
-			const payment = await this.paymentsRepository.create({
-				tenantId: tenant.tenantId,
-				amount,
-				method: PaymentMethod.MPESA_PAYBILL,
-				status: PaymentStatus.COMPLETED,
-				mpesaReceiptNumber: mpesaRef,
-				mpesaPhoneNumber: phone,
-				mpesaAccountReference: normalizedAccount,
-				mpesaPaybillNumber: paybill,
-				transactionDate: new Date(),
-				needsReconciliation: false,
-			});
+			let tenant: Tenant | null = null;
+			if (unit) {
+				tenant = await this.tenantRepository.findOne({
+					where: { unitId: unit.unitId, status: TenantStatus.ACTIVE },
+					relations: ['user'],
+				});
+			}
 
-			await this.auditService.createLog({
-				action: AuditAction.C2B_PAYMENT_RECEIVED,
-				performedBy: tenant.userId,
-				targetType: AuditTargetType.PAYMENT,
-				targetId: payment.paymentId,
-				details: `C2B payment received: KES ${amount} from ${firstName || phone} for ${normalizedAccount} (Ref: ${mpesaRef})`,
-				metadata: {
-					paymentId: payment.paymentId,
+			if (tenant) {
+				// Matched payment — create payment and credit wallet
+				const payment = await this.paymentsRepository.create({
 					tenantId: tenant.tenantId,
 					amount,
-					mpesaRef,
-					phone,
-					accountRef: normalizedAccount,
-					paybill,
-					organizationId: resolvedOrgId,
-				},
-			});
+					method: PaymentMethod.MPESA_PAYBILL,
+					status: PaymentStatus.COMPLETED,
+					mpesaReceiptNumber: mpesaRef,
+					mpesaPhoneNumber: phone,
+					mpesaAccountReference: normalizedAccount,
+					mpesaPaybillNumber: paybill,
+					transactionDate: new Date(),
+					needsReconciliation: false,
+				});
 
-			// Credit wallet and trigger settlement (post-commit, non-blocking)
-			try {
-				await this.walletService.credit(
-					tenant.tenantId,
-					amount,
-					mpesaRef,
-					`M-Pesa C2B payment from ${phone}`,
-					tenant.userId,
+				await this.auditService.createLog({
+					action: AuditAction.C2B_PAYMENT_RECEIVED,
+					performedBy: tenant.userId,
+					targetType: AuditTargetType.PAYMENT,
+					targetId: payment.paymentId,
+					details: `C2B payment received: KES ${amount} from ${firstName || phone} for ${normalizedAccount} (Ref: ${mpesaRef})`,
+					metadata: {
+						paymentId: payment.paymentId,
+						tenantId: tenant.tenantId,
+						amount,
+						mpesaRef,
+						phone,
+						accountRef: normalizedAccount,
+						paybill,
+						organizationId: resolvedOrgId,
+					},
+				});
+
+				// Credit wallet and trigger settlement (post-commit, non-blocking)
+				try {
+					await this.walletService.credit(
+						tenant.tenantId,
+						amount,
+						mpesaRef,
+						`M-Pesa C2B payment from ${phone}`,
+						tenant.userId,
+					);
+
+					await this.walletSettlementService.settleTenantInvoices(tenant.tenantId);
+				} catch (error) {
+					this.logger.error(
+						`Post-C2B processing failed for ${mpesaRef}: ${error.message}`,
+						error.stack,
+					);
+				}
+
+				this.logger.log(
+					`C2B Confirmation: matched payment ${mpesaRef} to tenant ${tenant.tenantId} (${normalizedAccount})`,
 				);
+			} else {
+				// Unmatched payment — flag for reconciliation
+				const payment = await this.paymentsRepository.create({
+					tenantId: undefined,
+					amount,
+					method: PaymentMethod.MPESA_PAYBILL,
+					status: PaymentStatus.COMPLETED,
+					mpesaReceiptNumber: mpesaRef,
+					mpesaPhoneNumber: phone,
+					mpesaAccountReference: normalizedAccount,
+					mpesaPaybillNumber: paybill,
+					transactionDate: new Date(),
+					needsReconciliation: true,
+					reconciliationNote: `Unmatched C2B payment. Account reference: ${normalizedAccount}`,
+				});
 
-				await this.walletSettlementService.settleTenantInvoices(tenant.tenantId);
-			} catch (error) {
-				this.logger.error(
-					`Post-C2B processing failed for ${mpesaRef}: ${error.message}`,
-					error.stack,
+				await this.auditService.createLog({
+					action: AuditAction.C2B_PAYMENT_UNMATCHED,
+					performedBy: undefined,
+					targetType: AuditTargetType.PAYMENT,
+					targetId: payment.paymentId,
+					details: `Unmatched C2B payment: KES ${amount} from ${phone}, account: ${normalizedAccount} (Ref: ${mpesaRef})`,
+					metadata: {
+						paymentId: payment.paymentId,
+						amount,
+						mpesaRef,
+						phone,
+						accountRef: normalizedAccount,
+						paybill,
+						organizationId: resolvedOrgId,
+					},
+				});
+
+				this.logger.warn(
+					`C2B Confirmation: unmatched payment ${mpesaRef} for account ${normalizedAccount}`,
 				);
 			}
 
-			this.logger.log(
-				`C2B Confirmation: matched payment ${mpesaRef} to tenant ${tenant.tenantId} (${normalizedAccount})`,
-			);
-		} else {
-			// Unmatched payment — flag for reconciliation
-			const payment = await this.paymentsRepository.create({
-				tenantId: undefined,
-				amount,
-				method: PaymentMethod.MPESA_PAYBILL,
-				status: PaymentStatus.COMPLETED,
-				mpesaReceiptNumber: mpesaRef,
-				mpesaPhoneNumber: phone,
-				mpesaAccountReference: normalizedAccount,
-				mpesaPaybillNumber: paybill,
-				transactionDate: new Date(),
-				needsReconciliation: true,
-				reconciliationNote: `Unmatched C2B payment. Account reference: ${normalizedAccount}`,
-			});
-
-			await this.auditService.createLog({
-				action: AuditAction.C2B_PAYMENT_UNMATCHED,
-				performedBy: undefined,
-				targetType: AuditTargetType.PAYMENT,
-				targetId: payment.paymentId,
-				details: `Unmatched C2B payment: KES ${amount} from ${phone}, account: ${normalizedAccount} (Ref: ${mpesaRef})`,
-				metadata: {
-					paymentId: payment.paymentId,
-					amount,
-					mpesaRef,
-					phone,
-					accountRef: normalizedAccount,
-					paybill,
-					organizationId: resolvedOrgId,
-				},
-			});
-
-			this.logger.warn(
-				`C2B Confirmation: unmatched payment ${mpesaRef} for account ${normalizedAccount}`,
-			);
-		}
-
-		return { ResultCode: 0, ResultDesc: 'Success' };
+			return { ResultCode: 0, ResultDesc: 'Success' };
+		});
 	}
 
 	// ── STK Status Check ────────────────────────────────────

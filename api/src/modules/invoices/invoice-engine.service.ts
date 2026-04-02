@@ -3,7 +3,7 @@ import { AuditTargetType } from '@/common/enums/audit-target-type.enum';
 import { orgAsyncStorage } from '@/common/services/org-async-context';
 import { Tenant, TenantStatus } from '@/modules/tenants/entities/tenant.entity';
 import { Receipt } from '@/modules/receipts/entities/receipt.entity';
-import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit, forwardRef } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { DataSource, In } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
@@ -11,6 +11,7 @@ import { SettingsService } from '../settings/settings.service';
 import { Invoice, InvoiceStatus, InvoiceType } from './entities/invoice.entity';
 import { InvoicesRepository } from './invoices.repository';
 import { InvoicesService } from './invoices.service';
+import { SystemSetting } from '../settings/entities/system-setting.entity';
 import { SettlementCoreService } from './settlement-core.service';
 
 interface MonthlyInvoiceResult {
@@ -21,7 +22,7 @@ interface MonthlyInvoiceResult {
 }
 
 @Injectable()
-export class InvoiceEngineService {
+export class InvoiceEngineService implements OnModuleInit {
 	private readonly logger = new Logger(InvoiceEngineService.name);
 
 	constructor(
@@ -32,6 +33,55 @@ export class InvoiceEngineService {
 		private readonly settlementCoreService: SettlementCoreService,
 		@Inject(forwardRef(() => SettingsService)) private readonly settingsService: SettingsService,
 	) {}
+
+	/**
+	 * On startup, schedule a delayed catch-up check to ensure invoices
+	 * are generated for the current month even if the primary cron was missed.
+	 */
+	async onModuleInit(): Promise<void> {
+		setTimeout(() => {
+			this.checkAndCatchUp().catch((err) =>
+				this.logger.error(`Startup invoice catch-up failed: ${err.message}`, err.stack),
+			);
+		}, 15_000); // 15s delay to let DB connections stabilize
+	}
+
+	/**
+	 * Periodic catch-up: every 4 hours, check if invoices need generating.
+	 */
+	@Cron('0 */4 * * *')
+	async handleCatchUpCheck(): Promise<void> {
+		await this.checkAndCatchUp();
+	}
+
+	/**
+	 * Check if invoices have been generated for the current billing month.
+	 * If not, trigger generation. Safe to call repeatedly (idempotent).
+	 */
+	private async checkAndCatchUp(): Promise<void> {
+		const currentBillingMonth = this.normalizeBillingMonth();
+
+		// Use raw repo to bypass org-scoping (cron has no auth context)
+		const settingsRepo = this.dataSource.getRepository(SystemSetting);
+		const anySettings = await settingsRepo.findOne({ where: {} });
+
+		if (!anySettings) {
+			this.logger.warn('No system settings found, skipping invoice catch-up');
+			return;
+		}
+
+		const lastRun = anySettings.lastInvoiceGenerationMonth;
+		if (lastRun && new Date(lastRun).getTime() >= currentBillingMonth.getTime()) {
+			return; // Already generated for current month
+		}
+
+		this.logger.warn(
+			`Invoice catch-up triggered. Last run: ${lastRun?.toISOString() ?? 'never'}, ` +
+			`current billing month: ${currentBillingMonth.toISOString()}`,
+		);
+
+		await this.generateMonthlyInvoices();
+	}
 
 	/**
 	 * Cron job: runs at midnight on the 1st of every month (EAT).
@@ -185,6 +235,17 @@ export class InvoiceEngineService {
 			`Generated: ${result.generated}, Settled: ${result.settled}, ` +
 			`Partial: ${result.partial}, Unpaid: ${result.unpaid}`,
 		);
+
+		// Update tracking flag on ALL settings rows (bypass org scope for cron context)
+		try {
+			await this.dataSource
+				.getRepository(SystemSetting)
+				.update({}, { lastInvoiceGenerationMonth: billing });
+			this.logger.log(`Updated lastInvoiceGenerationMonth to ${billing.toISOString()}`);
+		} catch (err) {
+			this.logger.error(`Failed to update lastInvoiceGenerationMonth: ${err.message}`);
+			// Non-fatal — next catch-up will retry generation (idempotent)
+		}
 
 		return result;
 	}
