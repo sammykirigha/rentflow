@@ -239,8 +239,10 @@ export class InvoiceEngineService implements OnModuleInit {
 		// Update tracking flag on ALL settings rows (bypass org scope for cron context)
 		try {
 			await this.dataSource
-				.getRepository(SystemSetting)
-				.update({}, { lastInvoiceGenerationMonth: billing });
+				.createQueryBuilder()
+				.update(SystemSetting)
+				.set({ lastInvoiceGenerationMonth: billing })
+				.execute();
 			this.logger.log(`Updated lastInvoiceGenerationMonth to ${billing.toISOString()}`);
 		} catch (err) {
 			this.logger.error(`Failed to update lastInvoiceGenerationMonth: ${err.message}`);
